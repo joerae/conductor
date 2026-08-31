@@ -405,15 +405,15 @@ export class DebugOverlay {
       </div>
 
       <!-- Note Velocity Scaler Breakdown -->
-      <div class="debug-section-header">NOTE VELOCITY SCALER BREAKDOWN</div>
+      <div class="debug-section-header" title="Live velocity decomposition pipeline for the most recently scheduled note voice">NOTE VELOCITY SCALER BREAKDOWN</div>
       <table class="debug-table">
-        <tr><td>Active Instrument</td><td id="dbg-decomp-track">—</td></tr>
-        <tr><td>1. Raw Score Velocity</td><td id="dbg-decomp-raw">—</td></tr>
-        <tr><td>2. Macro Smoothing</td><td id="dbg-decomp-macro">—</td></tr>
-        <tr><td>3. Dynamic Tier Scaling</td><td id="dbg-decomp-dyn">—</td></tr>
-        <tr><td>4. Final Synthesized Velocity</td><td id="dbg-decomp-final">—</td></tr>
+        <tr title="The orchestral instrument section executing this note"><td>Active Instrument</td><td id="dbg-decomp-track">—</td></tr>
+        <tr title="Original velocity value (0–127) as authored in the MIDI score file"><td>1. Raw Score Velocity</td><td id="dbg-decomp-raw">—</td></tr>
+        <tr title="Score velocity after centering and smoothing extreme terraced swings (e.g. forte theme vs piano theme) around baseline 72"><td>2. Macro Smoothing</td><td id="dbg-decomp-macro">—</td></tr>
+        <tr title="Active dynamic level (pp to fff) and its proportional scaling multiplier applied by your baton"><td>3. Dynamic Tier Scaling</td><td id="dbg-decomp-dyn">—</td></tr>
+        <tr title="Final computed MIDI velocity (10–127) sent to the WebAudioFont synthesizer wavetable"><td>4. Final Synthesized Velocity</td><td id="dbg-decomp-final">—</td></tr>
       </table>
-      <div id="dbg-decomp-formula" style="
+      <div id="dbg-decomp-formula" title="Mathematical transformation: Raw Score Velocity ➔ Macro Smoothed Base ➔ Conductor Tier Multiplier ➔ Synthesized Output" style="
         background: rgba(0,0,0,0.45);
         padding: 5px 8px;
         border-radius: 4px;
@@ -428,24 +428,24 @@ export class DebugOverlay {
       ">Play notes to inspect velocity calculation formula</div>
       
       <!-- Dynamics Telemetry -->
-      <div class="debug-section-header" style="margin-top: 10px;">ORCHESTRAL DYNAMICS</div>
+      <div class="debug-section-header" style="margin-top: 10px;" title="Current acoustic parameters computed by the Hybrid Dynamic Modeling DSP engine">ORCHESTRAL DYNAMICS</div>
       <table class="debug-table">
-        <tr><td>Dynamic Level</td><td id="dbg-dyn-level">mf</td></tr>
-        <tr><td>Velocity Scale</td><td id="dbg-vel-scale">× 1.00</td></tr>
-        <tr><td>LPF Cutoff</td><td id="dbg-lpf-cutoff">14.0 kHz</td></tr>
-        <tr><td>High-Shelf Boost</td><td id="dbg-shelf-gain">0.0 dB</td></tr>
-        <tr><td>Reverb Wet Send</td><td id="dbg-reverb-wet">18%</td></tr>
-        <tr><td>Attack Time</td><td id="dbg-attack-time">8 ms</td></tr>
+        <tr title="The currently selected conductor dynamic level (pp, p, mp, mf, f, ff, fff)"><td>Dynamic Level</td><td id="dbg-dyn-level">mf</td></tr>
+        <tr title="Proportional velocity factor scaling note volume and sample timbre (0.30x in pp up to 1.55x in fff)"><td>Velocity Scale</td><td id="dbg-vel-scale">× 1.00</td></tr>
+        <tr title="Master Low-Pass Filter cutoff frequency. Darkens soft dynamics and brightens forte dynamics"><td>LPF Cutoff</td><td id="dbg-lpf-cutoff">14.0 kHz</td></tr>
+        <tr title="High-Shelf Filter boost/cut gain (+3.5 dB in fff down to -5.0 dB in pp)"><td>High-Shelf Boost</td><td id="dbg-shelf-gain">0.0 dB</td></tr>
+        <tr title="Reverb send wet mix percentage into the 1.8s concert hall convolution acoustic model"><td>Reverb Wet Send</td><td id="dbg-reverb-wet">18%</td></tr>
+        <tr title="Per-voice attack transient ramp duration (2ms punch in forte to 18ms soft swell in piano)"><td>Attack Time</td><td id="dbg-attack-time">8 ms</td></tr>
       </table>
 
       <!-- Interactive A/B DSP Toggles & Macro Slider -->
-      <div class="debug-section-header" style="margin-top: 10px;">A/B DSP & MACRO CONTROLS</div>
+      <div class="debug-section-header" style="margin-top: 10px;" title="Interactive A/B toggles to audition individual DSP modules on/off in real-time">A/B DSP & MACRO CONTROLS</div>
       <div class="debug-toggles-grid">
-        <label class="debug-checkbox-label">
+        <label class="debug-checkbox-label" title="Toggle proportional note velocity scaling across dynamic tiers (pp through fff)">
           <input type="checkbox" data-dsp-flag="velocityScaling" checked>
           <span>Velocity Scaling</span>
         </label>
-        <label class="debug-checkbox-label">
+        <label class="debug-checkbox-label" title="Toggle score macro-dynamics compression. When enabled, compresses baked-in MIDI swings so the conductor commands the volume">
           <input type="checkbox" data-dsp-flag="scoreCompression" checked>
           <span>Score Macro Dynamics Smoothing</span>
         </label>
@@ -457,59 +457,59 @@ export class DebugOverlay {
           background: rgba(255, 255, 255, 0.04);
           border-radius: 4px;
           border: 1px solid rgba(255, 213, 107, 0.2);
-        ">
+        " title="Adjust the strength of Score Macro Smoothing: 0.00 = completely flat (100% conductor authority), 1.00 = raw MIDI score dynamics">
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:10.5px; margin-bottom:4px;">
             <span style="color:#d0f0d0;">Macro Smoothing Ratio:</span>
-            <span id="dbg-macro-ratio-val" style="color:#ffd56b; font-weight:700;">0.45 (Moderate Balanced)</span>
+            <span id="dbg-macro-ratio-val" style="color:#ffd56b; font-weight:700;">0.24 (Heavy Smooth)</span>
           </div>
-          <input type="range" id="dbg-macro-slider" min="0" max="1" step="0.05" value="0.45" style="
+          <input type="range" id="dbg-macro-slider" min="0" max="1" step="0.05" value="0.24" style="
             width: 100%;
             accent-color: #ffd56b;
             cursor: pointer;
             height: 4px;
             margin: 4px 0;
-          ">
+          " title="Drag to adjust macro smoothing ratio between 0.0 (flat) and 1.0 (raw MIDI)">
           <div style="display:flex; justify-content:space-between; font-size:8.5px; color:#888888;">
             <span>0.0 (Flat)</span>
-            <span>0.45 (Default)</span>
+            <span>0.24 (Active)</span>
             <span>1.0 (Raw MIDI)</span>
           </div>
         </div>
 
-        <label class="debug-checkbox-label">
+        <label class="debug-checkbox-label" title="Toggle dynamic Low-Pass Filter and High-Shelf EQ across dynamic tiers">
           <input type="checkbox" data-dsp-flag="timbreFilter" checked>
           <span>Timbre Filter (LPF/Shelf)</span>
         </label>
-        <label class="debug-checkbox-label">
+        <label class="debug-checkbox-label" title="Toggle dynamic concert hall reverb wet send expansion (bloom in forte, intimate in piano)">
           <input type="checkbox" data-dsp-flag="reverbScaling" checked>
           <span>Dynamic Reverb Bloom</span>
         </label>
-        <label class="debug-checkbox-label">
-          <input type="checkbox" data-dsp-flag="attackEnvelope" checked>
+        <label class="debug-checkbox-label" title="Toggle per-voice dynamic attack envelope shaping (2ms fast bite vs 18ms soft swell)">
+          <input type="checkbox" data-dsp-flag="attackEnvelope">
           <span>Dynamic Attack Envelope</span>
         </label>
-        <label class="debug-checkbox-label">
+        <label class="debug-checkbox-label" title="Toggle safety brickwall limiter (-1.0 dBFS) to prevent any DAC clipping">
           <input type="checkbox" data-dsp-flag="safetyLimiter" checked>
           <span>Safety Limiter (-1dB)</span>
         </label>
       </div>
 
       <!-- Clock & Transport Telemetry -->
-      <div class="debug-section-header" style="margin-top: 10px;">TEMPO & SCHEDULER</div>
+      <div class="debug-section-header" style="margin-top: 10px;" title="Telemetry from the Phase-Locked Loop (PLL) Conductor Clock and look-ahead scheduler">TEMPO & SCHEDULER</div>
       <table class="debug-table">
-        <tr><td>Mode</td><td id="dbg-tempo-mode" style="color:#ffd56b">A (Balanced PLL)</td></tr>
-        <tr><td>BPM</td><td id="dbg-bpm">0.0</td></tr>
-        <tr><td>Period</td><td id="dbg-period">500.0 ms</td></tr>
-        <tr><td>Next beat (audio)</td><td id="dbg-next-beat">0.000 s</td></tr>
-        <tr><td>Phase error</td><td id="dbg-phase-error">0.0 ms</td></tr>
-        <tr><td>Confidence</td><td id="dbg-confidence">0%</td></tr>
-        <tr><td>Beats accepted</td><td id="dbg-beats-accepted">0</td></tr>
-        <tr><td>Last tap</td><td id="dbg-last-tap">—</td></tr>
-        <tr><td>Score beat</td><td id="dbg-score-beat">0.00</td></tr>
-        <tr><td>Sched horizon</td><td id="dbg-sched-horizon">0.000 s</td></tr>
-        <tr><td>Sched committed</td><td id="dbg-sched-committed">0</td></tr>
-        <tr><td>Base latency</td><td id="dbg-base-lat">0.0 ms</td></tr>
-        <tr><td>Output latency</td><td id="dbg-out-lat">0.0 ms</td></tr>
+        <tr title="Conductor tempo input mode: Mode A (Balanced PLL), Mode B (Instant/Dime), Mode C (Autoplay)"><td>Mode</td><td id="dbg-tempo-mode" style="color:#ffd56b">A (Balanced PLL)</td></tr>
+        <tr title="Estimated tempo in beats per minute calculated from your conducting gestures"><td>BPM</td><td id="dbg-bpm">0.0</td></tr>
+        <tr title="Period between musical beats in milliseconds"><td>Period</td><td id="dbg-period">500.0 ms</td></tr>
+        <tr title="Predicted audio timestamp of the next downbeat in Web Audio seconds"><td>Next beat (audio)</td><td id="dbg-next-beat">0.000 s</td></tr>
+        <tr title="Phase error between expected beat timing and actual conductor gesture tap"><td>Phase error</td><td id="dbg-phase-error">0.0 ms</td></tr>
+        <tr title="Conductor Clock PLL tracking confidence level based on tempo consistency"><td>Confidence</td><td id="dbg-confidence">0%</td></tr>
+        <tr title="Total count of accepted conducting gestures in current performance"><td>Beats accepted</td><td id="dbg-beats-accepted">0</td></tr>
+        <tr title="Status of the most recent conductor tap (Accepted vs Rejected for double-tap/range)"><td>Last tap</td><td id="dbg-last-tap">—</td></tr>
+        <tr title="Current fractional beat cursor location in the musical score"><td>Score beat</td><td id="dbg-score-beat">0.00</td></tr>
+        <tr title="Look-ahead scheduling horizon into future audio time"><td>Sched horizon</td><td id="dbg-sched-horizon">0.000 s</td></tr>
+        <tr title="Total score note events committed to Web Audio synthesis"><td>Sched committed</td><td id="dbg-sched-committed">0</td></tr>
+        <tr title="Hardware audio input/processing base latency"><td>Base latency</td><td id="dbg-base-lat">0.0 ms</td></tr>
+        <tr title="Audio output buffer DAC latency"><td>Output latency</td><td id="dbg-out-lat">0.0 ms</td></tr>
       </table>
     `;
 

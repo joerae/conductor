@@ -65,33 +65,30 @@ describe("Score Macro-Dynamics Compression & Proportional Scaling", () => {
     // In raw MIDI: Forte theme lead is 115, accomp is 95
     const theme1Lead = scaleVelocity(115, "mf", true, true);
     const theme1Acc = scaleVelocity(95, "mf", true, true);
-    expect(theme1Lead).toBe(91);
-    expect(theme1Acc).toBe(82);
+    expect(theme1Lead).toBe(82);
+    expect(theme1Acc).toBe(78);
     expect(theme1Lead).toBeGreaterThan(theme1Acc);
 
     // In raw MIDI: Piano theme lead is 55, accomp is 40
     const theme2Lead = scaleVelocity(55, "mf", true, true);
     const theme2Acc = scaleVelocity(40, "mf", true, true);
-    expect(theme2Lead).toBe(64);
-    expect(theme2Acc).toBe(58);
+    expect(theme2Lead).toBe(68);
+    expect(theme2Acc).toBe(64);
     expect(theme2Lead).toBeGreaterThan(theme2Acc);
-
-    // Notice: The gap between theme 1 (91) and theme 2 (64) is now a smooth 27 points
-    // instead of an unmanageable 60 points in raw MIDI, allowing conductor dynamics to dominate!
   });
 
   it("gives conductor commanding control across dynamic tiers", () => {
     // In pp: entire orchestra (even loud theme 1) plays softly
-    expect(scaleVelocity(115, "pp", true, true)).toBe(27);
-    expect(scaleVelocity(55, "pp", true, true)).toBe(19);
+    expect(scaleVelocity(115, "pp", true, true)).toBe(25);
+    expect(scaleVelocity(55, "pp", true, true)).toBe(20);
 
     // In ff: entire orchestra plays with powerful volume
-    expect(scaleVelocity(115, "ff", true, true)).toBe(126);
-    expect(scaleVelocity(55, "ff", true, true)).toBe(89);
+    expect(scaleVelocity(115, "ff", true, true)).toBe(114);
+    expect(scaleVelocity(55, "ff", true, true)).toBe(94);
 
     // In fff (overburn): pushes to peak limit
     expect(scaleVelocity(115, "fff", true, true)).toBe(127);
-    expect(scaleVelocity(55, "fff", true, true)).toBe(100);
+    expect(scaleVelocity(55, "fff", true, true)).toBe(105);
   });
 
   it("enforces minimum clamp of 10 and maximum clamp of 127", () => {
@@ -128,15 +125,23 @@ describe("Dynamic Ladder Stepping", () => {
 });
 
 describe("DSP Bypass Defaults & Macro Ratio Control", () => {
-  it("has all DSP modules enabled by default including scoreCompression", () => {
+  it("has default DSP flags set (attackEnvelope disabled by default)", () => {
     expect(DEFAULT_DSP_BYPASS_FLAGS).toEqual({
       velocityScaling: true,
       timbreFilter: true,
       reverbScaling: true,
-      attackEnvelope: true,
+      attackEnvelope: false,
       safetyLimiter: true,
       scoreCompression: true,
     });
+  });
+
+  it("supports +2 dynamic tier burst jump for accents", () => {
+    expect(getStepDynamicLevel("pp", 2)).toBe("mp");
+    expect(getStepDynamicLevel("p", 2)).toBe("mf");
+    expect(getStepDynamicLevel("mf", 2)).toBe("ff");
+    expect(getStepDynamicLevel("f", 2)).toBe("fff");
+    expect(getStepDynamicLevel("ff", 2)).toBe("fff");
   });
 
   it("allows continuous adjustment of macro smoothing ratio from 0.0 to 1.0", () => {

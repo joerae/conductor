@@ -61,6 +61,8 @@ interface UICallbacks {
   onBeat: () => void;
   onNoteVisual?: (event: NoteVisualEvent) => void;
   onDynamicChange?: (level: DynamicLevel) => void;
+  onAccentArmed?: (armed: boolean) => void;
+  onAccentFlash?: () => void;
 }
 
 export class ExperienceController {
@@ -78,6 +80,11 @@ export class ExperienceController {
   private uiCallbacks: UICallbacks;
   private prepTapCount: number = 0;
   private pausedBeat: number = 0;
+
+  // Sustained conductor dynamic level & Accent state
+  private baseDynamicLevel: DynamicLevel = "mf";
+  private isAccentArmed: boolean = false;
+  private accentResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Overburn decay timer (for ff dynamic)
   private overburnTimer: ReturnType<typeof setTimeout> | null = null;
@@ -230,10 +237,14 @@ export class ExperienceController {
 
   // ── Dynamics & Expression ────────────────────────────────────────────────
 
-  setDynamicLevel(level: DynamicLevel): void {
+  setDynamicLevel(level: DynamicLevel, updateBase: boolean = true): void {
     if (this.overburnTimer) {
       clearTimeout(this.overburnTimer);
       this.overburnTimer = null;
+    }
+
+    if (updateBase) {
+      this.baseDynamicLevel = level;
     }
 
     this.audioEngine.setDynamicLevel(level);
@@ -257,10 +268,19 @@ export class ExperienceController {
     return this.audioEngine.getDynamicLevel();
   }
 
-  stepDynamicLevel(delta: 1 | -1): void {
-    const current = this.audioEngine.getDynamicLevel();
+  stepDynamicLevel(delta: number): void {
+    const current = this.baseDynamicLevel;
     const next = getStepDynamicLevel(current, delta);
     this.setDynamicLevel(next);
+  }
+
+  armAccent(): void {
+    this.isAccentArmed = true;
+    this.uiCallbacks.onAccentArmed?.(true);
+  }
+
+  isAccentArmedState(): boolean {
+    return this.isAccentArmed;
   }
 
   setDSPBypassFlags(flags: Partial<DSPBypassFlags>): void {
@@ -341,6 +361,24 @@ export class ExperienceController {
             s.phaseCorrectionSec ?? 0
           );
         }
+
+        // Execute Accent if armed
+        if (this.isAccentArmed) {
+          this.isAccentArmed = false;
+          this.uiCallbacks.onAccentArmed?.(false);
+          this.uiCallbacks.onAccentFlash?.();
+
+          // Jump dynamic level by +2 tiers for this beat
+          const accentedLevel = getStepDynamicLevel(this.baseDynamicLevel, 2);
+          this.setDynamicLevel(accentedLevel, false);
+
+          if (this.accentResetTimer) clearTimeout(this.accentResetTimer);
+          const periodMs = s.periodMs || 500;
+          this.accentResetTimer = setTimeout(() => {
+            this.setDynamicLevel(this.baseDynamicLevel, false);
+          }, Math.max(120, periodMs * 0.9));
+        }
+
         this.debug.updateClock(s);
         this.debug.updateTapAccepted();
         this.debug.updateScore(this.transport.getCursorBeat());

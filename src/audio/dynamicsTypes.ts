@@ -114,7 +114,7 @@ export const DEFAULT_DSP_BYPASS_FLAGS: DSPBypassFlags = {
   velocityScaling: true,
   timbreFilter: true,
   reverbScaling: true,
-  attackEnvelope: true,
+  attackEnvelope: false,
   safetyLimiter: true,
   scoreCompression: true,
 };
@@ -228,7 +228,7 @@ export function decomposeVelocity(
  */
 export function getStepDynamicLevel(
   current: DynamicLevel,
-  delta: 1 | -1
+  delta: number
 ): DynamicLevel {
   const currentIndex = DYNAMIC_ORDER.indexOf(current);
   if (currentIndex === -1) return "mf";

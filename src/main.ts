@@ -194,6 +194,16 @@ const controller = new ExperienceController({
   onDynamicChange: (level: DynamicLevel) => {
     updateDynamicLadderUI(level);
   },
+  onAccentArmed: (armed: boolean) => {
+    const accentBtn = document.getElementById("accent-btn");
+    accentBtn?.classList.toggle("armed", armed);
+  },
+  onAccentFlash: () => {
+    stageEl.classList.remove("accent-flash");
+    void stageEl.offsetWidth; // force DOM reflow
+    stageEl.classList.add("accent-flash");
+    setTimeout(() => stageEl.classList.remove("accent-flash"), 380);
+  },
   onNoteVisual: (event) => {
     setTimeout(() => {
       const section = channelToSectionMap.get(event.channel) ||
@@ -317,7 +327,7 @@ window.addEventListener("wheel", (e) => {
   }
 }, { passive: false });
 
-// Keyboard shortcuts: T (toggle mode), ArrowUp / ArrowDown (dynamics)
+// Keyboard shortcuts: T (toggle mode), P (pause), ↑/↓ (dynamics), → (accent burst)
 window.addEventListener("keydown", (e) => {
   if (versionModal.style.display === "flex" || repertoireModal.style.display === "flex") return;
 
@@ -328,6 +338,9 @@ window.addEventListener("keydown", (e) => {
     setMode(modes[nextIdx]);
   } else if (e.code === "KeyP" && !e.repeat) {
     controller.togglePause();
+  } else if (e.code === "ArrowRight" && !e.repeat) {
+    e.preventDefault();
+    controller.armAccent();
   } else if (e.code === "ArrowUp") {
     e.preventDefault();
     controller.stepDynamicLevel(1);
@@ -335,6 +348,12 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     controller.stepDynamicLevel(-1);
   }
+});
+
+// Accent button click
+const accentBtn = document.getElementById("accent-btn") as HTMLButtonElement;
+accentBtn?.addEventListener("click", () => {
+  controller.armAccent();
 });
 
 // Initialize UI to starting dynamic level (mf)
