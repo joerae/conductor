@@ -11,8 +11,10 @@
  *   - Clock & Transport telemetry (BPM, period, predicted beat, phase error, confidence)
  *   - Dynamic Modeling telemetry (dynamic marking, velocity factor, LPF cutoff, shelf gain, reverb %)
  *   - Interactive A/B DSP Bypass Checkboxes (toggle velocity scaling, filter bus, reverb scaling, attack shaping, limiter, score compression)
+ *   - Interactive Macro Dynamics Smoothing Ratio Slider (0.00 flat to 1.00 raw)
  *   - Step-by-step note velocity breakdown
  *   - Dedicated Pause / Resume button
+ *   - Rock-solid fixed width layout with zero jitter
  */
 
 import type { ClockState, TapRejectionReason } from "../clock/clockTypes";
@@ -43,6 +45,7 @@ export class DebugOverlay {
   private visible: boolean = false;
   private onDSPToggle?: (flag: keyof DSPBypassFlags, enabled: boolean) => void;
   private onTogglePause?: () => void;
+  private onMacroRatioChange?: (ratio: number) => void;
 
   // Cached DOM elements for live text updates without innerHTML thrashing
   private elements: Record<string, HTMLElement> = {};
@@ -69,6 +72,7 @@ export class DebugOverlay {
       highShelfGainDb: 0.0,
       reverbWet: 0.18,
       attackTimeSec: 0.008,
+      macroRatio: 0.45,
       bypassFlags: {
         velocityScaling: true,
         timbreFilter: true,
@@ -82,10 +86,12 @@ export class DebugOverlay {
 
   constructor(
     onDSPToggle?: (flag: keyof DSPBypassFlags, enabled: boolean) => void,
-    onTogglePause?: () => void
+    onTogglePause?: () => void,
+    onMacroRatioChange?: (ratio: number) => void
   ) {
     this.onDSPToggle = onDSPToggle;
     this.onTogglePause = onTogglePause;
+    this.onMacroRatioChange = onMacroRatioChange;
     this.container = this.createContainer();
     document.body.appendChild(this.container);
 
@@ -117,6 +123,7 @@ export class DebugOverlay {
       "decomp-dyn",
       "decomp-final",
       "decomp-formula",
+      "macro-ratio-val",
     ];
     for (const key of keys) {
       const el = document.getElementById(`dbg-${key}`);
@@ -141,6 +148,17 @@ export class DebugOverlay {
     pauseBtn?.addEventListener("click", () => {
       if (this.onTogglePause) {
         this.onTogglePause();
+      }
+    });
+
+    // Macro Dynamics Smoothing Slider
+    const macroSlider = document.getElementById("dbg-macro-slider") as HTMLInputElement;
+    macroSlider?.addEventListener("input", () => {
+      const ratio = parseFloat(macroSlider.value);
+      this.snapshot.dynamics.macroRatio = ratio;
+      this.updateMacroLabel(ratio);
+      if (this.onMacroRatioChange) {
+        this.onMacroRatioChange(ratio);
       }
     });
 
@@ -211,6 +229,13 @@ export class DebugOverlay {
         cb.checked = dynamics.bypassFlags[flag];
       }
     });
+
+    // Synchronize slider
+    const slider = document.getElementById("dbg-macro-slider") as HTMLInputElement;
+    if (slider && Math.abs(parseFloat(slider.value) - dynamics.macroRatio) > 0.01) {
+      slider.value = String(dynamics.macroRatio);
+      this.updateMacroLabel(dynamics.macroRatio);
+    }
   }
 
   updatePauseState(isPaused: boolean): void {
@@ -227,6 +252,22 @@ export class DebugOverlay {
   }
 
   // ── Private ─────────────────────────────────────────────────────────────
+
+  private updateMacroLabel(ratio: number): void {
+    if (this.elements["macro-ratio-val"]) {
+      const desc =
+        ratio === 0
+          ? "0.00 (Flat Authority)"
+          : ratio <= 0.25
+          ? `${ratio.toFixed(2)} (Heavy Smooth)`
+          : ratio <= 0.50
+          ? `${ratio.toFixed(2)} (Moderate Balanced)`
+          : ratio <= 0.80
+          ? `${ratio.toFixed(2)} (Light Smooth)`
+          : `${ratio.toFixed(2)} (Raw Score MIDI)`;
+      this.elements["macro-ratio-val"].textContent = desc;
+    }
+  }
 
   private toggle(): void {
     this.visible = !this.visible;
@@ -334,17 +375,20 @@ export class DebugOverlay {
       padding: 14px 18px;
       border-radius: 10px;
       border: 1px solid rgba(255, 213, 107, 0.35);
-      min-width: 320px;
-      max-width: 400px;
+      width: 390px;
+      min-width: 390px;
+      max-width: 390px;
+      box-sizing: border-box;
       backdrop-filter: blur(12px);
-      box-shadow: 0 12px 36px rgba(0,0,0,0.7);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.75);
       max-height: 92vh;
       overflow-y: auto;
+      overflow-x: hidden;
     `;
 
     el.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-        <span class="debug-title" style="margin:0;">DIAGNOSTICS & A/B DSP</span>
+        <span class="debug-title" style="margin:0; font-size:12px;">DIAGNOSTICS & A/B DSP</span>
         <button id="dbg-pause-btn" style="
           background: rgba(255, 213, 107, 0.15);
           color: #ffd56b;
@@ -356,6 +400,7 @@ export class DebugOverlay {
           font-weight: 600;
           cursor: pointer;
           transition: all 0.15s ease;
+          white-space: nowrap;
         ">⏸ Pause Orchestra</button>
       </div>
 
@@ -364,18 +409,22 @@ export class DebugOverlay {
       <table class="debug-table">
         <tr><td>Active Instrument</td><td id="dbg-decomp-track">—</td></tr>
         <tr><td>1. Raw Score Velocity</td><td id="dbg-decomp-raw">—</td></tr>
-        <tr><td>2. Macro Smoothing (0.45)</td><td id="dbg-decomp-macro">—</td></tr>
+        <tr><td>2. Macro Smoothing</td><td id="dbg-decomp-macro">—</td></tr>
         <tr><td>3. Dynamic Tier Scaling</td><td id="dbg-decomp-dyn">—</td></tr>
         <tr><td>4. Final Synthesized Velocity</td><td id="dbg-decomp-final">—</td></tr>
       </table>
       <div id="dbg-decomp-formula" style="
-        background: rgba(0,0,0,0.4);
-        padding: 6px 8px;
+        background: rgba(0,0,0,0.45);
+        padding: 5px 8px;
         border-radius: 4px;
         font-size: 10px;
         color: #ffd56b;
         margin-top: 6px;
         border-left: 2px solid #ffd56b;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        box-sizing: border-box;
       ">Play notes to inspect velocity calculation formula</div>
       
       <!-- Dynamics Telemetry -->
@@ -389,8 +438,8 @@ export class DebugOverlay {
         <tr><td>Attack Time</td><td id="dbg-attack-time">8 ms</td></tr>
       </table>
 
-      <!-- Interactive A/B DSP Toggles -->
-      <div class="debug-section-header" style="margin-top: 10px;">A/B DSP TOGGLES (Click to Test)</div>
+      <!-- Interactive A/B DSP Toggles & Macro Slider -->
+      <div class="debug-section-header" style="margin-top: 10px;">A/B DSP & MACRO CONTROLS</div>
       <div class="debug-toggles-grid">
         <label class="debug-checkbox-label">
           <input type="checkbox" data-dsp-flag="velocityScaling" checked>
@@ -400,6 +449,33 @@ export class DebugOverlay {
           <input type="checkbox" data-dsp-flag="scoreCompression" checked>
           <span>Score Macro Dynamics Smoothing</span>
         </label>
+
+        <!-- Interactive Macro Dynamics Smoothing Slider -->
+        <div style="
+          margin: 4px 0;
+          padding: 6px 8px;
+          background: rgba(255, 255, 255, 0.04);
+          border-radius: 4px;
+          border: 1px solid rgba(255, 213, 107, 0.2);
+        ">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:10.5px; margin-bottom:4px;">
+            <span style="color:#d0f0d0;">Macro Smoothing Ratio:</span>
+            <span id="dbg-macro-ratio-val" style="color:#ffd56b; font-weight:700;">0.45 (Moderate Balanced)</span>
+          </div>
+          <input type="range" id="dbg-macro-slider" min="0" max="1" step="0.05" value="0.45" style="
+            width: 100%;
+            accent-color: #ffd56b;
+            cursor: pointer;
+            height: 4px;
+            margin: 4px 0;
+          ">
+          <div style="display:flex; justify-content:space-between; font-size:8.5px; color:#888888;">
+            <span>0.0 (Flat)</span>
+            <span>0.45 (Default)</span>
+            <span>1.0 (Raw MIDI)</span>
+          </div>
+        </div>
+
         <label class="debug-checkbox-label">
           <input type="checkbox" data-dsp-flag="timbreFilter" checked>
           <span>Timbre Filter (LPF/Shelf)</span>

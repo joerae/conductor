@@ -127,7 +127,7 @@ describe("Dynamic Ladder Stepping", () => {
   });
 });
 
-describe("DSP Bypass Defaults", () => {
+describe("DSP Bypass Defaults & Macro Ratio Control", () => {
   it("has all DSP modules enabled by default including scoreCompression", () => {
     expect(DEFAULT_DSP_BYPASS_FLAGS).toEqual({
       velocityScaling: true,
@@ -137,5 +137,17 @@ describe("DSP Bypass Defaults", () => {
       safetyLimiter: true,
       scoreCompression: true,
     });
+  });
+
+  it("allows continuous adjustment of macro smoothing ratio from 0.0 to 1.0", () => {
+    const rawVel = 115;
+    // Ratio 0.0: completely flat (all notes centered to 72)
+    expect(scaleVelocity(rawVel, "mf", true, true, 0.0)).toBe(72);
+    // Ratio 0.25: heavy smoothing (72 + 43*0.25 = 83)
+    expect(scaleVelocity(rawVel, "mf", true, true, 0.25)).toBe(83);
+    // Ratio 0.45: default moderate smoothing (72 + 43*0.45 = 91)
+    expect(scaleVelocity(rawVel, "mf", true, true, 0.45)).toBe(91);
+    // Ratio 1.0: raw score dynamics (72 + 43*1.0 = 115)
+    expect(scaleVelocity(rawVel, "mf", true, true, 1.0)).toBe(115);
   });
 });

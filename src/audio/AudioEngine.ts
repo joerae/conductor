@@ -17,6 +17,7 @@ import { programToWebAudioFontVar, WEBAUDIOFONT_SCRIPTS } from "./instruments";
 import {
   DYNAMIC_PRESETS,
   DEFAULT_DSP_BYPASS_FLAGS,
+  DEFAULT_SCORE_MACRO_RATIO,
   scaleVelocity,
   decomposeVelocity,
 } from "./dynamicsTypes";
@@ -102,6 +103,7 @@ export class AudioEngine {
   // Dynamics & DSP State
   private dynamicLevel: DynamicLevel = "mf";
   private dspBypassFlags: DSPBypassFlags = { ...DEFAULT_DSP_BYPASS_FLAGS };
+  private scoreMacroRatio: number = DEFAULT_SCORE_MACRO_RATIO;
 
   // ── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -155,12 +157,21 @@ export class AudioEngine {
     return { ...this.dspBypassFlags };
   }
 
+  setScoreMacroRatio(ratio: number): void {
+    this.scoreMacroRatio = Math.max(0, Math.min(1, ratio));
+  }
+
+  getScoreMacroRatio(): number {
+    return this.scoreMacroRatio;
+  }
+
   computeEffectiveVelocity(rawVelocity: number): number {
     return scaleVelocity(
       rawVelocity,
       this.dynamicLevel,
       this.dspBypassFlags.velocityScaling,
-      this.dspBypassFlags.scoreCompression
+      this.dspBypassFlags.scoreCompression,
+      this.scoreMacroRatio
     );
   }
 
@@ -169,7 +180,8 @@ export class AudioEngine {
       rawVelocity,
       this.dynamicLevel,
       this.dspBypassFlags.velocityScaling,
-      this.dspBypassFlags.scoreCompression
+      this.dspBypassFlags.scoreCompression,
+      this.scoreMacroRatio
     );
   }
 
@@ -182,6 +194,7 @@ export class AudioEngine {
       highShelfGainDb: this.dspBypassFlags.timbreFilter ? preset.highShelfGainDb : 0.0,
       reverbWet: this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.0,
       attackTimeSec: this.dspBypassFlags.attackEnvelope ? preset.attackTimeSec : 0.006,
+      macroRatio: this.scoreMacroRatio,
       bypassFlags: { ...this.dspBypassFlags },
     };
   }
@@ -437,7 +450,8 @@ export class AudioEngine {
       velocity,
       this.dynamicLevel,
       this.dspBypassFlags.velocityScaling,
-      this.dspBypassFlags.scoreCompression
+      this.dspBypassFlags.scoreCompression,
+      this.scoreMacroRatio
     );
 
     const rawVelRatio = Math.max(0.08, effectiveVelocity / 127);

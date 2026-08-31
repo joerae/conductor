@@ -126,6 +126,7 @@ export interface DynamicsTelemetry {
   highShelfGainDb: number;
   reverbWet: number;
   attackTimeSec: number;
+  macroRatio: number;
   bypassFlags: DSPBypassFlags;
 }
 
@@ -134,8 +135,8 @@ export interface DynamicsTelemetry {
  * Compressing baked-in score macro swings gives the conductor full dynamic authority
  * while preserving natural phrasing, note-to-note expression, and lead vs accompaniment.
  */
-const SCORE_VELOCITY_CENTER = 72;
-const SCORE_MACRO_RATIO = 0.45;
+export const SCORE_VELOCITY_CENTER = 72;
+export const DEFAULT_SCORE_MACRO_RATIO = 0.24;
 
 /**
  * Complete step-by-step velocity breakdown for diagnostic telemetry.
@@ -144,6 +145,7 @@ export interface VelocityDecomposition {
   raw: number;
   macro: number;
   macroDelta: number;
+  macroRatio: number;
   dynMultiplier: number;
   dynamicLevel: DynamicLevel;
   final: number;
@@ -160,13 +162,14 @@ export function scaleVelocity(
   rawVelocity: number,
   level: DynamicLevel,
   enabled: boolean = true,
-  scoreCompression: boolean = true
+  scoreCompression: boolean = true,
+  macroRatio: number = DEFAULT_SCORE_MACRO_RATIO
 ): number {
   if (!enabled || rawVelocity <= 0) return rawVelocity;
 
-  // 1. Gentle score macro-dynamics compression
+  // 1. Score macro-dynamics compression with configurable ratio
   const baseVelocity = scoreCompression
-    ? SCORE_VELOCITY_CENTER + (rawVelocity - SCORE_VELOCITY_CENTER) * SCORE_MACRO_RATIO
+    ? SCORE_VELOCITY_CENTER + (rawVelocity - SCORE_VELOCITY_CENTER) * macroRatio
     : rawVelocity;
 
   // 2. Conductor dynamic tier scaling
@@ -183,7 +186,8 @@ export function decomposeVelocity(
   rawVelocity: number,
   level: DynamicLevel,
   enabled: boolean = true,
-  scoreCompression: boolean = true
+  scoreCompression: boolean = true,
+  macroRatio: number = DEFAULT_SCORE_MACRO_RATIO
 ): VelocityDecomposition {
   const preset = DYNAMIC_PRESETS[level] || DYNAMIC_PRESETS.mf;
   if (!enabled || rawVelocity <= 0) {
@@ -191,6 +195,7 @@ export function decomposeVelocity(
       raw: rawVelocity,
       macro: rawVelocity,
       macroDelta: 0,
+      macroRatio,
       dynMultiplier: 1.0,
       dynamicLevel: level,
       final: rawVelocity,
@@ -200,7 +205,7 @@ export function decomposeVelocity(
   }
 
   const baseVelocity = scoreCompression
-    ? SCORE_VELOCITY_CENTER + (rawVelocity - SCORE_VELOCITY_CENTER) * SCORE_MACRO_RATIO
+    ? SCORE_VELOCITY_CENTER + (rawVelocity - SCORE_VELOCITY_CENTER) * macroRatio
     : rawVelocity;
   const macro = Math.round(baseVelocity);
   const final = Math.max(10, Math.min(127, Math.round(baseVelocity * preset.velocityMultiplier)));
@@ -209,6 +214,7 @@ export function decomposeVelocity(
     raw: rawVelocity,
     macro,
     macroDelta: macro - rawVelocity,
+    macroRatio,
     dynMultiplier: preset.velocityMultiplier,
     dynamicLevel: level,
     final,

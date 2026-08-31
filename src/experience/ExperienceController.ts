@@ -86,7 +86,7 @@ export class ExperienceController {
     this.uiCallbacks = callbacks;
     this.audioEngine = new AudioEngine();
 
-    // Wire debug overlay with A/B DSP bypass control and pause toggle
+    // Wire debug overlay with A/B DSP bypass control, pause toggle, and macro ratio slider
     this.debug = new DebugOverlay(
       (flag: keyof DSPBypassFlags, enabled: boolean) => {
         this.audioEngine.setDSPBypassFlags({ [flag]: enabled });
@@ -94,6 +94,10 @@ export class ExperienceController {
       },
       () => {
         this.togglePause();
+      },
+      (ratio: number) => {
+        this.audioEngine.setScoreMacroRatio(ratio);
+        this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
       }
     );
 
