@@ -11,10 +11,12 @@
  *   - Clock & Transport telemetry (BPM, period, predicted beat, phase error, confidence)
  *   - Dynamic Modeling telemetry (dynamic marking, velocity factor, LPF cutoff, shelf gain, reverb %)
  *   - Interactive A/B DSP Bypass Checkboxes (toggle velocity scaling, filter bus, reverb scaling, attack shaping, limiter, score compression)
+ *   - Step-by-step note velocity breakdown
+ *   - Dedicated Pause / Resume button
  */
 
 import type { ClockState, TapRejectionReason } from "../clock/clockTypes";
-import type { DynamicsTelemetry, DSPBypassFlags } from "../audio/dynamicsTypes";
+import type { DynamicsTelemetry, DSPBypassFlags, VelocityDecomposition } from "../audio/dynamicsTypes";
 
 interface DebugSnapshot {
   tempoMode: string;
@@ -31,12 +33,16 @@ interface DebugSnapshot {
   audioLatencyMs: number;
   audioOutputLatencyMs: number;
   dynamics: DynamicsTelemetry;
+  isPaused: boolean;
+  lastDecomp?: VelocityDecomposition;
+  lastDecompTrack?: string;
 }
 
 export class DebugOverlay {
   private container: HTMLElement;
   private visible: boolean = false;
   private onDSPToggle?: (flag: keyof DSPBypassFlags, enabled: boolean) => void;
+  private onTogglePause?: () => void;
 
   // Cached DOM elements for live text updates without innerHTML thrashing
   private elements: Record<string, HTMLElement> = {};
@@ -55,12 +61,13 @@ export class DebugOverlay {
     schedulerCommitted: 0,
     audioLatencyMs: 0,
     audioOutputLatencyMs: 0,
+    isPaused: false,
     dynamics: {
       level: "mf",
       velocityMultiplier: 1.0,
       filterCutoffHz: 14000,
       highShelfGainDb: 0.0,
-      reverbWet: 0.16,
+      reverbWet: 0.18,
       attackTimeSec: 0.008,
       bypassFlags: {
         velocityScaling: true,
@@ -73,8 +80,12 @@ export class DebugOverlay {
     },
   };
 
-  constructor(onDSPToggle?: (flag: keyof DSPBypassFlags, enabled: boolean) => void) {
+  constructor(
+    onDSPToggle?: (flag: keyof DSPBypassFlags, enabled: boolean) => void,
+    onTogglePause?: () => void
+  ) {
     this.onDSPToggle = onDSPToggle;
+    this.onTogglePause = onTogglePause;
     this.container = this.createContainer();
     document.body.appendChild(this.container);
 
@@ -99,6 +110,13 @@ export class DebugOverlay {
       "sched-committed",
       "base-lat",
       "out-lat",
+      "pause-btn",
+      "decomp-track",
+      "decomp-raw",
+      "decomp-macro",
+      "decomp-dyn",
+      "decomp-final",
+      "decomp-formula",
     ];
     for (const key of keys) {
       const el = document.getElementById(`dbg-${key}`);
@@ -115,6 +133,14 @@ export class DebugOverlay {
         if (this.onDSPToggle) {
           this.onDSPToggle(flag, checked);
         }
+      }
+    });
+
+    // Pause / Resume button
+    const pauseBtn = document.getElementById("dbg-pause-btn");
+    pauseBtn?.addEventListener("click", () => {
+      if (this.onTogglePause) {
+        this.onTogglePause();
       }
     });
 
@@ -187,11 +213,25 @@ export class DebugOverlay {
     });
   }
 
+  updatePauseState(isPaused: boolean): void {
+    this.snapshot.isPaused = isPaused;
+  }
+
+  updateLastNoteDecomp(decomp: VelocityDecomposition, trackId: string): void {
+    this.snapshot.lastDecomp = decomp;
+    this.snapshot.lastDecompTrack = trackId;
+  }
+
+  isVisible(): boolean {
+    return this.visible;
+  }
+
   // ── Private ─────────────────────────────────────────────────────────────
 
   private toggle(): void {
     this.visible = !this.visible;
     this.container.style.display = this.visible ? "block" : "none";
+    document.body.classList.toggle("debug-mode-active", this.visible);
   }
 
   private renderLoop(): void {
@@ -215,6 +255,12 @@ export class DebugOverlay {
         ? `<strong style="color:#a0f0a0">mf (Default)</strong>`
         : `<strong style="color:#7cc5ff">${d.level.toUpperCase()}</strong>`;
 
+    if (this.elements["pause-btn"]) {
+      this.elements["pause-btn"].textContent = s.isPaused ? "▶ Resume Playback" : "⏸ Pause Orchestra";
+      this.elements["pause-btn"].style.background = s.isPaused ? "#ffd56b" : "rgba(255, 213, 107, 0.15)";
+      this.elements["pause-btn"].style.color = s.isPaused ? "#0c1018" : "#ffd56b";
+    }
+
     if (this.elements["dyn-level"]) this.elements["dyn-level"].innerHTML = dynamicLabel;
     if (this.elements["vel-scale"]) {
       this.elements["vel-scale"].innerHTML = `× ${d.velocityMultiplier.toFixed(2)} (${
@@ -232,6 +278,29 @@ export class DebugOverlay {
     }
     if (this.elements["attack-time"]) {
       this.elements["attack-time"].textContent = `${(d.attackTimeSec * 1000).toFixed(0)} ms`;
+    }
+
+    // Velocity breakdown decomposition display
+    if (s.lastDecomp) {
+      const dec = s.lastDecomp;
+      if (this.elements["decomp-track"]) this.elements["decomp-track"].textContent = s.lastDecompTrack || "Section";
+      if (this.elements["decomp-raw"]) this.elements["decomp-raw"].textContent = String(dec.raw);
+      if (this.elements["decomp-macro"]) {
+        const deltaStr = dec.macroDelta >= 0 ? `+${dec.macroDelta}` : `${dec.macroDelta}`;
+        this.elements["decomp-macro"].innerHTML = dec.macroEnabled
+          ? `${dec.macro} <span style="color:#7cc5ff">(${deltaStr})</span>`
+          : `${dec.raw} <span style="color:#888">(bypassed)</span>`;
+      }
+      if (this.elements["decomp-dyn"]) {
+        this.elements["decomp-dyn"].textContent = `${dec.dynamicLevel} (×${dec.dynMultiplier.toFixed(2)})`;
+      }
+      if (this.elements["decomp-final"]) {
+        this.elements["decomp-final"].innerHTML = `<strong style="color:#ffd56b; font-size:13px;">${dec.final}</strong>`;
+      }
+      if (this.elements["decomp-formula"]) {
+        const macroStr = dec.macroEnabled ? `${dec.macro} [Δ ${dec.macroDelta >= 0 ? "+" : ""}${dec.macroDelta}]` : `${dec.raw}`;
+        this.elements["decomp-formula"].innerHTML = `Raw ${dec.raw} ➔ Macro ${macroStr} ➔ ${dec.dynamicLevel} (×${dec.dynMultiplier.toFixed(2)}) ➔ <strong>v: ${dec.final}</strong>`;
+      }
     }
 
     if (this.elements["tempo-mode"]) this.elements["tempo-mode"].textContent = s.tempoMode;
@@ -258,37 +327,70 @@ export class DebugOverlay {
       top: 16px;
       right: 16px;
       z-index: 9999;
-      background: rgba(12, 16, 24, 0.94);
+      background: rgba(10, 14, 22, 0.96);
       color: #a0f0a0;
       font-family: 'JetBrains Mono', 'Fira Code', monospace;
       font-size: 11.5px;
-      padding: 12px 16px;
-      border-radius: 8px;
-      border: 1px solid rgba(100, 200, 100, 0.35);
-      min-width: 300px;
-      max-width: 380px;
-      backdrop-filter: blur(10px);
-      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
-      max-height: 90vh;
+      padding: 14px 18px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 213, 107, 0.35);
+      min-width: 320px;
+      max-width: 400px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.7);
+      max-height: 92vh;
       overflow-y: auto;
     `;
 
     el.innerHTML = `
-      <div class="debug-title">DEBUG & A/B DSP (D to hide)</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <span class="debug-title" style="margin:0;">DIAGNOSTICS & A/B DSP</span>
+        <button id="dbg-pause-btn" style="
+          background: rgba(255, 213, 107, 0.15);
+          color: #ffd56b;
+          border: 1px solid rgba(255, 213, 107, 0.5);
+          border-radius: 4px;
+          padding: 4px 10px;
+          font-family: inherit;
+          font-size: 11px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        ">⏸ Pause Orchestra</button>
+      </div>
+
+      <!-- Note Velocity Scaler Breakdown -->
+      <div class="debug-section-header">NOTE VELOCITY SCALER BREAKDOWN</div>
+      <table class="debug-table">
+        <tr><td>Active Instrument</td><td id="dbg-decomp-track">—</td></tr>
+        <tr><td>1. Raw Score Velocity</td><td id="dbg-decomp-raw">—</td></tr>
+        <tr><td>2. Macro Smoothing (0.45)</td><td id="dbg-decomp-macro">—</td></tr>
+        <tr><td>3. Dynamic Tier Scaling</td><td id="dbg-decomp-dyn">—</td></tr>
+        <tr><td>4. Final Synthesized Velocity</td><td id="dbg-decomp-final">—</td></tr>
+      </table>
+      <div id="dbg-decomp-formula" style="
+        background: rgba(0,0,0,0.4);
+        padding: 6px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        color: #ffd56b;
+        margin-top: 6px;
+        border-left: 2px solid #ffd56b;
+      ">Play notes to inspect velocity calculation formula</div>
       
       <!-- Dynamics Telemetry -->
-      <div class="debug-section-header">ORCHESTRAL DYNAMICS</div>
+      <div class="debug-section-header" style="margin-top: 10px;">ORCHESTRAL DYNAMICS</div>
       <table class="debug-table">
         <tr><td>Dynamic Level</td><td id="dbg-dyn-level">mf</td></tr>
         <tr><td>Velocity Scale</td><td id="dbg-vel-scale">× 1.00</td></tr>
         <tr><td>LPF Cutoff</td><td id="dbg-lpf-cutoff">14.0 kHz</td></tr>
         <tr><td>High-Shelf Boost</td><td id="dbg-shelf-gain">0.0 dB</td></tr>
-        <tr><td>Reverb Wet Send</td><td id="dbg-reverb-wet">16%</td></tr>
+        <tr><td>Reverb Wet Send</td><td id="dbg-reverb-wet">18%</td></tr>
         <tr><td>Attack Time</td><td id="dbg-attack-time">8 ms</td></tr>
       </table>
 
       <!-- Interactive A/B DSP Toggles -->
-      <div class="debug-section-header" style="margin-top: 8px;">A/B DSP TOGGLES (Click to Test)</div>
+      <div class="debug-section-header" style="margin-top: 10px;">A/B DSP TOGGLES (Click to Test)</div>
       <div class="debug-toggles-grid">
         <label class="debug-checkbox-label">
           <input type="checkbox" data-dsp-flag="velocityScaling" checked>
@@ -317,7 +419,7 @@ export class DebugOverlay {
       </div>
 
       <!-- Clock & Transport Telemetry -->
-      <div class="debug-section-header" style="margin-top: 8px;">TEMPO & SCHEDULER</div>
+      <div class="debug-section-header" style="margin-top: 10px;">TEMPO & SCHEDULER</div>
       <table class="debug-table">
         <tr><td>Mode</td><td id="dbg-tempo-mode" style="color:#ffd56b">A (Balanced PLL)</td></tr>
         <tr><td>BPM</td><td id="dbg-bpm">0.0</td></tr>

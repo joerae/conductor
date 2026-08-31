@@ -906,6 +906,49 @@ html, body {
   cursor: pointer;
 }
 
+/* ── Section Velocity Debug HUD (3x Larger for Instant Legibility) ────────── */
+.section-debug-hud {
+  display: none;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+body.debug-mode-active .section-debug-hud {
+  display: block;
+}
+
+.debug-vel-pill {
+  fill: rgba(6, 10, 16, 0.94);
+  stroke: rgba(255, 213, 107, 0.65);
+  stroke-width: 1.5px;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.85));
+}
+
+.debug-vel-main {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  fill: #ffd56b;
+  dominant-baseline: middle;
+}
+
+.debug-vel-decomp {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  fill: #7cc5ff;
+  dominant-baseline: middle;
+}
+
+.debug-vel-history {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  fill: #a0f0a0;
+  letter-spacing: 0.3px;
+  dominant-baseline: middle;
+}
+
 /* ── Dynamic Ambient Stage Lighting ──────────────────────────────────────── */
 #stage.dynamic-fff {
   background:

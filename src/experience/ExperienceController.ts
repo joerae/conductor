@@ -30,6 +30,7 @@ import type {
   DynamicLevel,
   DSPBypassFlags,
   DynamicsTelemetry,
+  VelocityDecomposition,
 } from "../audio/dynamicsTypes";
 
 import type { NotePlaybackEvent } from "../scheduler/Scheduler";
@@ -50,6 +51,8 @@ export type NoteVisualEvent = {
   channel: number;
   midiNote: number;
   velocity: number;
+  rawVelocity: number;
+  decomp: VelocityDecomposition;
   delayMs: number;
 };
 
@@ -83,11 +86,16 @@ export class ExperienceController {
     this.uiCallbacks = callbacks;
     this.audioEngine = new AudioEngine();
 
-    // Wire debug overlay with A/B DSP bypass control
-    this.debug = new DebugOverlay((flag: keyof DSPBypassFlags, enabled: boolean) => {
-      this.audioEngine.setDSPBypassFlags({ [flag]: enabled });
-      this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
-    });
+    // Wire debug overlay with A/B DSP bypass control and pause toggle
+    this.debug = new DebugOverlay(
+      (flag: keyof DSPBypassFlags, enabled: boolean) => {
+        this.audioEngine.setDSPBypassFlags({ [flag]: enabled });
+        this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
+      },
+      () => {
+        this.togglePause();
+      }
+    );
 
     // Clock uses AudioEngine's time function for audio scheduling
     this.clock = new ConductorClock({
@@ -116,12 +124,18 @@ export class ExperienceController {
     if (!this.uiCallbacks.onNoteVisual) return;
     const now = this.audioEngine.getAudioTime();
     const delayMs = Math.max(0, (event.audioTime - now) * 1000);
+    const decomp = this.audioEngine.decomposeNoteVelocity(event.velocity);
+
+    this.debug.updateLastNoteDecomp(decomp, event.trackId);
+
     this.uiCallbacks.onNoteVisual({
       type: event.type,
       trackId: event.trackId,
       channel: event.channel,
       midiNote: event.midiNote,
-      velocity: event.velocity,
+      velocity: decomp.final,
+      rawVelocity: event.velocity,
+      decomp,
       delayMs,
     });
   }
@@ -191,6 +205,23 @@ export class ExperienceController {
     this.prepTapCount = 0;
     this.pausedBeat = 0;
     this.setState("ready");
+  }
+
+  togglePause(): void {
+    if (this.state === "playing") {
+      this.pausedBeat = this.transport.getCursorBeat();
+      this.scheduler.stop();
+      this.scheduler.reset();
+      this.transport.stop();
+      this.clock.reset();
+      this.audioEngine.stopAllNotes();
+      this.prepTapCount = 0;
+      this.setState("paused");
+      this.debug.updatePauseState(true);
+    } else if (this.state === "paused" || this.state === "ready") {
+      this.startPlayback();
+      this.debug.updatePauseState(false);
+    }
   }
 
   // ── Dynamics & Expression ────────────────────────────────────────────────

@@ -86,18 +86,24 @@ function renderOrchestraStage(piece: PieceDefinition): void {
   if (piece.layout === "chamber_strings") {
     // 4 sections in classical semi-circle
     const positions = [
-      { x: 155, labelX: 155, eggs: [{ cx: 110, cy: 155 }, { cx: 155, cy: 148 }, { cx: 200, cy: 155 }] },
-      { x: 315, labelX: 315, eggs: [{ cx: 270, cy: 148 }, { cx: 315, cy: 142 }, { cx: 360, cy: 148 }] },
-      { x: 525, labelX: 525, eggs: [{ cx: 480, cy: 148 }, { cx: 525, cy: 142 }, { cx: 570, cy: 148 }] },
-      { x: 685, labelX: 685, eggs: [{ cx: 640, cy: 155 }, { cx: 685, cy: 148 }, { cx: 730, cy: 155 }] },
+      { x: 155, labelX: 155, eggs: [{ cx: 108, cy: 155, rx: 22, ry: 32 }, { cx: 155, cy: 146, rx: 25, ry: 36 }, { cx: 202, cy: 155, rx: 22, ry: 32 }] },
+      { x: 315, labelX: 315, eggs: [{ cx: 268, cy: 148, rx: 22, ry: 32 }, { cx: 315, cy: 140, rx: 25, ry: 36 }, { cx: 362, cy: 148, rx: 22, ry: 32 }] },
+      { x: 525, labelX: 525, eggs: [{ cx: 478, cy: 148, rx: 22, ry: 32 }, { cx: 525, cy: 140, rx: 25, ry: 36 }, { cx: 572, cy: 148, rx: 22, ry: 32 }] },
+      { x: 685, labelX: 685, eggs: [{ cx: 638, cy: 155, rx: 22, ry: 32 }, { cx: 685, cy: 146, rx: 25, ry: 36 }, { cx: 732, cy: 155, rx: 22, ry: 32 }] },
     ];
 
     piece.sections.forEach((sec, idx) => {
       const pos = positions[idx] || positions[0];
       sectionsSvg += `
         <g id="section-${sec.id}" class="instrument-section" data-section-id="${sec.id}">
-          ${pos.eggs.map((e, ei) => `<ellipse cx="${e.cx}" cy="${e.cy}" rx="18" ry="28" class="musician ${sec.id} egg-${ei}" />`).join("")}
-          <text x="${pos.labelX}" y="198" text-anchor="middle" class="section-label">${sec.name}</text>
+          <g class="section-debug-hud">
+            <rect x="${pos.labelX - 80}" y="32" width="160" height="52" rx="6" class="debug-vel-pill" />
+            <text x="${pos.labelX}" y="49" text-anchor="middle" class="debug-vel-main">v: —</text>
+            <text x="${pos.labelX}" y="63" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
+            <text x="${pos.labelX}" y="75" text-anchor="middle" class="debug-vel-history">History: —</text>
+          </g>
+          ${pos.eggs.map((e, ei) => `<ellipse cx="${e.cx}" cy="${e.cy}" rx="${e.rx}" ry="${e.ry}" class="musician ${sec.id} egg-${ei}" />`).join("")}
+          <text x="${pos.labelX}" y="202" text-anchor="middle" class="section-label">${sec.name}</text>
         </g>
       `;
     });
@@ -108,10 +114,16 @@ function renderOrchestraStage(piece: PieceDefinition): void {
       const cy = idx % 2 === 0 ? 152 : 144;
       sectionsSvg += `
         <g id="section-${sec.id}" class="instrument-section" data-section-id="${sec.id}">
-          <ellipse cx="${centerX - 24}" cy="${cy + 6}" rx="14" ry="22" class="musician ${sec.id} egg-0" />
-          <ellipse cx="${centerX}" cy="${cy}" rx="15" ry="24" class="musician ${sec.id} egg-1" />
-          <ellipse cx="${centerX + 24}" cy="${cy + 6}" rx="14" ry="22" class="musician ${sec.id} egg-2" />
-          <text x="${centerX}" y="198" text-anchor="middle" class="section-label" style="font-size: 9.5px;">${sec.name}</text>
+          <g class="section-debug-hud">
+            <rect x="${centerX - 48}" y="32" width="96" height="52" rx="6" class="debug-vel-pill" />
+            <text x="${centerX}" y="49" text-anchor="middle" class="debug-vel-main" style="font-size:12px;">v: —</text>
+            <text x="${centerX}" y="63" text-anchor="middle" class="debug-vel-decomp" style="font-size:8.5px;">Raw —</text>
+            <text x="${centerX}" y="75" text-anchor="middle" class="debug-vel-history" style="font-size:8px;">—</text>
+          </g>
+          <ellipse cx="${centerX - 24}" cy="${cy + 6}" rx="16" ry="24" class="musician ${sec.id} egg-0" />
+          <ellipse cx="${centerX}" cy="${cy}" rx="18" ry="28" class="musician ${sec.id} egg-1" />
+          <ellipse cx="${centerX + 24}" cy="${cy + 6}" rx="16" ry="24" class="musician ${sec.id} egg-2" />
+          <text x="${centerX}" y="202" text-anchor="middle" class="section-label" style="font-size: 10.5px;">${sec.name}</text>
         </g>
       `;
     });
@@ -121,9 +133,9 @@ function renderOrchestraStage(piece: PieceDefinition): void {
     <svg viewBox="0 0 840 230" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
       <!-- Conductor podium & Baton (Center) -->
       <g id="conductor-group" class="conductor-group">
-        <rect x="395" y="75" width="50" height="8" rx="4" class="podium" />
-        <ellipse cx="420" cy="62" rx="16" ry="22" class="conductor" />
-        <line id="baton-line" x1="428" y1="54" x2="465" y2="22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" class="baton" />
+        <rect x="410" y="65" width="60" height="10" rx="5" class="podium" />
+        <ellipse cx="440" cy="50" rx="19" ry="24" class="conductor" />
+        <line id="baton-line" x1="450" y1="42" x2="495" y2="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="baton" />
       </g>
       ${sectionsSvg}
       <!-- Stage floor -->
@@ -142,6 +154,9 @@ function renderOrchestraStage(piece: PieceDefinition): void {
     }
   });
 }
+
+// Map tracking the last 3 velocities for each section
+const sectionVelocityHistory = new Map<string, number[]>();
 
 // ── Experience setup ──────────────────────────────────────────────────────────
 
@@ -193,6 +208,33 @@ const controller = new ExperienceController({
       if (event.type === "noteOn") {
         section.classList.add("playing");
         if (targetEgg) targetEgg.classList.add("playing");
+
+        // Update Section Velocity Debug HUD (stays visible until next note updates it)
+        const sectionKey = section.id || section.dataset.sectionId || "section";
+        let history = sectionVelocityHistory.get(sectionKey);
+        if (!history) {
+          history = [];
+          sectionVelocityHistory.set(sectionKey, history);
+        }
+        history.unshift(event.velocity);
+        if (history.length > 3) history.pop();
+
+        const mainText = section.querySelector<SVGTextElement>(".debug-vel-main");
+        const decompText = section.querySelector<SVGTextElement>(".debug-vel-decomp");
+        const histText = section.querySelector<SVGTextElement>(".debug-vel-history");
+
+        const d = event.decomp;
+        if (mainText) {
+          mainText.textContent = `v: ${event.velocity} (${d.dynamicLevel} ×${d.dynMultiplier.toFixed(2)})`;
+        }
+        if (decompText) {
+          const deltaStr = d.macroDelta >= 0 ? `+${d.macroDelta}` : `${d.macroDelta}`;
+          const macroStr = d.macroEnabled ? `Macro ${d.macro} (${deltaStr})` : `Raw ${d.raw}`;
+          decompText.textContent = `Raw ${d.raw} ➔ ${macroStr}`;
+        }
+        if (histText) {
+          histText.textContent = `History: ${history.join(" • ")}`;
+        }
       } else {
         if (targetEgg) targetEgg.classList.remove("playing");
         const anyActive = section.querySelector(".musician.playing");
@@ -284,6 +326,8 @@ window.addEventListener("keydown", (e) => {
     const modes: TempoMode[] = ["balanced", "instant", "autoplay"];
     const nextIdx = (modes.indexOf(current) + 1) % modes.length;
     setMode(modes[nextIdx]);
+  } else if (e.code === "KeyP" && !e.repeat) {
+    controller.togglePause();
   } else if (e.code === "ArrowUp") {
     e.preventDefault();
     controller.stepDynamicLevel(1);

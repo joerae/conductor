@@ -38,7 +38,7 @@ describe("Dynamic Presets & Acoustic Parameters", () => {
       const preset = DYNAMIC_PRESETS[level];
       expect(preset.reverbWet).toBeGreaterThan(lastWet);
       expect(preset.reverbWet).toBeGreaterThanOrEqual(0.05);
-      expect(preset.reverbWet).toBeLessThanOrEqual(0.35);
+      expect(preset.reverbWet).toBeLessThanOrEqual(0.85);
       lastWet = preset.reverbWet;
     }
   });

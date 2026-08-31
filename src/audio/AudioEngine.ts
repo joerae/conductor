@@ -18,11 +18,13 @@ import {
   DYNAMIC_PRESETS,
   DEFAULT_DSP_BYPASS_FLAGS,
   scaleVelocity,
+  decomposeVelocity,
 } from "./dynamicsTypes";
 import type {
   DynamicLevel,
   DSPBypassFlags,
   DynamicsTelemetry,
+  VelocityDecomposition,
 } from "./dynamicsTypes";
 
 // ─── Tuning constants ───────────────────────────────────────────────────────
@@ -153,6 +155,24 @@ export class AudioEngine {
     return { ...this.dspBypassFlags };
   }
 
+  computeEffectiveVelocity(rawVelocity: number): number {
+    return scaleVelocity(
+      rawVelocity,
+      this.dynamicLevel,
+      this.dspBypassFlags.velocityScaling,
+      this.dspBypassFlags.scoreCompression
+    );
+  }
+
+  decomposeNoteVelocity(rawVelocity: number): VelocityDecomposition {
+    return decomposeVelocity(
+      rawVelocity,
+      this.dynamicLevel,
+      this.dspBypassFlags.velocityScaling,
+      this.dspBypassFlags.scoreCompression
+    );
+  }
+
   getDynamicsTelemetry(): DynamicsTelemetry {
     const preset = DYNAMIC_PRESETS[this.dynamicLevel] || DYNAMIC_PRESETS.mf;
     return {
@@ -160,7 +180,7 @@ export class AudioEngine {
       velocityMultiplier: this.dspBypassFlags.velocityScaling ? preset.velocityMultiplier : 1.0,
       filterCutoffHz: this.dspBypassFlags.timbreFilter ? preset.filterCutoffHz : 20000,
       highShelfGainDb: this.dspBypassFlags.timbreFilter ? preset.highShelfGainDb : 0.0,
-      reverbWet: this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.16,
+      reverbWet: this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.0,
       attackTimeSec: this.dspBypassFlags.attackEnvelope ? preset.attackTimeSec : 0.006,
       bypassFlags: { ...this.dspBypassFlags },
     };
@@ -182,9 +202,9 @@ export class AudioEngine {
       this.highShelfFilter.gain.setTargetAtTime(targetGain, now, timeConstant);
     }
 
-    // 2. Reverb wet gain
+    // 2. Reverb wet gain (0.0 when bypassed)
     if (this.reverbGain) {
-      const targetReverb = this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.16;
+      const targetReverb = this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.0;
       this.reverbGain.gain.setTargetAtTime(targetReverb, now, timeConstant);
     }
 
@@ -229,26 +249,34 @@ export class AudioEngine {
     this.limiter.attack.value = 0.001;
     this.limiter.release.value = 0.05;
 
-    // Synthesize natural concert hall stereo impulse response
+    // Synthesize clean, warm concert hall stereo impulse response
     const rate = ctx.sampleRate;
-    const duration = 1.6; // 1.6s warm hall decay
+    const duration = 1.8; // 1.8s warm concert hall decay
     const length = Math.floor(rate * duration);
     const impulse = ctx.createBuffer(2, length, rate);
     const left = impulse.getChannelData(0);
     const right = impulse.getChannelData(1);
 
+    let prevL = 0;
+    let prevR = 0;
     for (let i = 0; i < length; i++) {
       const t = i / rate;
-      const decay = Math.exp(-t / 0.38) * (1 - t / duration);
-      left[i] = (Math.random() * 2 - 1) * decay;
-      right[i] = (Math.random() * 2 - 1) * decay;
+      const decay = Math.exp(-t / 0.40) * Math.max(0, 1 - t / duration);
+      const rawL = (Math.random() * 2 - 1) * decay;
+      const rawR = (Math.random() * 2 - 1) * decay;
+      // High-frequency air absorption damping
+      prevL = prevL * 0.35 + rawL * 0.65;
+      prevR = prevR * 0.35 + rawR * 0.65;
+      left[i] = prevL;
+      right[i] = prevR;
     }
 
     this.reverbConvolver = ctx.createConvolver();
+    this.reverbConvolver.normalize = true;
     this.reverbConvolver.buffer = impulse;
 
     this.reverbGain = ctx.createGain();
-    this.reverbGain.gain.value = this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.16;
+    this.reverbGain.gain.value = this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.0;
 
     // Routing:
     // masterGain -> lowPassFilter -> highShelfFilter -> limiter -> destination
