@@ -7,6 +7,7 @@ import { ExperienceController } from "./experience/ExperienceController";
 import type { ExperienceState } from "./experience/ExperienceController";
 import { loadRepertoireCatalog } from "./score/repertoire";
 import type { PieceDefinition } from "./score/repertoire";
+import type { DynamicLevel } from "./audio/dynamicsTypes";
 import "./style.css";
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
@@ -174,6 +175,9 @@ const controller = new ExperienceController({
     flashBeat();
     swingBaton();
   },
+  onDynamicChange: (level: DynamicLevel) => {
+    updateDynamicLadderUI(level);
+  },
   onNoteVisual: (event) => {
     setTimeout(() => {
       const section = channelToSectionMap.get(event.channel) ||
@@ -222,95 +226,57 @@ function setMode(mode: "balanced" | "instant"): void {
 modeBtnA?.addEventListener("click", () => setMode("balanced"));
 modeBtnB?.addEventListener("click", () => setMode("instant"));
 
-// ── Master Dynamics / Volume Control ─────────────────────────────────────────
+// ── Orchestral Dynamics & Vertical Dynamic Ladder ───────────────────────────
 
-const volumeBarFill = document.getElementById("volume-bar-fill") as HTMLElement;
-const volumePercent = document.getElementById("volume-percent") as HTMLElement;
-const volumeContainer = document.getElementById("volume-indicator-container") as HTMLElement;
-const volumeIcon = document.getElementById("volume-icon") as HTMLElement;
+const dynamicLadderContainer = document.getElementById("dynamic-ladder-container") as HTMLElement;
+const dynamicSteps = document.querySelectorAll<HTMLButtonElement>(".dynamic-step");
 
-let overboostDecayTimer: ReturnType<typeof setTimeout> | null = null;
-let overboostDecayInterval: ReturnType<typeof setInterval> | null = null;
+function updateDynamicLadderUI(level: DynamicLevel): void {
+  dynamicSteps.forEach(btn => {
+    const isMatch = btn.dataset.dynamic === level;
+    btn.classList.toggle("active", isMatch);
+  });
 
-function updateVolumeUI(volume: number): void {
-  const percent = Math.round(volume * 100);
-  const fillWidth = Math.min(100, Math.round((volume / 1.2) * 100));
-
-  if (volumeBarFill) volumeBarFill.style.width = `${fillWidth}%`;
-
-  const isOverboost = volume > 1.0;
-  if (volumePercent) {
-    volumePercent.textContent = isOverboost ? `${percent}% ⚡` : `${percent}%`;
-  }
-
-  if (isOverboost) {
-    volumeContainer?.classList.add("overboost");
-    volumeBarFill?.classList.add("overboost");
-    volumePercent?.classList.add("overboost");
-    if (volumeIcon) volumeIcon.textContent = "⚡";
+  if (level === "ff") {
+    dynamicLadderContainer?.classList.add("overburn");
   } else {
-    volumeContainer?.classList.remove("overboost");
-    volumeBarFill?.classList.remove("overboost");
-    volumePercent?.classList.remove("overboost");
-    if (volumeIcon) volumeIcon.textContent = volume === 0 ? "🔇" : volume < 0.4 ? "🔈" : "🔊";
+    dynamicLadderContainer?.classList.remove("overburn");
   }
+
+  // Update stage ambient dynamic classes
+  const allLevels: DynamicLevel[] = ["pp", "p", "mp", "mf", "f", "ff"];
+  allLevels.forEach(d => stageEl.classList.remove(`dynamic-${d}`));
+  stageEl.classList.add(`dynamic-${level}`);
 }
 
-function stopOverboostDecay(): void {
-  if (overboostDecayTimer !== null) {
-    clearTimeout(overboostDecayTimer);
-    overboostDecayTimer = null;
-  }
-  if (overboostDecayInterval !== null) {
-    clearInterval(overboostDecayInterval);
-    overboostDecayInterval = null;
-  }
-}
-
-function scheduleOverboostDecay(): void {
-  stopOverboostDecay();
-  // Hold overboost for 1.2s before gently bringing volume back down to 100% (1.0)
-  overboostDecayTimer = setTimeout(() => {
-    overboostDecayInterval = setInterval(() => {
-      const current = controller.getMasterVolume();
-      if (current <= 1.0) {
-        stopOverboostDecay();
-        controller.setMasterVolume(1.0);
-        updateVolumeUI(1.0);
-      } else {
-        const next = Math.max(1.0, current - 0.02);
-        controller.setMasterVolume(next);
-        updateVolumeUI(next);
-      }
-    }, 80);
-  }, 1200);
-}
-
-function adjustVolume(delta: number): void {
-  const current = controller.getMasterVolume();
-  const next = Math.max(0.0, Math.min(1.20, Math.round((current + delta) * 100) / 100));
-
-  controller.setMasterVolume(next);
-  updateVolumeUI(next);
-
-  if (next > 1.0) {
-    scheduleOverboostDecay();
-  } else {
-    stopOverboostDecay();
-  }
-}
+// Click on dynamic ladder buttons
+dynamicSteps.forEach(btn => {
+  btn.addEventListener("click", () => {
+    const dyn = btn.dataset.dynamic as DynamicLevel;
+    if (dyn) {
+      controller.setDynamicLevel(dyn);
+    }
+  });
+});
 
 // Mouse wheel scroll to adjust orchestral dynamics
+let wheelAccumulator = 0;
 window.addEventListener("wheel", (e) => {
   // If user is scrolling inside a modal list, allow normal scrolling
   if ((e.target as HTMLElement)?.closest(".modal-body")) return;
 
   e.preventDefault();
-  const delta = e.deltaY < 0 ? 0.05 : -0.05;
-  adjustVolume(delta);
+  wheelAccumulator += e.deltaY;
+  if (wheelAccumulator <= -35) {
+    controller.stepDynamicLevel(1); // Louder
+    wheelAccumulator = 0;
+  } else if (wheelAccumulator >= 35) {
+    controller.stepDynamicLevel(-1); // Softer
+    wheelAccumulator = 0;
+  }
 }, { passive: false });
 
-// Keyboard shortcuts: T (toggle mode), ArrowUp / ArrowDown (volume)
+// Keyboard shortcuts: T (toggle mode), ArrowUp / ArrowDown (dynamics)
 window.addEventListener("keydown", (e) => {
   if (versionModal.style.display === "flex" || repertoireModal.style.display === "flex") return;
 
@@ -320,29 +286,15 @@ window.addEventListener("keydown", (e) => {
     setMode(next);
   } else if (e.code === "ArrowUp") {
     e.preventDefault();
-    adjustVolume(0.05);
+    controller.stepDynamicLevel(1);
   } else if (e.code === "ArrowDown") {
     e.preventDefault();
-    adjustVolume(-0.05);
+    controller.stepDynamicLevel(-1);
   }
 });
 
-// Click / drag on volume bar
-volumeContainer?.addEventListener("click", (e) => {
-  const rect = volumeContainer.getBoundingClientRect();
-  const clickX = e.clientX - rect.left;
-  const ratio = Math.max(0.05, Math.min(1.2, (clickX / rect.width) * 1.2));
-  controller.setMasterVolume(ratio);
-  updateVolumeUI(ratio);
-  if (ratio > 1.0) {
-    scheduleOverboostDecay();
-  } else {
-    stopOverboostDecay();
-  }
-});
-
-// Initialize UI to starting volume (60%)
-updateVolumeUI(controller.getMasterVolume());
+// Initialize UI to starting dynamic level (mf)
+updateDynamicLadderUI(controller.getDynamicLevel());
 
 restartBtn.addEventListener("click", () => controller.restart());
 switchPieceBtn.addEventListener("click", () => openRepertoireModal());

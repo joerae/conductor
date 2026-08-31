@@ -1,9 +1,23 @@
 {
-  "version": "0.2.3",
+  "version": "0.3.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.3.0",
+      "date": "2026-09-01",
+      "summary": "Hybrid Dynamic Modeling: Proportional Velocity Scaling, Real-time Timbre Filtering (LPF/Shelf), Dynamic Reverb Bloom, Vertical Musical Dynamic Ladder & A/B DSP Toggles",
+      "details": [
+        "Proportional MIDI velocity scaling preserves relative melody vs accompaniment phrasing across all dynamic tiers without clipping",
+        "Real-time native Web Audio DSP: Dynamic Low-Pass & High-Shelf filtering for authentic timbral brightness in forte and warmth in piano",
+        "Dynamic Concert Hall Reverb: scales acoustic hall bloom from intimate dry (7%) in pp to grand resonance (30%) in ff",
+        "Replaced heavy master compressor with transparent safety peak limiter (-1.0 dBFS) to preserve 100% natural score dynamic range",
+        "Added Vertical Musical Dynamic Ladder (pp, p, mp, mf, f, ff ⚡) with arrow keys, mouse wheel, and ff overburn decay",
+        "Added live dynamics telemetry and interactive A/B DSP component bypass toggles in the Debug Overlay (D key)",
+        "Documented sound rendering architecture in docs/SOUND_RENDERING_DESIGN.md"
+      ]
+    },
     {
       "version": "0.2.3",
       "date": "2026-08-31",

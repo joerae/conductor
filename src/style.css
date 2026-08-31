@@ -151,10 +151,19 @@ html, body {
   100% { border-color: transparent;         background: transparent; }
 }
 
-/* ── Orchestra silhouette & Instrument sections ───────────────────────────── */
+/* ── Orchestra silhouette & Performance Area ──────────────────────────────── */
+.stage-performance-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-lg);
+  width: min(880px, 94vw);
+  position: relative;
+}
+
 #orchestra-silhouette {
-  width: min(760px, 92vw);
-  flex-shrink: 0;
+  width: min(720px, 80vw);
+  flex-shrink: 1;
 }
 
 #orchestra-silhouette svg {
@@ -342,91 +351,128 @@ html, body {
   color: var(--accent-gold);
 }
 
-/* ── Dynamics / Volume HUD ────────────────────────────────────────────────── */
-.volume-container {
+/* ── Vertical Orchestral Dynamic Ladder ───────────────────────────────────── */
+.dynamic-ladder-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(14, 18, 26, 0.82);
+  border: 1px solid rgba(201, 168, 76, 0.22);
+  border-radius: 12px;
+  padding: 8px 6px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  user-select: none;
+  transition: border-color var(--transition-med), box-shadow var(--transition-med);
+  flex-shrink: 0;
+}
+
+.dynamic-ladder-container:hover {
+  border-color: rgba(201, 168, 76, 0.45);
+  box-shadow: 0 8px 28px rgba(201, 168, 76, 0.18);
+}
+
+.dynamic-ladder-header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  background: rgba(0, 0, 0, 0.35);
-  padding: 5px 14px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(8px);
-  margin-bottom: var(--spacing-xs);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-  user-select: none;
-  cursor: ns-resize;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  width: 100%;
+  justify-content: center;
 }
 
-.volume-container:hover {
-  border-color: rgba(201, 168, 76, 0.35);
-  box-shadow: 0 0 12px rgba(201, 168, 76, 0.15);
-}
-
-.volume-container.overboost {
-  border-color: #ff6b3d;
-  box-shadow: 0 0 16px rgba(255, 107, 61, 0.4);
-  animation: overboostPulse 1.2s ease-in-out infinite alternate;
-}
-
-@keyframes overboostPulse {
-  0%   { box-shadow: 0 0 12px rgba(255, 107, 61, 0.3); }
-  100% { box-shadow: 0 0 20px rgba(255, 72, 0, 0.6); }
-}
-
-.volume-icon {
+.dynamic-icon {
   font-size: 0.85rem;
+  color: var(--accent-gold);
 }
 
-.volume-label {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  letter-spacing: 0.08em;
+.dynamic-title {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
   text-transform: uppercase;
-  font-weight: 500;
-}
-
-.volume-bar-bg {
-  width: 80px;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  overflow: hidden;
-  position: relative;
-}
-
-.volume-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #c9a84c, #ffd56b);
-  border-radius: 4px;
-  transition: width 0.08s ease-out;
-  box-shadow: 0 0 8px rgba(255, 213, 107, 0.5);
-}
-
-.volume-bar-fill.overboost {
-  background: linear-gradient(90deg, #ffd56b, #ff6b3d, #ff2a00);
-  box-shadow: 0 0 12px rgba(255, 72, 0, 0.7);
-}
-
-.volume-val {
-  font-size: 0.75rem;
-  color: var(--accent-warm);
-  font-weight: 600;
-  min-width: 34px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.volume-val.overboost {
-  color: #ff7a4d;
-  text-shadow: 0 0 8px rgba(255, 107, 61, 0.6);
-}
-
-.volume-scroll-hint {
-  font-size: 0.68rem;
+  letter-spacing: 0.1em;
   color: var(--text-muted);
-  opacity: 0.7;
-  margin-left: 2px;
+  font-weight: 600;
+}
+
+.dynamic-ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.dynamic-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 6px;
+  padding: 5px 12px;
+  min-width: 52px;
+  cursor: pointer;
+  transition: all 0.12s ease-out;
+  color: var(--text-muted);
+}
+
+.dynamic-step:hover {
+  background: rgba(201, 168, 76, 0.15);
+  border-color: rgba(201, 168, 76, 0.4);
+  color: var(--text-primary);
+  transform: scale(1.05);
+}
+
+.dynamic-symbol {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: -0.02em;
+}
+
+.dynamic-sparkle {
+  font-size: 0.72rem;
+  margin-left: -1px;
+}
+
+/* Active Dynamic Step */
+.dynamic-step.active {
+  background: linear-gradient(135deg, rgba(201, 168, 76, 0.38), rgba(255, 213, 107, 0.22));
+  border-color: var(--accent-gold);
+  color: #fff2c4;
+  box-shadow: 0 0 12px rgba(255, 213, 107, 0.35);
+  transform: scale(1.08);
+}
+
+/* Overburn (ff) Active State */
+.dynamic-step[data-dynamic="ff"].active {
+  background: linear-gradient(135deg, rgba(255, 107, 61, 0.45), rgba(255, 180, 0, 0.35));
+  border-color: #ff8c42;
+  color: #ffffff;
+  box-shadow: 0 0 18px rgba(255, 140, 66, 0.65);
+  animation: overburnLadderPulse 1s ease-in-out infinite alternate;
+}
+
+.dynamic-ladder-container.overburn {
+  border-color: #ff8c42;
+  box-shadow: 0 0 20px rgba(255, 140, 66, 0.35);
+}
+
+@keyframes overburnLadderPulse {
+  0% { box-shadow: 0 0 10px rgba(255, 140, 66, 0.4); }
+  100% { box-shadow: 0 0 22px rgba(255, 90, 20, 0.85); }
+}
+
+.dynamic-ladder-hint {
+  margin-top: 6px;
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  opacity: 0.75;
+  text-align: center;
 }
 
 /* ── Prompt area ────────────────────────────────────────────────────────────── */
@@ -818,3 +864,83 @@ html, body {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+.debug-section-header {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #ffd56b;
+  border-bottom: 1px solid rgba(255, 213, 107, 0.2);
+  padding-bottom: 3px;
+  margin-bottom: 4px;
+}
+
+.debug-toggles-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.debug-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #d0f0d0;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.1s ease;
+}
+
+.debug-checkbox-label:hover {
+  color: #ffffff;
+}
+
+.debug-checkbox-label input[type="checkbox"] {
+  accent-color: #ffd56b;
+  cursor: pointer;
+}
+
+/* ── Dynamic Ambient Stage Lighting ──────────────────────────────────────── */
+#stage.dynamic-ff {
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 80%, rgba(255, 140, 66, 0.16) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(45, 25, 15, 0.9) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-f {
+  background:
+    radial-gradient(ellipse 85% 65% at 50% 80%, rgba(201, 168, 76, 0.14) 0%, transparent 70%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-mf {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 80%, rgba(201, 168, 76, 0.08) 0%, transparent 70%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-mp {
+  background:
+    radial-gradient(ellipse 75% 55% at 50% 80%, rgba(160, 140, 180, 0.06) 0%, transparent 70%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-p {
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 80%, rgba(120, 100, 160, 0.05) 0%, transparent 70%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-pp {
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 80%, rgba(80, 70, 120, 0.04) 0%, transparent 70%),
+    var(--bg-stage);
+}
+

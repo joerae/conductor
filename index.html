@@ -7,7 +7,7 @@
     <meta name="description" content="An interactive orchestral experience where you control tempo in real time. Tap Space to conduct." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
   </head>
   <body>
 
@@ -25,66 +25,101 @@
       <!-- Beat flash overlay -->
       <div id="beat-flash"></div>
 
-      <!-- Orchestra silhouette with instrument sections -->
-      <div id="orchestra-silhouette" aria-hidden="true">
-        <svg viewBox="0 0 840 230" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
-          <defs>
-            <filter id="glow-gold" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-            <radialGradient id="egg-glow" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#ffd56b" stop-opacity="1" />
-              <stop offset="60%" stop-color="#c9a84c" stop-opacity="0.8" />
-              <stop offset="100%" stop-color="#2a2e3a" stop-opacity="0.2" />
-            </radialGradient>
-          </defs>
+      <!-- Stage Center Area: Orchestra Silhouette + Vertical Dynamic Ladder -->
+      <div class="stage-performance-area">
+        <!-- Orchestra silhouette with instrument sections -->
+        <div id="orchestra-silhouette" aria-hidden="true">
+          <svg viewBox="0 0 840 230" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <filter id="glow-gold" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+              <radialGradient id="egg-glow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#ffd56b" stop-opacity="1" />
+                <stop offset="60%" stop-color="#c9a84c" stop-opacity="0.8" />
+                <stop offset="100%" stop-color="#2a2e3a" stop-opacity="0.2" />
+              </radialGradient>
+            </defs>
 
-          <!-- Section 1: Violin I (Left) -->
-          <g id="section-0" class="instrument-section" data-track="0" data-track-name="Violin I">
-            <ellipse cx="110" cy="155" rx="18" ry="28" class="musician violin1 egg-0" />
-            <ellipse cx="155" cy="148" rx="18" ry="28" class="musician violin1 egg-1" />
-            <ellipse cx="200" cy="155" rx="18" ry="28" class="musician violin1 egg-2" />
-            <text x="155" y="198" text-anchor="middle" class="section-label">Violin I</text>
-          </g>
+            <!-- Section 1: Violin I (Left) -->
+            <g id="section-0" class="instrument-section" data-track="0" data-track-name="Violin I">
+              <ellipse cx="110" cy="155" rx="18" ry="28" class="musician violin1 egg-0" />
+              <ellipse cx="155" cy="148" rx="18" ry="28" class="musician violin1 egg-1" />
+              <ellipse cx="200" cy="155" rx="18" ry="28" class="musician violin1 egg-2" />
+              <text x="155" y="198" text-anchor="middle" class="section-label">Violin I</text>
+            </g>
 
-          <!-- Section 2: Violin II (Center-Left) -->
-          <g id="section-1" class="instrument-section" data-track="1" data-track-name="Violin II">
-            <ellipse cx="270" cy="148" rx="18" ry="28" class="musician violin2 egg-0" />
-            <ellipse cx="315" cy="142" rx="18" ry="28" class="musician violin2 egg-1" />
-            <ellipse cx="360" cy="148" rx="18" ry="28" class="musician violin2 egg-2" />
-            <text x="315" y="198" text-anchor="middle" class="section-label">Violin II</text>
-          </g>
+            <!-- Section 2: Violin II (Center-Left) -->
+            <g id="section-1" class="instrument-section" data-track="1" data-track-name="Violin II">
+              <ellipse cx="270" cy="148" rx="18" ry="28" class="musician violin2 egg-0" />
+              <ellipse cx="315" cy="142" rx="18" ry="28" class="musician violin2 egg-1" />
+              <ellipse cx="360" cy="148" rx="18" ry="28" class="musician violin2 egg-2" />
+              <text x="315" y="198" text-anchor="middle" class="section-label">Violin II</text>
+            </g>
 
-          <!-- Conductor podium & Baton (Center) -->
-          <g id="conductor-group" class="conductor-group">
-            <rect x="395" y="75" width="50" height="8" rx="4" class="podium" />
-            <ellipse cx="420" cy="62" rx="16" ry="22" class="conductor" />
-            <line id="baton-line" x1="428" y1="54" x2="465" y2="22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" class="baton" />
-          </g>
+            <!-- Conductor podium & Baton (Center) -->
+            <g id="conductor-group" class="conductor-group">
+              <rect x="395" y="75" width="50" height="8" rx="4" class="podium" />
+              <ellipse cx="420" cy="62" rx="16" ry="22" class="conductor" />
+              <line id="baton-line" x1="428" y1="54" x2="465" y2="22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" class="baton" />
+            </g>
 
-          <!-- Section 3: Viola (Center-Right) -->
-          <g id="section-2" class="instrument-section" data-track="2" data-track-name="Viola">
-            <ellipse cx="480" cy="148" rx="18" ry="28" class="musician viola egg-0" />
-            <ellipse cx="525" cy="142" rx="18" ry="28" class="musician viola egg-1" />
-            <ellipse cx="570" cy="148" rx="18" ry="28" class="musician viola egg-2" />
-            <text x="525" y="198" text-anchor="middle" class="section-label">Viola</text>
-          </g>
+            <!-- Section 3: Viola (Center-Right) -->
+            <g id="section-2" class="instrument-section" data-track="2" data-track-name="Viola">
+              <ellipse cx="480" cy="148" rx="18" ry="28" class="musician viola egg-0" />
+              <ellipse cx="525" cy="142" rx="18" ry="28" class="musician viola egg-1" />
+              <ellipse cx="570" cy="148" rx="18" ry="28" class="musician viola egg-2" />
+              <text x="525" y="198" text-anchor="middle" class="section-label">Viola</text>
+            </g>
 
-          <!-- Section 4: Violoncello & Bass (Right) -->
-          <g id="section-3" class="instrument-section" data-track="3" data-track-name="Violoncello">
-            <ellipse cx="640" cy="155" rx="18" ry="28" class="musician cello egg-0" />
-            <ellipse cx="685" cy="148" rx="18" ry="28" class="musician cello egg-1" />
-            <ellipse cx="730" cy="155" rx="18" ry="28" class="musician cello egg-2" />
-            <text x="685" y="198" text-anchor="middle" class="section-label">Cello / Bass</text>
-          </g>
+            <!-- Section 4: Violoncello & Bass (Right) -->
+            <g id="section-3" class="instrument-section" data-track="3" data-track-name="Violoncello">
+              <ellipse cx="640" cy="155" rx="18" ry="28" class="musician cello egg-0" />
+              <ellipse cx="685" cy="148" rx="18" ry="28" class="musician cello egg-1" />
+              <ellipse cx="730" cy="155" rx="18" ry="28" class="musician cello egg-2" />
+              <text x="685" y="198" text-anchor="middle" class="section-label">Cello / Bass</text>
+            </g>
 
-          <!-- Stage floor -->
-          <rect x="20" y="210" width="800" height="4" rx="2" class="stage-floor" />
-        </svg>
+            <!-- Stage floor -->
+            <rect x="20" y="210" width="800" height="4" rx="2" class="stage-floor" />
+          </svg>
+        </div>
+
+        <!-- Vertical Orchestral Dynamic Ladder -->
+        <aside id="dynamic-ladder-container" class="dynamic-ladder-container" title="Orchestral Dynamics: Use ↑/↓ arrows, mouse wheel, or click to shape dynamic expression">
+          <div class="dynamic-ladder-header">
+            <span class="dynamic-icon">𝄢</span>
+            <span class="dynamic-title">Dynamics</span>
+          </div>
+          <div class="dynamic-ladder" id="dynamic-ladder" role="group" aria-label="Orchestral dynamic levels">
+            <button class="dynamic-step" data-dynamic="ff" title="Fortissimo (Overburn ⚡)">
+              <span class="dynamic-symbol">ff</span>
+              <span class="dynamic-sparkle">⚡</span>
+            </button>
+            <button class="dynamic-step" data-dynamic="f" title="Forte (Loud)">
+              <span class="dynamic-symbol">f</span>
+            </button>
+            <button class="dynamic-step active" data-dynamic="mf" title="Mezzo-forte (Default)">
+              <span class="dynamic-symbol">mf</span>
+            </button>
+            <button class="dynamic-step" data-dynamic="mp" title="Mezzo-piano (Moderately soft)">
+              <span class="dynamic-symbol">mp</span>
+            </button>
+            <button class="dynamic-step" data-dynamic="p" title="Piano (Soft)">
+              <span class="dynamic-symbol">p</span>
+            </button>
+            <button class="dynamic-step" data-dynamic="pp" title="Pianissimo (Very soft)">
+              <span class="dynamic-symbol">pp</span>
+            </button>
+          </div>
+          <div class="dynamic-ladder-hint">
+            <span>Scroll 🖱️ / ↑↓</span>
+          </div>
+        </aside>
       </div>
 
       <!-- Piece info & Repertoire button -->
@@ -112,17 +147,6 @@
         <span class="mode-shortcut-hint">Press <strong>T</strong> to toggle</span>
       </div>
 
-      <!-- Dynamics / Volume Control -->
-      <div id="volume-indicator-container" class="volume-container" title="Master Dynamics: Scroll mouse wheel or use ↑/↓ arrows to adjust orchestral volume (Overboost up to 120%)">
-        <span class="volume-icon" id="volume-icon">🔊</span>
-        <span class="volume-label">Dynamics:</span>
-        <div class="volume-bar-bg" id="volume-slider-track">
-          <div id="volume-bar-fill" class="volume-bar-fill" style="width: 50%;"></div>
-        </div>
-        <span id="volume-percent" class="volume-val">60%</span>
-        <span class="volume-scroll-hint">Scroll 🖱️ / ↑↓</span>
-      </div>
-
       <!-- Prompt -->
       <div id="prompt-area">
         <p id="prompt">Tap SPACE twice to set the pulse.</p>
@@ -139,9 +163,9 @@
 
       <!-- Footer controls -->
       <footer id="stage-footer">
-        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.2.0</button>
+        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.3.0</button>
         <span class="footer-divider">•</span>
-        <span id="debug-hint" class="debug-hint">Press D for debug overlay</span>
+        <span id="debug-hint" class="debug-hint">Press D for debug overlay & A/B DSP</span>
       </footer>
     </div>
 

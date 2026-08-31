@@ -13,6 +13,7 @@
  *
  * Wires together:
  *   KeyboardBeatInput → ConductorClock → ScoreTransport → Scheduler → AudioEngine
+ *   Dynamic level state machine + overburn timer → AudioEngine DSP
  *   All modules → DebugOverlay
  */
 
@@ -24,9 +25,14 @@ import { MidiScore } from "../score/MidiScore";
 import { ScoreTransport } from "../score/ScoreTransport";
 import { Scheduler } from "../scheduler/Scheduler";
 import { DebugOverlay } from "../ui/DebugOverlay";
+import { getStepDynamicLevel } from "../audio/dynamicsTypes";
+import type {
+  DynamicLevel,
+  DSPBypassFlags,
+  DynamicsTelemetry,
+} from "../audio/dynamicsTypes";
 
 import type { NotePlaybackEvent } from "../scheduler/Scheduler";
-
 import { REPERTOIRE, getPieceById, DEFAULT_PIECE_ID } from "../score/repertoire";
 import type { PieceDefinition } from "../score/repertoire";
 
@@ -51,6 +57,7 @@ interface UICallbacks {
   onStateChange: (state: ExperienceState) => void;
   onBeat: () => void;
   onNoteVisual?: (event: NoteVisualEvent) => void;
+  onDynamicChange?: (level: DynamicLevel) => void;
 }
 
 export class ExperienceController {
@@ -69,10 +76,18 @@ export class ExperienceController {
   private prepTapCount: number = 0;
   private pausedBeat: number = 0;
 
+  // Overburn decay timer (for ff dynamic)
+  private overburnTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(callbacks: UICallbacks) {
     this.uiCallbacks = callbacks;
     this.audioEngine = new AudioEngine();
-    this.debug = new DebugOverlay();
+
+    // Wire debug overlay with A/B DSP bypass control
+    this.debug = new DebugOverlay((flag: keyof DSPBypassFlags, enabled: boolean) => {
+      this.audioEngine.setDSPBypassFlags({ [flag]: enabled });
+      this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
+    });
 
     // Clock uses AudioEngine's time function for audio scheduling
     this.clock = new ConductorClock({
@@ -92,6 +107,9 @@ export class ExperienceController {
 
     // Wire clock events → UI + debug
     this.clock.on((event: ClockEvent) => this.handleClockEvent(event));
+
+    // Initialize dynamics telemetry in debug
+    this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
   }
 
   private handleNotePlaybackEvent(event: NotePlaybackEvent): void {
@@ -175,6 +193,54 @@ export class ExperienceController {
     this.setState("ready");
   }
 
+  // ── Dynamics & Expression ────────────────────────────────────────────────
+
+  setDynamicLevel(level: DynamicLevel): void {
+    if (this.overburnTimer) {
+      clearTimeout(this.overburnTimer);
+      this.overburnTimer = null;
+    }
+
+    this.audioEngine.setDynamicLevel(level);
+    this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
+
+    if (this.uiCallbacks.onDynamicChange) {
+      this.uiCallbacks.onDynamicChange(level);
+    }
+
+    // If pushed to ff (overburn), schedule automatic decay back to f after 1.5s
+    if (level === "ff") {
+      this.overburnTimer = setTimeout(() => {
+        if (this.audioEngine.getDynamicLevel() === "ff") {
+          this.setDynamicLevel("f");
+        }
+      }, 1500);
+    }
+  }
+
+  getDynamicLevel(): DynamicLevel {
+    return this.audioEngine.getDynamicLevel();
+  }
+
+  stepDynamicLevel(delta: 1 | -1): void {
+    const current = this.audioEngine.getDynamicLevel();
+    const next = getStepDynamicLevel(current, delta);
+    this.setDynamicLevel(next);
+  }
+
+  setDSPBypassFlags(flags: Partial<DSPBypassFlags>): void {
+    this.audioEngine.setDSPBypassFlags(flags);
+    this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
+  }
+
+  getDSPBypassFlags(): DSPBypassFlags {
+    return this.audioEngine.getDSPBypassFlags();
+  }
+
+  getDynamicsTelemetry(): DynamicsTelemetry {
+    return this.audioEngine.getDynamicsTelemetry();
+  }
+
   // ── Beat observation handler ─────────────────────────────────────────────
 
   private async handleBeatObservation(obs: {
@@ -223,6 +289,7 @@ export class ExperienceController {
         (ctx as AudioContext & { outputLatency?: number }).outputLatency ?? 0
       );
     }
+    this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
   }
 
   // ── Clock event handler ──────────────────────────────────────────────────
@@ -243,6 +310,7 @@ export class ExperienceController {
         this.debug.updateTapAccepted();
         this.debug.updateScore(this.transport.getCursorBeat());
         this.debug.updateScheduler(this.scheduler.horizon, this.scheduler.committedCount);
+        this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
         this.uiCallbacks.onBeat();
         break;
       }

@@ -11,7 +11,7 @@
   "beatsPerTap": 1,
   "conductMode": "In 4 (1 tap = 1 beat)",
   "layout": "chamber_strings",
-  "description": "Mozart's celebrated serenade, opening with its iconic unison Mannheim rocket motif across all strings.",
+  "description": "Mozart's celebrated serenade: 1st Movement (Allegro in 4/4 common time), opening with its famous unison Mannheim rocket motif across all strings (Note: Movement 3 is the famous Minuet in 3/4).",
   "sections": [
     { "id": "violin1", "name": "Violin I", "channels": [0], "programs": [48, 40], "trackNames": ["Violin I"] },
     { "id": "violin2", "name": "Violin II", "channels": [3], "programs": [48, 40], "trackNames": ["Violin II"] },

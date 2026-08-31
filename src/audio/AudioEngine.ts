@@ -5,19 +5,25 @@
  * against AudioContext.currentTime — never fired from keyboard events,
  * setTimeout callbacks, or animation frames.
  *
- * Phase 0: scheduleClick() for the timing spike (oscillator-based, no samples).
- * Phase 1: scheduleNoteOn() / scheduleNoteOff() using WebAudioFont sample banks.
- *
- * One shared AudioContext is created on first resume (requires a user gesture).
- * The AudioContext is exposed as getAudioTime() for injection into ConductorClock.
- *
- * WebAudioFont integration:
- *   - Sample banks are loaded as CDN script tags that define arrays on window.
- *   - We use WebAudioFontPlayer from the same CDN for sample playback.
- *   - Each active note is tracked in a Map so we can release it precisely.
+ * Hybrid Dynamic Modeling Architecture:
+ *   - Proportional velocity scaling preserves phrasing & contrast across dynamic tiers.
+ *   - Real-time Native Biquad Filters (LPF + High-Shelf) modulate timbre on audio thread.
+ *   - Dynamic Impulse Response Reverb scales hall acoustics from intimate dry (pp) to blooming (ff).
+ *   - Master Transparent Peak Limiter prevents clipping without squashing dynamics.
+ *   - A/B Debug Bypass controls for isolating individual DSP components.
  */
 
 import { programToWebAudioFontVar, WEBAUDIOFONT_SCRIPTS } from "./instruments";
+import {
+  DYNAMIC_PRESETS,
+  DEFAULT_DSP_BYPASS_FLAGS,
+  scaleVelocity,
+} from "./dynamicsTypes";
+import type {
+  DynamicLevel,
+  DSPBypassFlags,
+  DynamicsTelemetry,
+} from "./dynamicsTypes";
 
 // ─── Tuning constants ───────────────────────────────────────────────────────
 
@@ -41,7 +47,6 @@ const CLICK_RELEASE_SEC = 0.015;
 
 // ─── WebAudioFont types ─────────────────────────────────────────────────────
 
-// The WebAudioFontPlayer library defines itself on window
 declare global {
   interface Window {
     WebAudioFontPlayer: new () => WebAudioFontPlayerInstance;
@@ -64,7 +69,7 @@ interface WebAudioFontPlayerInstance {
   ) => { cancel: () => void };
 }
 
-// ─── AudioEngine ────────────────────────────────────────────────────────────
+// ─── Active Voice ──────────────────────────────────────────────────────────
 
 interface ActiveVoice {
   noteId: string;
@@ -83,12 +88,18 @@ export class AudioEngine {
   private activeVoices: Map<string, ActiveVoice> = new Map();
   private samplesLoaded: boolean = false;
 
-  // Master bus & Concert Hall acoustics (Phase 2)
+  // Master bus & Concert Hall acoustics
   private masterGain: GainNode | null = null;
+  private lowPassFilter: BiquadFilterNode | null = null;
+  private highShelfFilter: BiquadFilterNode | null = null;
   private reverbConvolver: ConvolverNode | null = null;
   private reverbGain: GainNode | null = null;
-  private compressor: DynamicsCompressorNode | null = null;
+  private limiter: DynamicsCompressorNode | null = null;
   private masterVolume: number = 0.60;
+
+  // Dynamics & DSP State
+  private dynamicLevel: DynamicLevel = "mf";
+  private dspBypassFlags: DSPBypassFlags = { ...DEFAULT_DSP_BYPASS_FLAGS };
 
   // ── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -97,12 +108,17 @@ export class AudioEngine {
    * Creates and resumes the AudioContext with Concert Hall acoustics.
    */
   async resume(): Promise<void> {
+    const isNew = !this.ctx;
     if (!this.ctx) {
       this.ctx = new AudioContext();
       this.setupMasterAcoustics();
     }
     if (this.ctx.state === "suspended") {
       await this.ctx.resume();
+    }
+    // Decode all loaded instrument soundfonts immediately into the newly created context
+    if (isNew && this.samplesLoaded) {
+      this.decodeLoadedSamples();
     }
   }
 
@@ -117,26 +133,103 @@ export class AudioEngine {
     return this.masterVolume;
   }
 
+  // ── Dynamics & DSP Control ──────────────────────────────────────────────
+
+  setDynamicLevel(level: DynamicLevel): void {
+    this.dynamicLevel = level;
+    this.applyDynamicPreset();
+  }
+
+  getDynamicLevel(): DynamicLevel {
+    return this.dynamicLevel;
+  }
+
+  setDSPBypassFlags(flags: Partial<DSPBypassFlags>): void {
+    this.dspBypassFlags = { ...this.dspBypassFlags, ...flags };
+    this.applyDynamicPreset();
+  }
+
+  getDSPBypassFlags(): DSPBypassFlags {
+    return { ...this.dspBypassFlags };
+  }
+
+  getDynamicsTelemetry(): DynamicsTelemetry {
+    const preset = DYNAMIC_PRESETS[this.dynamicLevel] || DYNAMIC_PRESETS.mf;
+    return {
+      level: this.dynamicLevel,
+      velocityMultiplier: this.dspBypassFlags.velocityScaling ? preset.velocityMultiplier : 1.0,
+      filterCutoffHz: this.dspBypassFlags.timbreFilter ? preset.filterCutoffHz : 20000,
+      highShelfGainDb: this.dspBypassFlags.timbreFilter ? preset.highShelfGainDb : 0.0,
+      reverbWet: this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.16,
+      attackTimeSec: this.dspBypassFlags.attackEnvelope ? preset.attackTimeSec : 0.006,
+      bypassFlags: { ...this.dspBypassFlags },
+    };
+  }
+
+  private applyDynamicPreset(): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const timeConstant = 0.040; // 40ms smooth acoustic transition
+    const preset = DYNAMIC_PRESETS[this.dynamicLevel] || DYNAMIC_PRESETS.mf;
+
+    // 1. Timbre filters (Low-Pass Filter + High-Shelf Harmonics)
+    if (this.lowPassFilter) {
+      const targetCutoff = this.dspBypassFlags.timbreFilter ? preset.filterCutoffHz : 20000;
+      this.lowPassFilter.frequency.setTargetAtTime(targetCutoff, now, timeConstant);
+    }
+    if (this.highShelfFilter) {
+      const targetGain = this.dspBypassFlags.timbreFilter ? preset.highShelfGainDb : 0.0;
+      this.highShelfFilter.gain.setTargetAtTime(targetGain, now, timeConstant);
+    }
+
+    // 2. Reverb wet gain
+    if (this.reverbGain) {
+      const targetReverb = this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.16;
+      this.reverbGain.gain.setTargetAtTime(targetReverb, now, timeConstant);
+    }
+
+    // 3. Safety Peak Limiter (Transparent protection against 0dBFS DAC clipping)
+    if (this.limiter) {
+      if (this.dspBypassFlags.safetyLimiter) {
+        this.limiter.threshold.setTargetAtTime(-1.0, now, 0.01);
+        this.limiter.ratio.setTargetAtTime(20.0, now, 0.01);
+      } else {
+        this.limiter.threshold.setTargetAtTime(0.0, now, 0.01);
+        this.limiter.ratio.setTargetAtTime(1.0, now, 0.01);
+      }
+    }
+  }
+
   private setupMasterAcoustics(): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
+    const preset = DYNAMIC_PRESETS[this.dynamicLevel] || DYNAMIC_PRESETS.mf;
 
     // Master output bus
     this.masterGain = ctx.createGain();
     this.masterGain.gain.value = this.masterVolume;
 
-    // Master Dynamics Compressor: tightens score dynamic peaks so conductor wheel has primary control
-    this.compressor = ctx.createDynamicsCompressor();
-    this.compressor.threshold.value = -16; // dB
-    this.compressor.knee.value = 10;
-    this.compressor.ratio.value = 4;
-    this.compressor.attack.value = 0.005;
-    this.compressor.release.value = 0.12;
+    // Dynamic Low-Pass Filter (removes harsh upper harmonics in soft dynamics, opens in forte)
+    this.lowPassFilter = ctx.createBiquadFilter();
+    this.lowPassFilter.type = "lowpass";
+    this.lowPassFilter.frequency.value = this.dspBypassFlags.timbreFilter ? preset.filterCutoffHz : 20000;
+    this.lowPassFilter.Q.value = 0.707;
 
-    this.masterGain.connect(this.compressor);
-    this.compressor.connect(ctx.destination);
+    // Dynamic High-Shelf Filter (boosts piercing brass/string brilliance in ff/f, softens in p/pp)
+    this.highShelfFilter = ctx.createBiquadFilter();
+    this.highShelfFilter.type = "highshelf";
+    this.highShelfFilter.frequency.value = 4500;
+    this.highShelfFilter.gain.value = this.dspBypassFlags.timbreFilter ? preset.highShelfGainDb : 0.0;
 
-    // Synthesize natural concert hall stereo impulse response (Phase 2)
+    // Master Safety Peak Limiter: Transparent soft limiter at -1.0 dBFS (no squash on natural dynamics)
+    this.limiter = ctx.createDynamicsCompressor();
+    this.limiter.threshold.value = this.dspBypassFlags.safetyLimiter ? -1.0 : 0.0;
+    this.limiter.knee.value = 3.0;
+    this.limiter.ratio.value = this.dspBypassFlags.safetyLimiter ? 20.0 : 1.0;
+    this.limiter.attack.value = 0.001;
+    this.limiter.release.value = 0.05;
+
+    // Synthesize natural concert hall stereo impulse response
     const rate = ctx.sampleRate;
     const duration = 1.6; // 1.6s warm hall decay
     const length = Math.floor(rate * duration);
@@ -155,11 +248,20 @@ export class AudioEngine {
     this.reverbConvolver.buffer = impulse;
 
     this.reverbGain = ctx.createGain();
-    this.reverbGain.gain.value = 0.16; // 16% concert hall wet blend
+    this.reverbGain.gain.value = this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.16;
 
-    this.masterGain.connect(this.reverbConvolver);
+    // Routing:
+    // masterGain -> lowPassFilter -> highShelfFilter -> limiter -> destination
+    //                                      └-> reverbConvolver -> reverbGain -> limiter
+    this.masterGain.connect(this.lowPassFilter);
+    this.lowPassFilter.connect(this.highShelfFilter);
+
+    this.highShelfFilter.connect(this.limiter);
+    this.highShelfFilter.connect(this.reverbConvolver);
     this.reverbConvolver.connect(this.reverbGain);
-    this.reverbGain.connect(this.compressor);
+    this.reverbGain.connect(this.limiter);
+
+    this.limiter.connect(ctx.destination);
   }
 
   /**
@@ -217,7 +319,7 @@ export class AudioEngine {
    * Schedule a short click tone at the given AudioContext time.
    * Uses a plain oscillator — no samples needed for Phase 0.
    *
-   * @param audioTime  AudioContext.currentTime in seconds.
+   * @param audioTime AudioContext.currentTime in seconds.
    */
   scheduleClick(audioTime: number): void {
     if (!this.ctx) return;
@@ -241,11 +343,11 @@ export class AudioEngine {
     osc.stop(audioTime + CLICK_DURATION_SEC + CLICK_RELEASE_SEC);
   }
 
-  // ── Phase 1/2: Sampled notes & Dynamic voice control ─────────────────────
+  // ── Phase 1/2/3: Sampled notes & Dynamic voice control ────────────────────
 
   /**
    * Schedule a note-on event using the WebAudioFont sample bank.
-   * Handles pitch-collision truncation during accelerando and expressive velocity curves.
+   * Applies proportional velocity scaling, dynamic attack shaping, and voice management.
    *
    * @param noteId      Unique identifier for the note instance
    * @param midiNote    0–127
@@ -279,8 +381,8 @@ export class AudioEngine {
 
     const ctx = this.ctx;
 
-    // Pitch Collision Truncation (Phase 2): If a previous voice on the same pitch is still ringing,
-    // fade it out quickly (15ms) so the new note is crisp and doesn't pile up during accelerandos
+    // Pitch Collision Truncation: If a previous voice on the same pitch is still ringing,
+    // fade it out quickly (15ms) so the new note is crisp and doesn't pile up
     for (const [existingId, voice] of this.activeVoices.entries()) {
       if (voice.channel === channel && voice.midiNote === midiNote) {
         try {
@@ -302,16 +404,26 @@ export class AudioEngine {
       }
     }
 
-    // Natural expressive MIDI velocity dynamics (Phase 2):
-    // Preserves the score's authentic phrasing while master DynamicsCompressorNode
-    // smooths master acoustic peaks and lets the conductor's volume wheel shape overall level.
-    const rawVelRatio = Math.max(0.08, velocity / 127);
+    // Proportional velocity scaling
+    const effectiveVelocity = scaleVelocity(
+      velocity,
+      this.dynamicLevel,
+      this.dspBypassFlags.velocityScaling
+    );
+
+    const rawVelRatio = Math.max(0.08, effectiveVelocity / 127);
     const volume = Math.min(1.0, Math.pow(rawVelRatio, 1.15) * 1.05);
+
+    // Dynamic Attack Time: Bite on loud notes, gentle swell on quiet notes
+    const dynamicPreset = DYNAMIC_PRESETS[this.dynamicLevel] || DYNAMIC_PRESETS.mf;
+    const attackTime = this.dspBypassFlags.attackEnvelope
+      ? dynamicPreset.attackTimeSec
+      : 0.006;
 
     // Create dedicated GainNode for this voice connected to master bus
     const gainNode = ctx.createGain();
     gainNode.gain.setValueAtTime(0, audioTime);
-    gainNode.gain.linearRampToValueAtTime(volume, audioTime + 0.006);
+    gainNode.gain.linearRampToValueAtTime(volume, audioTime + attackTime);
     gainNode.connect(this.masterGain || ctx.destination);
 
     // Queue note with open duration (managed by scheduleNoteOff)

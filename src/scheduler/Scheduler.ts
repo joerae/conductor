@@ -27,10 +27,10 @@ import type { ScoreTransport } from "../score/ScoreTransport";
 import type { AudioEngine } from "../audio/AudioEngine";
 
 /** How often the scheduler wakes and checks for events to commit. */
-const TICK_INTERVAL_MS = 25;
+const TICK_INTERVAL_MS = 20;
 
 /** How far ahead we look when committing events to the audio engine. */
-const LOOKAHEAD_MS = 150;
+const LOOKAHEAD_MS = 300;
 
 export type NotePlaybackEvent = {
   type: "noteOn" | "noteOff";
@@ -98,9 +98,7 @@ export class Scheduler {
 
   private tick(): void {
     const audioNow = this.getAudioTime();
-    const lookAheadEnd = audioNow + LOOKAHEAD_MS / 1000;
-
-    // Advance the transport cursor to now
+    // Advance cursor to match current audio time
     this.transport.advanceTo(audioNow);
 
     if (this.transport.isPlaying()) {
@@ -112,7 +110,12 @@ export class Scheduler {
         }
       }
 
-      const pending = this.transport.eventsInWindow(audioNow, lookAheadEnd);
+      // Predictive lookahead: look from audioNow up through the predicted cursor beat + lookahead horizon
+      const cursorAudioTime = this.transport.audioTimeForBeat(this.transport.getCursorBeat());
+      const windowStart = Math.min(audioNow, cursorAudioTime);
+      const windowEnd = Math.max(audioNow + LOOKAHEAD_MS / 1000, cursorAudioTime + LOOKAHEAD_MS / 1000);
+
+      const pending = this.transport.eventsInWindow(windowStart, windowEnd);
 
       for (const event of pending) {
         // Use a composite key: noteId + type to track each note's on/off separately
