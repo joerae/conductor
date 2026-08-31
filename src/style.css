@@ -1,0 +1,334 @@
+/* ─── Conductor — Design System ─────────────────────────────────────────────
+   Dark stage aesthetic. Warm candlelight palette.
+   Typefaces: Playfair Display (titles), Inter (UI)
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Reset & base ──────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Palette */
+  --bg-deep:        #0a0b0e;
+  --bg-stage:       #0f1118;
+  --bg-card:        rgba(255,255,255,0.04);
+  --accent-gold:    #c9a84c;
+  --accent-warm:    #e8c87a;
+  --accent-glow:    rgba(201,168,76,0.18);
+  --text-primary:   #f0e8d8;
+  --text-secondary: #8a8070;
+  --text-muted:     #4a4540;
+  --musician-fill:  #2a2e3a;
+  --musician-wind:  #2e3328;
+  --musician-brass: #332e28;
+  --conductor-fill: #c9a84c;
+  --podium-fill:    #8a7040;
+  --stage-floor:    #1a1a22;
+  --baton-color:    #e8c87a;
+
+  /* Typography */
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-ui:      'Inter', system-ui, sans-serif;
+
+  /* Spacing */
+  --spacing-xs:   4px;
+  --spacing-sm:   8px;
+  --spacing-md:   16px;
+  --spacing-lg:   32px;
+  --spacing-xl:   64px;
+
+  /* Motion */
+  --transition-fast:  120ms ease;
+  --transition-med:   280ms cubic-bezier(0.4,0,0.2,1);
+  --transition-slow:  500ms ease;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Loading screen ────────────────────────────────────────────────────────── */
+#loading-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-deep);
+  z-index: 100;
+}
+
+.loading-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+}
+
+.loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--text-muted);
+  border-top-color: var(--accent-gold);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error {
+  color: #e07070;
+  font-size: 0.9rem;
+}
+
+/* ── Stage ─────────────────────────────────────────────────────────────────── */
+#stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-lg);
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 80%, rgba(201,168,76,0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(26,22,18,0.8) 0%, transparent 60%),
+    var(--bg-stage);
+  padding: var(--spacing-xl) var(--spacing-lg);
+  transition: background var(--transition-slow);
+}
+
+/* State-based ambience */
+#stage[data-state="playing"] {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 80%, rgba(201,168,76,0.10) 0%, transparent 70%),
+    var(--bg-stage);
+}
+
+#stage[data-state="coasting"] {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 80%, rgba(201,168,76,0.05) 0%, transparent 70%),
+    var(--bg-stage);
+}
+
+#stage[data-state="paused"] {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 80%, rgba(100,80,150,0.06) 0%, transparent 70%),
+    var(--bg-stage);
+}
+
+/* ── Beat flash ────────────────────────────────────────────────────────────── */
+#beat-flash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  border: 2px solid transparent;
+  border-radius: 0;
+  transition: border-color var(--transition-fast);
+  z-index: 50;
+}
+
+#beat-flash.flash {
+  animation: beatFlash 0.18s ease-out forwards;
+}
+
+@keyframes beatFlash {
+  0%   { border-color: rgba(201,168,76,0.6); background: rgba(201,168,76,0.04); }
+  100% { border-color: transparent;         background: transparent; }
+}
+
+/* ── Orchestra silhouette ──────────────────────────────────────────────────── */
+#orchestra-silhouette {
+  width: min(680px, 90vw);
+  flex-shrink: 0;
+}
+
+#orchestra-silhouette svg {
+  width: 100%;
+  height: auto;
+  color: var(--baton-color);
+}
+
+.musician {
+  fill: var(--musician-fill);
+  transition: fill var(--transition-slow);
+}
+
+.musician.wind { fill: var(--musician-wind); }
+.musician.brass { fill: var(--musician-brass); }
+.conductor { fill: var(--conductor-fill); }
+.podium { fill: var(--podium-fill); }
+.stage-floor { fill: var(--stage-floor); }
+.baton { color: var(--baton-color); }
+
+/* Subtle breathing animation on musicians during playing */
+#stage[data-state="playing"] .musician,
+#stage[data-state="coasting"] .musician {
+  animation: breathe 3.5s ease-in-out infinite;
+}
+
+#stage[data-state="playing"] .musician:nth-child(even) {
+  animation-delay: 0.7s;
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scaleY(1); }
+  50%       { transform: scaleY(1.03); }
+}
+
+/* Conductor baton animate on beat */
+#stage[data-state="playing"] .baton {
+  transform-origin: 408px 60px;
+  animation: batonSwing 0.18s ease-out;
+}
+
+/* ── Piece info ─────────────────────────────────────────────────────────────── */
+#piece-info {
+  text-align: center;
+}
+
+#piece-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(1.6rem, 4vw, 2.8rem);
+  font-weight: 400;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin-bottom: var(--spacing-xs);
+}
+
+#piece-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 300;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ── Prompt area ────────────────────────────────────────────────────────────── */
+#prompt-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+#prompt {
+  font-size: clamp(0.9rem, 2vw, 1.1rem);
+  color: var(--accent-warm);
+  font-weight: 300;
+  letter-spacing: 0.05em;
+  text-align: center;
+  transition: opacity var(--transition-med), color var(--transition-med);
+}
+
+#stage[data-state="playing"] #prompt {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+#stage[data-state="paused"] #prompt {
+  color: #b07070;
+}
+
+/* Space key visual hint */
+#space-key-hint {
+  margin-top: var(--spacing-xs);
+}
+
+.key {
+  display: inline-block;
+  padding: 6px 24px;
+  border: 1px solid var(--accent-gold);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  color: var(--accent-gold);
+  background: rgba(201,168,76,0.06);
+  font-family: var(--font-ui);
+  font-weight: 500;
+  box-shadow: 0 0 12px rgba(201,168,76,0.12);
+  transition: box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+#stage[data-state="playing"] .key,
+#stage[data-state="coasting"] .key {
+  box-shadow: 0 0 24px rgba(201,168,76,0.22);
+  background: rgba(201,168,76,0.10);
+}
+
+/* ── Restart button ─────────────────────────────────────────────────────────── */
+#restart-btn {
+  padding: 10px 28px;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 24px;
+  background: rgba(255,255,255,0.05);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+#restart-btn:hover {
+  background: rgba(255,255,255,0.10);
+  border-color: rgba(255,255,255,0.3);
+  color: var(--text-primary);
+}
+
+/* ── Debug hint ─────────────────────────────────────────────────────────────── */
+.debug-hint {
+  position: fixed;
+  bottom: var(--spacing-md);
+  right: var(--spacing-md);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+/* ── Debug overlay (injected by DebugOverlay.ts) ────────────────────────────── */
+.debug-title {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: rgba(160, 240, 160, 0.6);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.debug-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.debug-table td {
+  padding: 2px 8px 2px 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.debug-table td:first-child {
+  color: rgba(160, 240, 160, 0.6);
+  min-width: 120px;
+}
+
+.debug-table td:last-child {
+  color: #a0f0a0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

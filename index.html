@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Conductor — Eine Kleine Nachtmusik</title>
+    <meta name="description" content="An interactive orchestral experience where you control tempo in real time. Tap Space to conduct." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+
+    <!-- Loading screen -->
+    <div id="loading-screen">
+      <div class="loading-inner">
+        <div class="loading-spinner"></div>
+        <p>Preparing the orchestra…</p>
+      </div>
+    </div>
+
+    <!-- Stage (hidden until loaded) -->
+    <div id="stage" style="display:none" data-state="ready">
+
+      <!-- Beat flash overlay -->
+      <div id="beat-flash"></div>
+
+      <!-- Orchestra silhouette -->
+      <div id="orchestra-silhouette" aria-hidden="true">
+        <svg viewBox="0 0 800 200" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+          <!-- String section silhouettes -->
+          <ellipse cx="120" cy="160" rx="18" ry="28" class="musician"/>
+          <ellipse cx="165" cy="155" rx="18" ry="28" class="musician"/>
+          <ellipse cx="210" cy="160" rx="18" ry="28" class="musician"/>
+          <ellipse cx="255" cy="155" rx="18" ry="28" class="musician"/>
+          <ellipse cx="300" cy="160" rx="18" ry="28" class="musician"/>
+          <ellipse cx="345" cy="155" rx="18" ry="28" class="musician"/>
+          <!-- Wind section -->
+          <ellipse cx="430" cy="150" rx="16" ry="26" class="musician wind"/>
+          <ellipse cx="470" cy="145" rx="16" ry="26" class="musician wind"/>
+          <ellipse cx="510" cy="150" rx="16" ry="26" class="musician wind"/>
+          <ellipse cx="550" cy="145" rx="16" ry="26" class="musician wind"/>
+          <!-- Brass -->
+          <ellipse cx="620" cy="148" rx="16" ry="26" class="musician brass"/>
+          <ellipse cx="660" cy="143" rx="16" ry="26" class="musician brass"/>
+          <ellipse cx="700" cy="148" rx="16" ry="26" class="musician brass"/>
+          <!-- Conductor podium -->
+          <rect x="375" y="80" width="50" height="8" rx="4" class="podium"/>
+          <ellipse cx="400" cy="68" rx="16" ry="22" class="conductor"/>
+          <!-- Baton -->
+          <line x1="408" y1="60" x2="440" y2="30" stroke="currentColor" stroke-width="2" class="baton"/>
+          <!-- Stage floor -->
+          <rect x="0" y="186" width="800" height="4" rx="2" class="stage-floor"/>
+        </svg>
+      </div>
+
+      <!-- Piece info -->
+      <div id="piece-info">
+        <h1 id="piece-title">Eine Kleine Nachtmusik</h1>
+        <p id="piece-subtitle">W.A. Mozart</p>
+      </div>
+
+      <!-- Prompt -->
+      <div id="prompt-area">
+        <p id="prompt">Tap SPACE twice to set the pulse.</p>
+        <div id="space-key-hint" aria-hidden="true">
+          <span class="key">SPACE</span>
+        </div>
+      </div>
+
+      <!-- Restart button (shown during playing / paused) -->
+      <button id="restart-btn" style="display:none" aria-label="Restart piece">↺ Restart</button>
+
+      <!-- Debug hint -->
+      <p id="debug-hint" class="debug-hint">Press D for debug overlay</p>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
