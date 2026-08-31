@@ -226,18 +226,77 @@ modeBtnB?.addEventListener("click", () => setMode("instant"));
 const volumeBarFill = document.getElementById("volume-bar-fill") as HTMLElement;
 const volumePercent = document.getElementById("volume-percent") as HTMLElement;
 const volumeContainer = document.getElementById("volume-indicator-container") as HTMLElement;
+const volumeIcon = document.getElementById("volume-icon") as HTMLElement;
+
+let overboostDecayTimer: ReturnType<typeof setTimeout> | null = null;
+let overboostDecayInterval: ReturnType<typeof setInterval> | null = null;
 
 function updateVolumeUI(volume: number): void {
   const percent = Math.round(volume * 100);
-  if (volumeBarFill) volumeBarFill.style.width = `${Math.min(100, percent)}%`;
-  if (volumePercent) volumePercent.textContent = `${percent}%`;
+  const fillWidth = Math.min(100, Math.round((volume / 1.2) * 100));
+
+  if (volumeBarFill) volumeBarFill.style.width = `${fillWidth}%`;
+
+  const isOverboost = volume > 1.0;
+  if (volumePercent) {
+    volumePercent.textContent = isOverboost ? `${percent}% ⚡` : `${percent}%`;
+  }
+
+  if (isOverboost) {
+    volumeContainer?.classList.add("overboost");
+    volumeBarFill?.classList.add("overboost");
+    volumePercent?.classList.add("overboost");
+    if (volumeIcon) volumeIcon.textContent = "⚡";
+  } else {
+    volumeContainer?.classList.remove("overboost");
+    volumeBarFill?.classList.remove("overboost");
+    volumePercent?.classList.remove("overboost");
+    if (volumeIcon) volumeIcon.textContent = volume === 0 ? "🔇" : volume < 0.4 ? "🔈" : "🔊";
+  }
+}
+
+function stopOverboostDecay(): void {
+  if (overboostDecayTimer !== null) {
+    clearTimeout(overboostDecayTimer);
+    overboostDecayTimer = null;
+  }
+  if (overboostDecayInterval !== null) {
+    clearInterval(overboostDecayInterval);
+    overboostDecayInterval = null;
+  }
+}
+
+function scheduleOverboostDecay(): void {
+  stopOverboostDecay();
+  // Hold overboost for 1.2s before gently bringing volume back down to 100% (1.0)
+  overboostDecayTimer = setTimeout(() => {
+    overboostDecayInterval = setInterval(() => {
+      const current = controller.getMasterVolume();
+      if (current <= 1.0) {
+        stopOverboostDecay();
+        controller.setMasterVolume(1.0);
+        updateVolumeUI(1.0);
+      } else {
+        const next = Math.max(1.0, current - 0.02);
+        controller.setMasterVolume(next);
+        updateVolumeUI(next);
+      }
+    }, 80);
+  }, 1200);
 }
 
 function adjustVolume(delta: number): void {
   const current = controller.getMasterVolume();
-  const next = Math.max(0.0, Math.min(1.0, Math.round((current + delta) * 100) / 100));
+  const next = Math.max(0.0, Math.min(1.20, Math.round((current + delta) * 100) / 100));
+
   controller.setMasterVolume(next);
   updateVolumeUI(next);
+
+  if (next > 1.0) {
+    scheduleOverboostDecay();
+  } else {
+    stopOverboostDecay();
+  }
 }
 
 // Mouse wheel scroll to adjust orchestral dynamics
@@ -271,10 +330,18 @@ window.addEventListener("keydown", (e) => {
 volumeContainer?.addEventListener("click", (e) => {
   const rect = volumeContainer.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
-  const ratio = Math.max(0.1, Math.min(1.0, clickX / rect.width));
+  const ratio = Math.max(0.05, Math.min(1.2, (clickX / rect.width) * 1.2));
   controller.setMasterVolume(ratio);
   updateVolumeUI(ratio);
+  if (ratio > 1.0) {
+    scheduleOverboostDecay();
+  } else {
+    stopOverboostDecay();
+  }
 });
+
+// Initialize UI to starting volume (60%)
+updateVolumeUI(controller.getMasterVolume());
 
 restartBtn.addEventListener("click", () => controller.restart());
 switchPieceBtn.addEventListener("click", () => openRepertoireModal());

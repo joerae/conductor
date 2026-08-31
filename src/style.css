@@ -363,6 +363,17 @@ html, body {
   box-shadow: 0 0 12px rgba(201, 168, 76, 0.15);
 }
 
+.volume-container.overboost {
+  border-color: #ff6b3d;
+  box-shadow: 0 0 16px rgba(255, 107, 61, 0.4);
+  animation: overboostPulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes overboostPulse {
+  0%   { box-shadow: 0 0 12px rgba(255, 107, 61, 0.3); }
+  100% { box-shadow: 0 0 20px rgba(255, 72, 0, 0.6); }
+}
+
 .volume-icon {
   font-size: 0.85rem;
 }
@@ -376,7 +387,7 @@ html, body {
 }
 
 .volume-bar-bg {
-  width: 75px;
+  width: 80px;
   height: 6px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 4px;
@@ -392,13 +403,23 @@ html, body {
   box-shadow: 0 0 8px rgba(255, 213, 107, 0.5);
 }
 
+.volume-bar-fill.overboost {
+  background: linear-gradient(90deg, #ffd56b, #ff6b3d, #ff2a00);
+  box-shadow: 0 0 12px rgba(255, 72, 0, 0.7);
+}
+
 .volume-val {
   font-size: 0.75rem;
   color: var(--accent-warm);
   font-weight: 600;
-  min-width: 32px;
+  min-width: 34px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.volume-val.overboost {
+  color: #ff7a4d;
+  text-shadow: 0 0 8px rgba(255, 107, 61, 0.6);
 }
 
 .volume-scroll-hint {

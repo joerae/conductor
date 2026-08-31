@@ -87,7 +87,8 @@ export class AudioEngine {
   private masterGain: GainNode | null = null;
   private reverbConvolver: ConvolverNode | null = null;
   private reverbGain: GainNode | null = null;
-  private masterVolume: number = 0.85;
+  private compressor: DynamicsCompressorNode | null = null;
+  private masterVolume: number = 0.60;
 
   // ── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ export class AudioEngine {
   }
 
   setMasterVolume(vol: number): void {
-    this.masterVolume = Math.max(0.0, Math.min(1.2, vol));
+    this.masterVolume = Math.max(0.0, Math.min(1.25, vol));
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setValueAtTime(this.masterVolume, this.ctx.currentTime);
     }
@@ -123,7 +124,17 @@ export class AudioEngine {
     // Master output bus
     this.masterGain = ctx.createGain();
     this.masterGain.gain.value = this.masterVolume;
-    this.masterGain.connect(ctx.destination);
+
+    // Master Dynamics Compressor: tightens score dynamic peaks so conductor wheel has primary control
+    this.compressor = ctx.createDynamicsCompressor();
+    this.compressor.threshold.value = -16; // dB
+    this.compressor.knee.value = 10;
+    this.compressor.ratio.value = 4;
+    this.compressor.attack.value = 0.005;
+    this.compressor.release.value = 0.12;
+
+    this.masterGain.connect(this.compressor);
+    this.compressor.connect(ctx.destination);
 
     // Synthesize natural concert hall stereo impulse response (Phase 2)
     const rate = ctx.sampleRate;
@@ -148,7 +159,7 @@ export class AudioEngine {
 
     this.masterGain.connect(this.reverbConvolver);
     this.reverbConvolver.connect(this.reverbGain);
-    this.reverbGain.connect(ctx.destination);
+    this.reverbGain.connect(this.compressor);
   }
 
   /**
@@ -291,9 +302,12 @@ export class AudioEngine {
       }
     }
 
-    // Expressive dynamic velocity curve (Phase 2)
-    const normalizedVel = Math.max(0.1, velocity / 127);
-    const volume = Math.min(1.0, Math.pow(normalizedVel, 1.2) * 1.05);
+    // Expressive dynamic velocity curve with score dynamic range compression:
+    // Compresses raw MIDI velocity [0..127] into a tight musical baseline [0.65..0.85],
+    // allowing the conductor's master volume wheel to have commanding dynamic authority!
+    const rawVelRatio = Math.max(0.1, velocity / 127);
+    const compressedScoreVel = 0.70 + (rawVelRatio - 0.5) * 0.25;
+    const volume = Math.min(1.0, Math.max(0.1, compressedScoreVel));
 
     // Create dedicated GainNode for this voice connected to master bus
     const gainNode = ctx.createGain();

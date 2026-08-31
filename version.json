@@ -1,9 +1,20 @@
 {
-  "version": "0.2.1",
+  "version": "0.2.2",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.2.2",
+      "date": "2026-08-31",
+      "summary": "Default 60% Dynamics, Sforzando Overboost to 120% with Surge Decay, and Score Dynamic Range Compression",
+      "details": [
+        "Default dynamics initialized to 60% on start",
+        "Added Sforzando / Overboost zone (100% to 120%) with glowing fiery visual feedback",
+        "Added automatic surge decay: overboosts above 100% hold for 1.2s then gently settle back to 100%",
+        "Compressed score internal dynamic range and added master DynamicsCompressorNode so the conductor's volume wheel has absolute commanding authority"
+      ]
+    },
     {
       "version": "0.2.1",
       "date": "2026-08-31",
