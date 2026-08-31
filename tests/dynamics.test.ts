@@ -11,6 +11,7 @@ import {
   DYNAMIC_ORDER,
   DYNAMIC_PRESETS,
   scaleVelocity,
+  decomposeVelocity,
   getStepDynamicLevel,
   DEFAULT_DSP_BYPASS_FLAGS,
   type DynamicLevel,
@@ -136,12 +137,19 @@ describe("DSP Bypass Defaults & Macro Ratio Control", () => {
     });
   });
 
-  it("supports +2 dynamic tier burst jump for accents", () => {
-    expect(getStepDynamicLevel("pp", 2)).toBe("mp");
-    expect(getStepDynamicLevel("p", 2)).toBe("mf");
-    expect(getStepDynamicLevel("mf", 2)).toBe("ff");
-    expect(getStepDynamicLevel("f", 2)).toBe("fff");
-    expect(getStepDynamicLevel("ff", 2)).toBe("fff");
+  it("supports musical accent transient punch in scaleVelocity and decomposeVelocity", () => {
+    // Normal mf note
+    const normalVel = scaleVelocity(72, "mf", true, true, 0.24, false);
+    expect(normalVel).toBe(72);
+
+    // Accented mf note: boosted transient punch
+    const accentedVel = scaleVelocity(72, "mf", true, true, 0.24, true);
+    expect(accentedVel).toBe(Math.min(127, Math.round(72 * 1.35 + 30))); // 127
+    expect(accentedVel).toBeGreaterThan(normalVel);
+
+    const decomp = decomposeVelocity(72, "mf", true, true, 0.24, true);
+    expect(decomp.isAccented).toBe(true);
+    expect(decomp.final).toBe(127);
   });
 
   it("allows continuous adjustment of macro smoothing ratio from 0.0 to 1.0", () => {

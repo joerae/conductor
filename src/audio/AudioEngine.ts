@@ -83,6 +83,21 @@ interface ActiveVoice {
   targetVolume: number;
 }
 
+/**
+ * Generates an ultra-smooth half-cosine S-curve Float32Array from `from` down to `to`.
+ * Zero derivative at peak and zero derivative at tail ensures organic acoustic decay.
+ */
+function makeCosineDecayCurve(from: number, to: number, steps: number = 32): Float32Array {
+  const curve = new Float32Array(steps);
+  for (let i = 0; i < steps; i++) {
+    const t = i / (steps - 1); // 0.0 -> 1.0
+    // Half-cosine S-curve: (1 + cos(π * t)) / 2
+    const factor = (1 + Math.cos(Math.PI * t)) / 2;
+    curve[i] = to + (from - to) * factor;
+  }
+  return curve;
+}
+
 // ─── AudioEngine ────────────────────────────────────────────────────────────
 
 export class AudioEngine {
@@ -165,23 +180,98 @@ export class AudioEngine {
     return this.scoreMacroRatio;
   }
 
+  // ── Musical Accent Burst (Sforzando / Reverb Bloom) ─────────────────────
+
+  private accentStartTime: number = 0;
+  private accentDurationSec: number = 0;
+
+  triggerAccentBurst(periodMs: number = 500): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const burstDurationSec = Math.max(0.35, Math.min(0.50, (periodMs / 1000) * 0.85));
+    this.accentStartTime = now;
+    this.accentDurationSec = burstDurationSec;
+
+    const preset = DYNAMIC_PRESETS[this.dynamicLevel] || DYNAMIC_PRESETS.mf;
+
+    // 1. Instantly open master filter & boost high-frequency transient bite, then smooth cosine decay
+    if (this.lowPassFilter) {
+      const targetCutoff = this.dspBypassFlags.timbreFilter ? preset.filterCutoffHz : 20000;
+      this.lowPassFilter.frequency.cancelScheduledValues(now);
+      this.lowPassFilter.frequency.setValueAtTime(20000, now);
+      const lpfCurve = makeCosineDecayCurve(20000, targetCutoff, 32);
+      try {
+        this.lowPassFilter.frequency.setValueCurveAtTime(lpfCurve, now + 0.003, burstDurationSec);
+      } catch {
+        this.lowPassFilter.frequency.setTargetAtTime(targetCutoff, now + 0.003, burstDurationSec * 0.4);
+      }
+    }
+    if (this.highShelfFilter) {
+      const targetGain = this.dspBypassFlags.timbreFilter ? preset.highShelfGainDb : 0.0;
+      this.highShelfFilter.gain.cancelScheduledValues(now);
+      this.highShelfFilter.gain.setValueAtTime(4.0, now);
+      const shelfCurve = makeCosineDecayCurve(4.0, targetGain, 32);
+      try {
+        this.highShelfFilter.gain.setValueCurveAtTime(shelfCurve, now + 0.003, burstDurationSec);
+      } catch {
+        this.highShelfFilter.gain.setTargetAtTime(targetGain, now + 0.003, burstDurationSec * 0.4);
+      }
+    }
+
+    // 2. Instantly surge all currently active/playing voices, then smoothly cosine-decay away over 350-450ms
+    for (const voice of this.activeVoices.values()) {
+      try {
+        const currentGain = voice.gainNode.gain.value || voice.targetVolume;
+        const boostedGain = Math.min(1.0, currentGain * 1.60);
+        voice.gainNode.gain.cancelScheduledValues(now);
+        voice.gainNode.gain.setValueAtTime(currentGain, now);
+        voice.gainNode.gain.linearRampToValueAtTime(boostedGain, now + 0.003);
+        const voiceCurve = makeCosineDecayCurve(boostedGain, voice.targetVolume, 32);
+        try {
+          voice.gainNode.gain.setValueCurveAtTime(voiceCurve, now + 0.003, burstDurationSec);
+        } catch {
+          voice.gainNode.gain.setTargetAtTime(voice.targetVolume, now + 0.003, burstDurationSec * 0.4);
+        }
+      } catch {
+        // Ignore
+      }
+    }
+  }
+
+  getAccentFactor(audioTime: number): number {
+    if (this.accentDurationSec <= 0) return 0;
+    const delta = audioTime - this.accentStartTime;
+    if (delta < 0 || delta > this.accentDurationSec) return 0;
+    const t = delta / this.accentDurationSec; // 0 to 1
+    return (1 + Math.cos(Math.PI * t)) / 2; // Smooth sine/cosine S-curve factor 1.0 -> 0.0
+  }
+
+  isAccentActive(): boolean {
+    if (!this.ctx) return false;
+    return this.getAccentFactor(this.ctx.currentTime) > 0.05;
+  }
+
   computeEffectiveVelocity(rawVelocity: number): number {
+    const factor = this.ctx ? this.getAccentFactor(this.ctx.currentTime) : 0;
     return scaleVelocity(
       rawVelocity,
       this.dynamicLevel,
       this.dspBypassFlags.velocityScaling,
       this.dspBypassFlags.scoreCompression,
-      this.scoreMacroRatio
+      this.scoreMacroRatio,
+      factor
     );
   }
 
   decomposeNoteVelocity(rawVelocity: number): VelocityDecomposition {
+    const factor = this.ctx ? this.getAccentFactor(this.ctx.currentTime) : 0;
     return decomposeVelocity(
       rawVelocity,
       this.dynamicLevel,
       this.dspBypassFlags.velocityScaling,
       this.dspBypassFlags.scoreCompression,
-      this.scoreMacroRatio
+      this.scoreMacroRatio,
+      factor
     );
   }
 
@@ -264,7 +354,7 @@ export class AudioEngine {
 
     // Synthesize clean, warm concert hall stereo impulse response
     const rate = ctx.sampleRate;
-    const duration = 1.8; // 1.8s warm concert hall decay
+    const duration = 1.2; // 1.2s crisp concert hall acoustic decay
     const length = Math.floor(rate * duration);
     const impulse = ctx.createBuffer(2, length, rate);
     const left = impulse.getChannelData(0);
@@ -274,7 +364,7 @@ export class AudioEngine {
     let prevR = 0;
     for (let i = 0; i < length; i++) {
       const t = i / rate;
-      const decay = Math.exp(-t / 0.40) * Math.max(0, 1 - t / duration);
+      const decay = Math.exp(-t / 0.28) * Math.max(0, 1 - t / duration);
       const rawL = (Math.random() * 2 - 1) * decay;
       const rawR = (Math.random() * 2 - 1) * decay;
       // High-frequency air absorption damping
@@ -445,13 +535,15 @@ export class AudioEngine {
       }
     }
 
-    // Proportional velocity scaling + macro-dynamics compression
+    // Proportional velocity scaling + macro-dynamics compression + smooth cosine accent curve
+    const accentFactor = this.getAccentFactor(audioTime);
     const effectiveVelocity = scaleVelocity(
       velocity,
       this.dynamicLevel,
       this.dspBypassFlags.velocityScaling,
       this.dspBypassFlags.scoreCompression,
-      this.scoreMacroRatio
+      this.scoreMacroRatio,
+      accentFactor
     );
 
     const rawVelRatio = Math.max(0.08, effectiveVelocity / 127);

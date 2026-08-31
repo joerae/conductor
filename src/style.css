@@ -1019,78 +1019,41 @@ body.debug-mode-active .section-debug-hud {
   }
 }
 
-.accent-control-container {
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  width: 100%;
-}
-
-.accent-btn {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 5px 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  color: var(--text-muted);
-  font-family: var(--font-ui);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  user-select: none;
-}
-
-.accent-btn:hover {
-  background: rgba(255, 80, 80, 0.15);
-  border-color: rgba(255, 100, 100, 0.4);
-  color: #ff9090;
-}
-
-.accent-symbol {
-  font-size: 1.15rem;
-  font-weight: 900;
+/* ── Accent Badge Icon Next to Active Dynamic Step ────────────────────────── */
+.accent-badge-icon {
+  display: none;
   font-family: 'JetBrains Mono', monospace;
-  color: #ffd56b;
+  font-weight: 900;
+  font-size: 1.15rem;
   line-height: 1;
+  color: #ff3b30;
+  text-shadow: 0 0 10px rgba(255, 59, 48, 0.9), 0 0 20px rgba(255, 149, 0, 0.6);
+  margin-left: 4px;
+  animation: accentArmedPulse 0.45s infinite alternate ease-in-out;
 }
 
-.accent-text {
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 700;
+.dynamic-ladder-container.accent-armed .dynamic-step.active .accent-badge-icon {
+  display: inline-block;
 }
 
-.accent-badge {
-  font-size: 0.65rem;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 1px 4px;
-  border-radius: 3px;
-  color: var(--text-muted);
+.dynamic-ladder-container.accent-armed {
+  border-color: rgba(255, 59, 48, 0.55);
+  box-shadow: 0 0 24px rgba(255, 59, 48, 0.35);
 }
 
-.accent-btn.armed {
-  background: linear-gradient(135deg, rgba(255, 50, 50, 0.4), rgba(255, 120, 50, 0.3));
-  border-color: #ff4d4d;
-  color: #ffffff;
-  box-shadow: 0 0 16px rgba(255, 77, 77, 0.6);
-  animation: accentPulse 0.6s infinite alternate ease-in-out;
+.dynamic-ladder-container.accent-armed .dynamic-step.active {
+  border-color: #ff3b30;
+  box-shadow: 0 0 20px rgba(255, 59, 48, 0.65);
 }
 
-.accent-btn.armed .accent-symbol {
-  color: #ffffff;
-  text-shadow: 0 0 8px #ff4d4d;
-}
-
-.accent-btn.armed .accent-badge {
-  background: #ff4d4d;
-  color: #ffffff;
-}
-
-@keyframes accentPulse {
-  0%   { transform: scale(1.0); box-shadow: 0 0 12px rgba(255, 77, 77, 0.5); }
-  100% { transform: scale(1.06); box-shadow: 0 0 22px rgba(255, 77, 77, 0.9); }
+@keyframes accentArmedPulse {
+  0% {
+    transform: scale(1.0);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1.35) translateX(2px);
+    opacity: 1.0;
+  }
 }
 

@@ -195,8 +195,7 @@ const controller = new ExperienceController({
     updateDynamicLadderUI(level);
   },
   onAccentArmed: (armed: boolean) => {
-    const accentBtn = document.getElementById("accent-btn");
-    accentBtn?.classList.toggle("armed", armed);
+    dynamicLadderContainer?.classList.toggle("accent-armed", armed);
   },
   onAccentFlash: () => {
     stageEl.classList.remove("accent-flash");
@@ -305,7 +304,12 @@ dynamicSteps.forEach(btn => {
   btn.addEventListener("click", () => {
     const dyn = btn.dataset.dynamic as DynamicLevel;
     if (dyn) {
-      controller.setDynamicLevel(dyn);
+      if (controller.getDynamicLevel() === dyn) {
+        // Clicking active dynamic level toggles Accent burst for next beat
+        controller.armAccent();
+      } else {
+        controller.setDynamicLevel(dyn);
+      }
     }
   });
 });
@@ -348,12 +352,6 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     controller.stepDynamicLevel(-1);
   }
-});
-
-// Accent button click
-const accentBtn = document.getElementById("accent-btn") as HTMLButtonElement;
-accentBtn?.addEventListener("click", () => {
-  controller.armAccent();
 });
 
 // Initialize UI to starting dynamic level (mf)

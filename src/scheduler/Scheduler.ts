@@ -27,10 +27,10 @@ import type { ScoreTransport } from "../score/ScoreTransport";
 import type { AudioEngine } from "../audio/AudioEngine";
 
 /** How often the scheduler wakes and checks for events to commit. */
-const TICK_INTERVAL_MS = 20;
+const TICK_INTERVAL_MS = 15;
 
-/** How far ahead we look when committing events to the audio engine. */
-const LOOKAHEAD_MS = 300;
+/** How far ahead we look when committing events to the audio engine (tight for instant responsiveness). */
+const LOOKAHEAD_MS = 120;
 
 export type NotePlaybackEvent = {
   type: "noteOn" | "noteOff";

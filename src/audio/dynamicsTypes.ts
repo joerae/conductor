@@ -151,19 +151,22 @@ export interface VelocityDecomposition {
   final: number;
   macroEnabled: boolean;
   velScalingEnabled: boolean;
+  isAccented?: boolean;
 }
 
 /**
  * Proportionally scales a MIDI velocity (0–127) according to dynamic level.
  * Optionally compresses baked-in MIDI terraced macro dynamics so the conductor
  * commands the ensemble volume without losing intra-measure phrasing.
+ * If accent is true or a number (0.0–1.0), applies a punchy physical transient burst along a smooth decay curve.
  */
 export function scaleVelocity(
   rawVelocity: number,
   level: DynamicLevel,
   enabled: boolean = true,
   scoreCompression: boolean = true,
-  macroRatio: number = DEFAULT_SCORE_MACRO_RATIO
+  macroRatio: number = DEFAULT_SCORE_MACRO_RATIO,
+  accent: boolean | number = false
 ): number {
   if (!enabled || rawVelocity <= 0) return rawVelocity;
 
@@ -174,7 +177,13 @@ export function scaleVelocity(
 
   // 2. Conductor dynamic tier scaling
   const preset = DYNAMIC_PRESETS[level] || DYNAMIC_PRESETS.mf;
-  const scaled = Math.round(baseVelocity * preset.velocityMultiplier);
+  let scaled = Math.round(baseVelocity * preset.velocityMultiplier);
+
+  // 3. Musical Accent transient punch with smooth sine curve decay
+  const factor = typeof accent === "number" ? Math.max(0, Math.min(1, accent)) : (accent ? 1.0 : 0.0);
+  if (factor > 0) {
+    scaled = Math.round(scaled * (1 + 0.35 * factor) + 30 * factor);
+  }
 
   return Math.max(10, Math.min(127, scaled));
 }
@@ -187,9 +196,13 @@ export function decomposeVelocity(
   level: DynamicLevel,
   enabled: boolean = true,
   scoreCompression: boolean = true,
-  macroRatio: number = DEFAULT_SCORE_MACRO_RATIO
+  macroRatio: number = DEFAULT_SCORE_MACRO_RATIO,
+  accent: boolean | number = false
 ): VelocityDecomposition {
   const preset = DYNAMIC_PRESETS[level] || DYNAMIC_PRESETS.mf;
+  const factor = typeof accent === "number" ? Math.max(0, Math.min(1, accent)) : (accent ? 1.0 : 0.0);
+  const isAccented = factor > 0.05;
+
   if (!enabled || rawVelocity <= 0) {
     return {
       raw: rawVelocity,
@@ -201,6 +214,7 @@ export function decomposeVelocity(
       final: rawVelocity,
       macroEnabled: scoreCompression,
       velScalingEnabled: enabled,
+      isAccented,
     };
   }
 
@@ -208,7 +222,11 @@ export function decomposeVelocity(
     ? SCORE_VELOCITY_CENTER + (rawVelocity - SCORE_VELOCITY_CENTER) * macroRatio
     : rawVelocity;
   const macro = Math.round(baseVelocity);
-  const final = Math.max(10, Math.min(127, Math.round(baseVelocity * preset.velocityMultiplier)));
+  let final = Math.round(baseVelocity * preset.velocityMultiplier);
+  if (factor > 0) {
+    final = Math.round(final * (1 + 0.35 * factor) + 30 * factor);
+  }
+  final = Math.max(10, Math.min(127, final));
 
   return {
     raw: rawVelocity,
@@ -220,6 +238,7 @@ export function decomposeVelocity(
     final,
     macroEnabled: scoreCompression,
     velScalingEnabled: enabled,
+    isAccented,
   };
 }
 

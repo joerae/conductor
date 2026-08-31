@@ -81,10 +81,8 @@ export class ExperienceController {
   private prepTapCount: number = 0;
   private pausedBeat: number = 0;
 
-  // Sustained conductor dynamic level & Accent state
+  // Sustained conductor dynamic level
   private baseDynamicLevel: DynamicLevel = "mf";
-  private isAccentArmed: boolean = false;
-  private accentResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Overburn decay timer (for ff dynamic)
   private overburnTimer: ReturnType<typeof setTimeout> | null = null;
@@ -274,13 +272,26 @@ export class ExperienceController {
     this.setDynamicLevel(next);
   }
 
+  private accentClearTimer: ReturnType<typeof setTimeout> | null = null;
+
   armAccent(): void {
-    this.isAccentArmed = true;
+    const periodMs = this.clock.getState().periodMs || 500;
+
+    // 1. Instantly trigger acoustic burst, voice gain surge, open filter & cranked reverb
+    this.audioEngine.triggerAccentBurst(Math.max(380, periodMs * 0.95));
+    this.uiCallbacks.onAccentFlash?.();
     this.uiCallbacks.onAccentArmed?.(true);
+    this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
+
+    // 2. Clear visual accent mark after the burst window finishes
+    if (this.accentClearTimer) clearTimeout(this.accentClearTimer);
+    this.accentClearTimer = setTimeout(() => {
+      this.uiCallbacks.onAccentArmed?.(false);
+    }, Math.max(320, periodMs * 0.85));
   }
 
   isAccentArmedState(): boolean {
-    return this.isAccentArmed;
+    return this.audioEngine.isAccentActive();
   }
 
   setDSPBypassFlags(flags: Partial<DSPBypassFlags>): void {
@@ -360,23 +371,6 @@ export class ExperienceController {
             s.periodMs / 1000,
             s.phaseCorrectionSec ?? 0
           );
-        }
-
-        // Execute Accent if armed
-        if (this.isAccentArmed) {
-          this.isAccentArmed = false;
-          this.uiCallbacks.onAccentArmed?.(false);
-          this.uiCallbacks.onAccentFlash?.();
-
-          // Jump dynamic level by +2 tiers for this beat
-          const accentedLevel = getStepDynamicLevel(this.baseDynamicLevel, 2);
-          this.setDynamicLevel(accentedLevel, false);
-
-          if (this.accentResetTimer) clearTimeout(this.accentResetTimer);
-          const periodMs = s.periodMs || 500;
-          this.accentResetTimer = setTimeout(() => {
-            this.setDynamicLevel(this.baseDynamicLevel, false);
-          }, Math.max(120, periodMs * 0.9));
         }
 
         this.debug.updateClock(s);
