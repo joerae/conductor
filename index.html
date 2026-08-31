@@ -167,21 +167,36 @@
         <p id="piece-subtitle">W.A. Mozart</p>
       </div>
 
-      <!-- Time Input & Tempo Mode Switcher -->
-      <div id="tempo-mode-selector" class="mode-selector-container">
-        <span class="mode-label">Time Input:</span>
-        <div class="mode-pill-group">
-          <button id="mode-btn-a" class="mode-pill active" data-mode="balanced" title="Mode A: Balanced PLL smoothing (inertia over ~3 beats)">
-            Mode A: Balanced
-          </button>
-          <button id="mode-btn-b" class="mode-pill" data-mode="instant" title="Mode B: Super-responsive on a dime (instant cuts & speedups)">
-            Mode B: Instant
-          </button>
-          <button id="mode-btn-c" class="mode-pill" data-mode="autoplay" title="Mode C: Autoplay (tap twice to set tempo, plays continuously at tempo)">
-            Mode C: Autoplay ⚡
-          </button>
+      <!-- Control Bars: Input Source & Tempo Mode Switcher -->
+      <div class="control-bars-wrap">
+        <div id="input-source-selector" class="mode-selector-container">
+          <span class="mode-label">Input:</span>
+          <div class="mode-pill-group">
+            <button id="input-btn-keyboard" class="mode-pill active" data-input-source="keyboard" title="Keyboard mode: Tap SPACE bar to conduct">
+              ⌨️ Space Bar
+            </button>
+            <button id="input-btn-camera" class="mode-pill" data-input-source="camera" title="Camera mode: Conduct with hand gestures in front of webcam">
+              📷 Camera
+            </button>
+          </div>
+          <span class="mode-shortcut-hint">Press <strong>C</strong> to switch</span>
         </div>
-        <span class="mode-shortcut-hint">Press <strong>T</strong> to cycle</span>
+
+        <div id="tempo-mode-selector" class="mode-selector-container">
+          <span class="mode-label">Tempo:</span>
+          <div class="mode-pill-group">
+            <button id="mode-btn-a" class="mode-pill active" data-mode="balanced" title="Mode A: Balanced PLL smoothing (inertia over ~3 beats)">
+              Mode A: Balanced
+            </button>
+            <button id="mode-btn-b" class="mode-pill" data-mode="instant" title="Mode B: Super-responsive on a dime (instant cuts & speedups)">
+              Mode B: Instant
+            </button>
+            <button id="mode-btn-c" class="mode-pill" data-mode="autoplay" title="Mode C: Autoplay (tap twice to set tempo, plays continuously at tempo)">
+              Mode C: Autoplay ⚡
+            </button>
+          </div>
+          <span class="mode-shortcut-hint">Press <strong>T</strong> to cycle</span>
+        </div>
       </div>
 
       <!-- Prompt -->
@@ -200,7 +215,7 @@
 
       <!-- Footer controls -->
       <footer id="stage-footer">
-        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.3.0</button>
+        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.4.0</button>
         <span class="footer-divider">•</span>
         <span id="debug-hint" class="debug-hint">Press D for debug overlay & A/B DSP</span>
       </footer>

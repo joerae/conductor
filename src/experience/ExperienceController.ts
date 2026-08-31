@@ -19,7 +19,9 @@
 
 import { ConductorClock } from "../clock/ConductorClock";
 import type { ClockEvent, TempoMode } from "../clock/ConductorClock";
+import type { BeatInputProvider } from "../input/BeatInputProvider";
 import { KeyboardBeatInput } from "../input/KeyboardBeatInput";
+import { CameraBeatInputProvider } from "../camera/CameraBeatInputProvider";
 import { AudioEngine } from "../audio/AudioEngine";
 import { MidiScore } from "../score/MidiScore";
 import { ScoreTransport } from "../score/ScoreTransport";
@@ -45,6 +47,8 @@ export type ExperienceState =
   | "paused"
   | "completed";
 
+export type InputSource = "keyboard" | "camera";
+
 export type NoteVisualEvent = {
   type: "noteOn" | "noteOff";
   trackId: string;
@@ -63,6 +67,7 @@ interface UICallbacks {
   onDynamicChange?: (level: DynamicLevel) => void;
   onAccentArmed?: (armed: boolean) => void;
   onAccentFlash?: () => void;
+  onInputSourceChange?: (source: InputSource) => void;
 }
 
 export class ExperienceController {
@@ -71,7 +76,11 @@ export class ExperienceController {
 
   private audioEngine: AudioEngine;
   private clock: ConductorClock;
-  private input: KeyboardBeatInput;
+  private inputSource: InputSource = "keyboard";
+  private keyboardInput: KeyboardBeatInput;
+  private cameraInput: CameraBeatInputProvider | null = null;
+  private currentInputProvider: BeatInputProvider;
+  private inputUnsubscribe: (() => void) | null = null;
   private midiScore: MidiScore;
   private transport: ScoreTransport;
   private scheduler: Scheduler;
@@ -111,7 +120,8 @@ export class ExperienceController {
       getAudioTime: () => this.audioEngine.getAudioTime(),
     });
 
-    this.input = new KeyboardBeatInput();
+    this.keyboardInput = new KeyboardBeatInput();
+    this.currentInputProvider = this.keyboardInput;
     this.midiScore = new MidiScore();
     this.transport = new ScoreTransport();
     this.scheduler = new Scheduler(
@@ -175,9 +185,8 @@ export class ExperienceController {
       this.transport.setEvents(this.midiScore.getEvents(), this.midiScore.getMetadata().totalBeats);
       this.transport.setBeatsPerTap(piece.beatsPerTap || 1);
 
-      // Wire input → clock
-      this.input.onBeat(obs => this.handleBeatObservation(obs));
-      this.input.start();
+      // Wire active input provider → clock
+      this.attachInputProvider(this.inputSource === "camera" && this.cameraInput ? this.cameraInput : this.keyboardInput);
 
       this.prepTapCount = 0;
       this.pausedBeat = 0;
@@ -186,6 +195,42 @@ export class ExperienceController {
       console.error("Conductor: failed to load piece", err);
       throw err;
     }
+  }
+
+  private attachInputProvider(provider: BeatInputProvider): void {
+    if (this.inputUnsubscribe) {
+      this.inputUnsubscribe();
+      this.inputUnsubscribe = null;
+    }
+    this.currentInputProvider.stop();
+    this.currentInputProvider = provider;
+    this.inputUnsubscribe = this.currentInputProvider.onBeat(obs => this.handleBeatObservation(obs));
+    this.currentInputProvider.start();
+  }
+
+  async setInputSource(source: InputSource): Promise<void> {
+    if (source === this.inputSource) return;
+
+    if (source === "camera") {
+      if (!this.cameraInput) {
+        this.cameraInput = new CameraBeatInputProvider();
+      }
+      this.inputSource = "camera";
+      this.attachInputProvider(this.cameraInput);
+    } else {
+      this.inputSource = "keyboard";
+      this.attachInputProvider(this.keyboardInput);
+    }
+
+    this.uiCallbacks.onInputSourceChange?.(this.inputSource);
+  }
+
+  getInputSource(): InputSource {
+    return this.inputSource;
+  }
+
+  getCameraProvider(): CameraBeatInputProvider | null {
+    return this.cameraInput;
   }
 
   async loadPiece(pieceId: string): Promise<void> {

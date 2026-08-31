@@ -1,9 +1,22 @@
 {
-  "version": "0.3.0",
+  "version": "0.4.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.4.0",
+      "date": "2026-09-01",
+      "summary": "Stage A (Phase C0): Camera Plumbing, Browser-Local Hand Tracking (MediaPipe), Live Hand Skeleton & Conducting Point Overlay, Dual-Hand Tracking, and Input Source Switching",
+      "details": [
+        "Added opt-in Camera Input Source alongside Keyboard (Space Bar) with seamless C-key hotkey switching",
+        "Integrated Google MediaPipe HandLandmarker (@mediapipe/tasks-vision) running 100% locally in the browser with zero backend requirements",
+        "Tracks up to 2 hands simultaneously with normalized 3D landmarks, confidence tracking, and handedness identification",
+        "Implemented conductor-space coordinate mapping (Y: 0=low to 1=high) and primary conducting point extraction (wrist vs index tip)",
+        "Added floating, collapsible Camera Preview window with glowing gold 21-joint skeleton canvas overlay and live telemetry HUD (FPS, latency, detected hands)",
+        "Engineered leak-free camera lifecycle: instant media stream release and requestAnimationFrame cancellation on mode switch"
+      ]
+    },
     {
       "version": "0.3.0",
       "date": "2026-09-01",

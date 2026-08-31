@@ -4,7 +4,7 @@
  */
 
 import { ExperienceController } from "./experience/ExperienceController";
-import type { ExperienceState } from "./experience/ExperienceController";
+import type { ExperienceState, InputSource } from "./experience/ExperienceController";
 import type { TempoMode } from "./clock/ConductorClock";
 import { loadRepertoireCatalog } from "./score/repertoire";
 import type { PieceDefinition } from "./score/repertoire";
@@ -52,7 +52,26 @@ function swingBaton(): void {
 
 // ── Dynamic prompt formatter ──────────────────────────────────────────────────
 
-function getPromptText(state: ExperienceState, pausedBeat: number): string {
+function getPromptText(state: ExperienceState, pausedBeat: number, inputSource: InputSource = "keyboard"): string {
+  if (inputSource === "camera") {
+    switch (state) {
+      case "loading":
+        return "Preparing orchestra and loading hand tracking AI model…";
+      case "ready":
+        return "Camera active. Move your hand down and back up to conduct.";
+      case "preparing":
+        return pausedBeat > 0
+          ? `Resume motion from beat ${pausedBeat.toFixed(1)}…`
+          : "Good — continue your conducting motion…";
+      case "playing":
+        return "Orchestra following your motion. Keep conducting.";
+      case "paused":
+        return `Orchestra paused at beat ${pausedBeat.toFixed(1)}. Move your hands to resume.`;
+      case "completed":
+        return "Bravo! Masterpiece concluded. Conduct again.";
+    }
+  }
+
   switch (state) {
     case "loading":
       return "Preparing the orchestra and instruments…";
@@ -163,7 +182,7 @@ const sectionVelocityHistory = new Map<string, number[]>();
 const controller = new ExperienceController({
   onStateChange: (state: ExperienceState) => {
     const pausedBeat = controller.getPausedBeat();
-    promptEl.textContent = getPromptText(state, pausedBeat);
+    promptEl.textContent = getPromptText(state, pausedBeat, controller.getInputSource());
 
     const showControls = (state === "playing" || state === "paused" || state === "completed");
     restartBtn.style.display = showControls ? "inline-block" : "none";
@@ -186,6 +205,9 @@ const controller = new ExperienceController({
         el.classList.remove("playing");
       });
     }
+  },
+  onInputSourceChange: (source: InputSource) => {
+    updateInputSourceButtons(source);
   },
   onBeat: () => {
     flashBeat();
@@ -254,6 +276,41 @@ const controller = new ExperienceController({
     }, event.delayMs);
   },
 });
+
+// ── Input Source Controls ───────────────────────────────────────────────────
+
+const inputBtnKeyboard = document.getElementById("input-btn-keyboard") as HTMLButtonElement;
+const inputBtnCamera = document.getElementById("input-btn-camera") as HTMLButtonElement;
+const spaceKeyHint = document.getElementById("space-key-hint") as HTMLElement;
+
+function updateInputSourceButtons(source: InputSource): void {
+  inputBtnKeyboard?.classList.toggle("active", source === "keyboard");
+  inputBtnCamera?.classList.toggle("active", source === "camera");
+
+  if (spaceKeyHint) {
+    if (source === "camera") {
+      spaceKeyHint.innerHTML = `<span class="key" style="border-color:#5cd87e; color:#5cd87e; background:rgba(52,199,89,0.08); box-shadow:0 0 12px rgba(52,199,89,0.2);">📷 MOTION ACTIVE</span>`;
+    } else {
+      spaceKeyHint.innerHTML = `<span class="key">SPACE</span>`;
+    }
+  }
+
+  const pausedBeat = controller.getPausedBeat();
+  promptEl.textContent = getPromptText(controller.getState(), pausedBeat, source);
+}
+
+async function setInputSource(source: InputSource): Promise<void> {
+  try {
+    await controller.setInputSource(source);
+    updateInputSourceButtons(source);
+  } catch (err) {
+    console.error("Failed to switch input source:", err);
+    updateInputSourceButtons("keyboard");
+  }
+}
+
+inputBtnKeyboard?.addEventListener("click", () => setInputSource("keyboard"));
+inputBtnCamera?.addEventListener("click", () => setInputSource("camera"));
 
 // ── Time Input / Tempo Mode Controls ─────────────────────────────────────────
 
@@ -331,11 +388,14 @@ window.addEventListener("wheel", (e) => {
   }
 }, { passive: false });
 
-// Keyboard shortcuts: T (toggle mode), P (pause), ↑/↓ (dynamics), → (accent burst)
+// Keyboard shortcuts: C (toggle input source), T (toggle tempo mode), P (pause), ↑/↓ (dynamics), → (accent burst)
 window.addEventListener("keydown", (e) => {
   if (versionModal.style.display === "flex" || repertoireModal.style.display === "flex") return;
 
-  if (e.code === "KeyT" && !e.repeat) {
+  if (e.code === "KeyC" && !e.repeat) {
+    const current = controller.getInputSource();
+    setInputSource(current === "keyboard" ? "camera" : "keyboard");
+  } else if (e.code === "KeyT" && !e.repeat) {
     const current = controller.getTempoMode();
     const modes: TempoMode[] = ["balanced", "instant", "autoplay"];
     const nextIdx = (modes.indexOf(current) + 1) % modes.length;
