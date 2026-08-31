@@ -83,19 +83,72 @@ export class AudioEngine {
   private activeVoices: Map<string, ActiveVoice> = new Map();
   private samplesLoaded: boolean = false;
 
+  // Master bus & Concert Hall acoustics (Phase 2)
+  private masterGain: GainNode | null = null;
+  private reverbConvolver: ConvolverNode | null = null;
+  private reverbGain: GainNode | null = null;
+  private masterVolume: number = 0.85;
+
   // ── Lifecycle ───────────────────────────────────────────────────────────
 
   /**
    * Must be called from a user gesture (e.g. first Space tap).
-   * Creates and resumes the AudioContext.
+   * Creates and resumes the AudioContext with Concert Hall acoustics.
    */
   async resume(): Promise<void> {
     if (!this.ctx) {
       this.ctx = new AudioContext();
+      this.setupMasterAcoustics();
     }
     if (this.ctx.state === "suspended") {
       await this.ctx.resume();
     }
+  }
+
+  setMasterVolume(vol: number): void {
+    this.masterVolume = Math.max(0.0, Math.min(1.2, vol));
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setValueAtTime(this.masterVolume, this.ctx.currentTime);
+    }
+  }
+
+  getMasterVolume(): number {
+    return this.masterVolume;
+  }
+
+  private setupMasterAcoustics(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+
+    // Master output bus
+    this.masterGain = ctx.createGain();
+    this.masterGain.gain.value = this.masterVolume;
+    this.masterGain.connect(ctx.destination);
+
+    // Synthesize natural concert hall stereo impulse response (Phase 2)
+    const rate = ctx.sampleRate;
+    const duration = 1.6; // 1.6s warm hall decay
+    const length = Math.floor(rate * duration);
+    const impulse = ctx.createBuffer(2, length, rate);
+    const left = impulse.getChannelData(0);
+    const right = impulse.getChannelData(1);
+
+    for (let i = 0; i < length; i++) {
+      const t = i / rate;
+      const decay = Math.exp(-t / 0.38) * (1 - t / duration);
+      left[i] = (Math.random() * 2 - 1) * decay;
+      right[i] = (Math.random() * 2 - 1) * decay;
+    }
+
+    this.reverbConvolver = ctx.createConvolver();
+    this.reverbConvolver.buffer = impulse;
+
+    this.reverbGain = ctx.createGain();
+    this.reverbGain.gain.value = 0.16; // 16% concert hall wet blend
+
+    this.masterGain.connect(this.reverbConvolver);
+    this.reverbConvolver.connect(this.reverbGain);
+    this.reverbGain.connect(ctx.destination);
   }
 
   /**
@@ -108,7 +161,7 @@ export class AudioEngine {
   }
 
   /**
-   * Load all WebAudioFont sample banks needed for Phase 1.
+   * Load all WebAudioFont sample banks needed for Phase 1/2/3.
    * Downloads scripts and initializes the player.
    * Can be called during app initialization (does not require user gesture).
    */
@@ -171,18 +224,17 @@ export class AudioEngine {
     gain.gain.exponentialRampToValueAtTime(0.001, audioTime + CLICK_DURATION_SEC);
 
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.masterGain || ctx.destination);
 
     osc.start(audioTime);
     osc.stop(audioTime + CLICK_DURATION_SEC + CLICK_RELEASE_SEC);
   }
 
-  // ── Phase 1: Sampled notes ───────────────────────────────────────────────
+  // ── Phase 1/2: Sampled notes & Dynamic voice control ─────────────────────
 
   /**
    * Schedule a note-on event using the WebAudioFont sample bank.
-   * The note is sustained indefinitely until its score noteOff arrives,
-   * allowing the conductor to hold notes across any tempo change.
+   * Handles pitch-collision truncation during accelerando and expressive velocity curves.
    *
    * @param noteId      Unique identifier for the note instance
    * @param midiNote    0–127
@@ -215,22 +267,48 @@ export class AudioEngine {
     }
 
     const ctx = this.ctx;
-    const volume = Math.max(0.1, velocity / 127);
 
-    // Create a dedicated GainNode for this voice to control its attack, sustain, and release
+    // Pitch Collision Truncation (Phase 2): If a previous voice on the same pitch is still ringing,
+    // fade it out quickly (15ms) so the new note is crisp and doesn't pile up during accelerandos
+    for (const [existingId, voice] of this.activeVoices.entries()) {
+      if (voice.channel === channel && voice.midiNote === midiNote) {
+        try {
+          voice.gainNode.gain.cancelScheduledValues(audioTime);
+          voice.gainNode.gain.setValueAtTime(voice.targetVolume, audioTime);
+          voice.gainNode.gain.linearRampToValueAtTime(0.0001, audioTime + 0.015);
+          setTimeout(() => {
+            try {
+              voice.envelope.cancel();
+              voice.gainNode.disconnect();
+            } catch {
+              // Ignore
+            }
+          }, 40);
+          this.activeVoices.delete(existingId);
+        } catch {
+          // Ignore
+        }
+      }
+    }
+
+    // Expressive dynamic velocity curve (Phase 2)
+    const normalizedVel = Math.max(0.1, velocity / 127);
+    const volume = Math.min(1.0, Math.pow(normalizedVel, 1.2) * 1.05);
+
+    // Create dedicated GainNode for this voice connected to master bus
     const gainNode = ctx.createGain();
     gainNode.gain.setValueAtTime(0, audioTime);
-    gainNode.gain.linearRampToValueAtTime(volume, audioTime + 0.008);
-    gainNode.connect(ctx.destination);
+    gainNode.gain.linearRampToValueAtTime(volume, audioTime + 0.006);
+    gainNode.connect(this.masterGain || ctx.destination);
 
-    // Queue note into the gain node with indefinite hold (duration = 999)
+    // Queue note with open duration (managed by scheduleNoteOff)
     const envelope = this.player.queueWaveTable(
       ctx,
       gainNode,
       preset,
       audioTime,
       midiNote,
-      999, // Sustains until release is scheduled via scheduleNoteOff
+      999,
       1.0
     );
 
@@ -255,14 +333,14 @@ export class AudioEngine {
     if (!voice || !this.ctx) return;
 
     const { gainNode, envelope, targetVolume } = voice;
-    const releaseTime = 0.08; // 80ms musical release
+    const releaseTime = 0.06; // 60ms natural orchestral release
 
     try {
-      // Smoothly fade the gain out starting at audioTime
-      gainNode.gain.setValueAtTime(targetVolume, Math.max(this.ctx.currentTime, audioTime));
-      gainNode.gain.linearRampToValueAtTime(0.0001, Math.max(this.ctx.currentTime, audioTime) + releaseTime);
+      const startTime = Math.max(this.ctx.currentTime, audioTime);
+      gainNode.gain.setValueAtTime(targetVolume, startTime);
+      gainNode.gain.linearRampToValueAtTime(0.0001, startTime + releaseTime);
 
-      // Clean up the WebAudioFont envelope after release completes
+      // Clean up after release completes
       setTimeout(() => {
         try {
           envelope.cancel();
@@ -270,7 +348,7 @@ export class AudioEngine {
         } catch {
           // Ignore if already disconnected
         }
-      }, Math.max(0, (audioTime + releaseTime - this.ctx!.currentTime) * 1000) + 50);
+      }, Math.max(0, (startTime + releaseTime - this.ctx!.currentTime) * 1000) + 50);
     } catch {
       // Ignore audio scheduling error
     }

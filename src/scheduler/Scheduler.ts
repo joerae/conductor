@@ -49,6 +49,8 @@ export class Scheduler {
   private tickHandle: ReturnType<typeof setTimeout> | null = null;
   private getAudioTime: () => number;
   private onNoteEvent?: (event: NotePlaybackEvent) => void;
+  private onComplete?: () => void;
+  private hasCompleted: boolean = false;
 
   /** Diagnostic: number of events committed since last reset. */
   public committedCount: number = 0;
@@ -59,17 +61,20 @@ export class Scheduler {
     transport: ScoreTransport,
     audioEngine: AudioEngine,
     getAudioTime: () => number,
-    onNoteEvent?: (event: NotePlaybackEvent) => void
+    onNoteEvent?: (event: NotePlaybackEvent) => void,
+    onComplete?: () => void
   ) {
     this.transport = transport;
     this.audioEngine = audioEngine;
     this.getAudioTime = getAudioTime;
     this.onNoteEvent = onNoteEvent;
+    this.onComplete = onComplete;
   }
 
   /** Start the scheduler tick loop. */
   start(): void {
     if (this.tickHandle !== null) return;
+    this.hasCompleted = false;
     this.tick();
   }
 
@@ -86,6 +91,7 @@ export class Scheduler {
     this.committedNoteIds.clear();
     this.committedCount = 0;
     this.horizon = 0;
+    this.hasCompleted = false;
   }
 
   // ── Private ─────────────────────────────────────────────────────────────
@@ -98,6 +104,14 @@ export class Scheduler {
     this.transport.advanceTo(audioNow);
 
     if (this.transport.isPlaying()) {
+      // Check for piece completion
+      if (this.transport.isCompleted() && !this.hasCompleted) {
+        this.hasCompleted = true;
+        if (this.onComplete) {
+          this.onComplete();
+        }
+      }
+
       const pending = this.transport.eventsInWindow(audioNow, lookAheadEnd);
 
       for (const event of pending) {

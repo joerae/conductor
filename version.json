@@ -1,9 +1,34 @@
 {
-  "version": "0.1.3",
+  "version": "0.2.1",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.2.1",
+      "date": "2026-08-31",
+      "summary": "Master Dynamics & Volume Controller (Scroll Wheel & Keyboard Arrows)",
+      "details": [
+        "Added Master Dynamics volume control mapped to the mouse scroll wheel",
+        "Added keyboard shortcuts (ArrowUp / ArrowDown) and click/drag on dynamics bar",
+        "Added visual Master Dynamics HUD with live percentage display on stage",
+        "Integrated master volume scaling directly with the concert hall master bus"
+      ]
+    },
+    {
+      "version": "0.2.0",
+      "date": "2026-08-31",
+      "summary": "Repertoire Selection (Mozart & Beethoven 5), Phase 2 (Concert Hall Reverb, pitch-collision truncation) & Phase 3 (Repertoire system & completion flow)",
+      "details": [
+        "Added Repertoire catalog supporting switching between Mozart (Eine Kleine Nachtmusik) and Beethoven (Symphony No. 5 in C minor, Op. 67)",
+        "Added Repertoire selection modal with artwork, piece details, and seamless piece loading",
+        "Added dynamic orchestral stage layouts: Chamber Strings (4 sections) for Mozart vs. Full Grand Symphony (7 sections: Winds, Reeds, Horns, Trumpets, Timpani, Upper Strings, Lower Strings) for Beethoven 5",
+        "Phase 2 Concert Hall Reverb: Added stereo impulse concert hall acoustics bus and exponential velocity dynamics",
+        "Fixed accelerando note overlap: added pitch-collision voice truncation so held notes release cleanly when speeding up",
+        "Phase 3 Completion Flow: Added score completion detection with grand finale hold and replay/switch piece controls",
+        "Added SoundFonts for Bassoon, Timpani, and full orchestral instrumentation"
+      ]
+    },
     {
       "version": "0.1.3",
       "date": "2026-08-31",

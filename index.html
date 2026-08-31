@@ -87,9 +87,14 @@
         </svg>
       </div>
 
-      <!-- Piece info -->
+      <!-- Piece info & Repertoire button -->
       <div id="piece-info">
-        <h1 id="piece-title">Eine Kleine Nachtmusik</h1>
+        <div class="piece-title-row">
+          <h1 id="piece-title">Eine Kleine Nachtmusik</h1>
+          <button id="repertoire-btn" class="repertoire-pill-btn" aria-label="Open repertoire selector" title="Choose a piece from repertoire">
+            🎵 Repertoire
+          </button>
+        </div>
         <p id="piece-subtitle">W.A. Mozart</p>
       </div>
 
@@ -107,6 +112,17 @@
         <span class="mode-shortcut-hint">Press <strong>T</strong> to toggle</span>
       </div>
 
+      <!-- Dynamics / Volume Control -->
+      <div id="volume-indicator-container" class="volume-container" title="Master Dynamics: Scroll mouse wheel or use ↑/↓ arrows to adjust orchestral volume">
+        <span class="volume-icon">🔊</span>
+        <span class="volume-label">Dynamics:</span>
+        <div class="volume-bar-bg" id="volume-slider-track">
+          <div id="volume-bar-fill" class="volume-bar-fill" style="width: 85%;"></div>
+        </div>
+        <span id="volume-percent" class="volume-val">85%</span>
+        <span class="volume-scroll-hint">Scroll 🖱️ / ↑↓</span>
+      </div>
+
       <!-- Prompt -->
       <div id="prompt-area">
         <p id="prompt">Tap SPACE twice to set the pulse.</p>
@@ -115,15 +131,31 @@
         </div>
       </div>
 
-      <!-- Restart button (shown during playing / paused) -->
-      <button id="restart-btn" style="display:none" aria-label="Restart piece">↺ Restart from Top</button>
+      <!-- Stage Action Controls -->
+      <div id="stage-actions">
+        <button id="restart-btn" style="display:none" aria-label="Restart piece">↺ Restart from Top</button>
+        <button id="repertoire-switch-btn" style="display:none" aria-label="Choose another piece">🎵 Switch Piece</button>
+      </div>
 
       <!-- Footer controls -->
       <footer id="stage-footer">
-        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.1.1</button>
+        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.2.0</button>
         <span class="footer-divider">•</span>
         <span id="debug-hint" class="debug-hint">Press D for debug overlay</span>
       </footer>
+    </div>
+
+    <!-- Repertoire Selection Modal -->
+    <div id="repertoire-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="repertoire-title">
+      <div class="modal-card repertoire-card">
+        <div class="modal-header">
+          <h2 id="repertoire-title">Orchestral Repertoire</h2>
+          <button id="close-repertoire-btn" class="close-btn" aria-label="Close modal">✕</button>
+        </div>
+        <div id="repertoire-list" class="modal-body repertoire-grid">
+          <!-- Populated from REPERTOIRE catalog -->
+        </div>
+      </div>
     </div>
 
     <!-- Version & Updates Modal -->

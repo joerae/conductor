@@ -124,4 +124,36 @@ describe("Scheduler", () => {
 
     scheduler.stop();
   });
+
+  it("calls onComplete when the score reaches the end", () => {
+    let mockTime = 0.0;
+    const transport = new ScoreTransport();
+    const mockAudio = new MockAudioEngine();
+    let completedCalled = false;
+
+    const events: ScoreEvent[] = [
+      { beat: 0.1, type: "noteOn", durationBeats: 0.5, trackId: "Violin I", noteId: "n1", midiNote: 60, velocity: 90, channel: 0, program: 48 },
+    ];
+    transport.setEvents(events, 1.0); // Total 1 beat
+    transport.start(0, 0.0, 0.5);
+
+    const scheduler = new Scheduler(
+      transport,
+      mockAudio as unknown as AudioEngine,
+      () => mockTime,
+      undefined,
+      () => { completedCalled = true; }
+    );
+
+    // Initial tick at 0.0
+    (scheduler as any).tick();
+    expect(completedCalled).toBe(false);
+
+    // Advance time to 0.6s (beat 1.2 >= totalBeats 1.0)
+    mockTime = 0.6;
+    (scheduler as any).tick();
+    expect(completedCalled).toBe(true);
+
+    scheduler.stop();
+  });
 });

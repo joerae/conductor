@@ -27,12 +27,16 @@ import { DebugOverlay } from "../ui/DebugOverlay";
 
 import type { NotePlaybackEvent } from "../scheduler/Scheduler";
 
+import { REPERTOIRE, getPieceById, DEFAULT_PIECE_ID } from "../score/repertoire";
+import type { PieceDefinition } from "../score/repertoire";
+
 export type ExperienceState =
   | "loading"
   | "ready"
   | "preparing"
   | "playing"
-  | "paused";
+  | "paused"
+  | "completed";
 
 export type NoteVisualEvent = {
   type: "noteOn" | "noteOff";
@@ -51,6 +55,7 @@ interface UICallbacks {
 
 export class ExperienceController {
   private state: ExperienceState = "loading";
+  private currentPieceId: string = DEFAULT_PIECE_ID;
 
   private audioEngine: AudioEngine;
   private clock: ConductorClock;
@@ -81,7 +86,8 @@ export class ExperienceController {
       this.transport,
       this.audioEngine,
       () => this.audioEngine.getAudioTime(),
-      (event: NotePlaybackEvent) => this.handleNotePlaybackEvent(event)
+      (event: NotePlaybackEvent) => this.handleNotePlaybackEvent(event),
+      () => this.handlePieceComplete()
     );
 
     // Wire clock events → UI + debug
@@ -102,29 +108,59 @@ export class ExperienceController {
     });
   }
 
-  // ── Lifecycle ────────────────────────────────────────────────────────────
+  private handlePieceComplete(): void {
+    this.setState("completed");
+    setTimeout(() => {
+      this.scheduler.stop();
+      this.transport.stop();
+    }, 2000);
+  }
 
-  async load(): Promise<void> {
+  // ── Lifecycle & Repertoire ────────────────────────────────────────────────
+
+  async load(pieceId: string = DEFAULT_PIECE_ID): Promise<void> {
     this.setState("loading");
+    this.currentPieceId = pieceId;
+    const piece = getPieceById(pieceId) || REPERTOIRE[0];
+
     try {
-      // Load MIDI score and instrument samples in parallel during loading screen
+      // Load MIDI score and instrument samples in parallel
       await Promise.all([
-        this.midiScore.load("/midi/Eine-Kleine-Nachtmusik1.mid"),
+        this.midiScore.load(piece.midiUrl),
         this.audioEngine.loadSamples().catch(err =>
           console.warn("Conductor: sample loading failed, using fallback click", err)
         ),
       ]);
-      this.transport.setEvents(this.midiScore.getEvents());
+      this.transport.setEvents(this.midiScore.getEvents(), this.midiScore.getMetadata().totalBeats);
 
       // Wire input → clock
       this.input.onBeat(obs => this.handleBeatObservation(obs));
       this.input.start();
 
+      this.prepTapCount = 0;
+      this.pausedBeat = 0;
       this.setState("ready");
     } catch (err) {
-      console.error("Conductor: failed to load", err);
+      console.error("Conductor: failed to load piece", err);
       throw err;
     }
+  }
+
+  async loadPiece(pieceId: string): Promise<void> {
+    this.scheduler.stop();
+    this.scheduler.reset();
+    this.transport.stop();
+    this.clock.reset();
+    this.audioEngine.stopAllNotes();
+    await this.load(pieceId);
+  }
+
+  getCurrentPiece(): PieceDefinition {
+    return getPieceById(this.currentPieceId) || REPERTOIRE[0];
+  }
+
+  getRepertoire(): PieceDefinition[] {
+    return REPERTOIRE;
   }
 
   restart(): void {
@@ -242,6 +278,14 @@ export class ExperienceController {
 
   getTempoMode(): TempoMode {
     return this.clock.getTempoMode();
+  }
+
+  setMasterVolume(vol: number): void {
+    this.audioEngine.setMasterVolume(vol);
+  }
+
+  getMasterVolume(): number {
+    return this.audioEngine.getMasterVolume();
   }
 
   getCursorBeat(): number {

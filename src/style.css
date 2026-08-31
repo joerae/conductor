@@ -342,6 +342,72 @@ html, body {
   color: var(--accent-gold);
 }
 
+/* ── Dynamics / Volume HUD ────────────────────────────────────────────────── */
+.volume-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  margin-bottom: var(--spacing-xs);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  user-select: none;
+  cursor: ns-resize;
+}
+
+.volume-container:hover {
+  border-color: rgba(201, 168, 76, 0.35);
+  box-shadow: 0 0 12px rgba(201, 168, 76, 0.15);
+}
+
+.volume-icon {
+  font-size: 0.85rem;
+}
+
+.volume-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.volume-bar-bg {
+  width: 75px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.volume-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #c9a84c, #ffd56b);
+  border-radius: 4px;
+  transition: width 0.08s ease-out;
+  box-shadow: 0 0 8px rgba(255, 213, 107, 0.5);
+}
+
+.volume-val {
+  font-size: 0.75rem;
+  color: var(--accent-warm);
+  font-weight: 600;
+  min-width: 32px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.volume-scroll-hint {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+  margin-left: 2px;
+}
+
 /* ── Prompt area ────────────────────────────────────────────────────────────── */
 #prompt-area {
   display: flex;
@@ -394,9 +460,46 @@ html, body {
   background: rgba(201,168,76,0.10);
 }
 
-/* ── Restart button ─────────────────────────────────────────────────────────── */
+.piece-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.repertoire-pill-btn {
+  background: rgba(201, 168, 76, 0.12);
+  border: 1px solid rgba(201, 168, 76, 0.35);
+  color: var(--accent-gold);
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: all var(--transition-fast);
+}
+
+.repertoire-pill-btn:hover {
+  background: rgba(201, 168, 76, 0.25);
+  box-shadow: 0 0 12px rgba(201, 168, 76, 0.3);
+  transform: translateY(-1px);
+}
+
+/* ── Stage actions (restart & switch) ──────────────────────────────────────── */
+#stage-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+#repertoire-switch-btn,
 #restart-btn {
-  padding: 10px 28px;
+  padding: 10px 24px;
   border: 1px solid rgba(255,255,255,0.15);
   border-radius: 24px;
   background: rgba(255,255,255,0.05);
@@ -405,13 +508,103 @@ html, body {
   font-size: 0.8rem;
   letter-spacing: 0.08em;
   cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
 }
 
+#repertoire-switch-btn:hover,
 #restart-btn:hover {
-  background: rgba(255,255,255,0.10);
-  border-color: rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(201, 168, 76, 0.4);
   color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+#stage[data-state="completed"] #prompt {
+  color: var(--accent-gold);
+  font-size: 1.25rem;
+  font-weight: 400;
+  text-shadow: 0 0 16px rgba(201, 168, 76, 0.4);
+}
+
+/* ── Repertoire Grid Cards ─────────────────────────────────────────────────── */
+.repertoire-card {
+  max-width: 680px;
+}
+
+.repertoire-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 65vh;
+  overflow-y: auto;
+}
+
+.piece-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  transition: all var(--transition-fast);
+}
+
+.piece-card:hover {
+  background: rgba(201, 168, 76, 0.06);
+  border-color: rgba(201, 168, 76, 0.35);
+  transform: translateX(4px);
+}
+
+.piece-card.active-piece {
+  border-color: var(--accent-gold);
+  background: rgba(201, 168, 76, 0.10);
+  box-shadow: 0 0 16px rgba(201, 168, 76, 0.15);
+}
+
+.piece-card-info {
+  flex: 1;
+}
+
+.piece-card-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.15rem;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.piece-card-composer {
+  font-size: 0.8rem;
+  color: var(--accent-warm);
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.piece-card-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.piece-select-btn {
+  background: var(--accent-gold);
+  color: #12151e;
+  border: none;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.piece-select-btn:hover {
+  background: #ffe08a;
+  box-shadow: 0 0 14px rgba(201, 168, 76, 0.5);
 }
 
 /* ── Stage Footer ───────────────────────────────────────────────────────────── */

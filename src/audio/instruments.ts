@@ -40,12 +40,14 @@ export function programName(program: number): string {
     42: "Cello",
     43: "Contrabass",
     44: "Tremolo Strings",
+    47: "Timpani",
     48: "String Ensemble 1",
     49: "String Ensemble 2",
     56: "Trumpet",
     57: "Trombone",
     60: "French Horn",
     68: "Oboe",
+    70: "Bassoon",
     71: "Clarinet",
     73: "Flute",
   };
@@ -66,12 +68,12 @@ export function programToWebAudioFontVar(program: number, channel: number): stri
 }
 
 /**
- * All WebAudioFont CDN script URLs needed for Eine Kleine.
- * Using FluidR3_GM — a complete 128-program GM SoundFont bank.
+ * All WebAudioFont CDN script URLs needed for full symphony orchestra repertoire.
+ * Using FluidR3_GM — high quality General MIDI SoundFont bank.
  * Variable names: _tone_PPPP_FluidR3_GM_sf2_file
  */
 export const WEBAUDIOFONT_SCRIPTS: string[] = [
-  // Piano (fallback for unmapped channels)
+  // Piano (fallback)
   "https://surikov.github.io/webaudiofontdata/sound/0000_FluidR3_GM_sf2_file.js",
   // Strings
   "https://surikov.github.io/webaudiofontdata/sound/0400_FluidR3_GM_sf2_file.js",   // Violin   (prog 40)
@@ -80,8 +82,11 @@ export const WEBAUDIOFONT_SCRIPTS: string[] = [
   "https://surikov.github.io/webaudiofontdata/sound/0430_FluidR3_GM_sf2_file.js",   // Contrabass (prog 43)
   "https://surikov.github.io/webaudiofontdata/sound/0480_FluidR3_GM_sf2_file.js",   // String Ensemble 1 (prog 48)
   "https://surikov.github.io/webaudiofontdata/sound/0490_FluidR3_GM_sf2_file.js",   // String Ensemble 2 (prog 49)
-  // Winds
+  // Percussion
+  "https://surikov.github.io/webaudiofontdata/sound/0470_FluidR3_GM_sf2_file.js",   // Timpani  (prog 47)
+  // Winds & Reeds
   "https://surikov.github.io/webaudiofontdata/sound/0680_FluidR3_GM_sf2_file.js",   // Oboe     (prog 68)
+  "https://surikov.github.io/webaudiofontdata/sound/0700_FluidR3_GM_sf2_file.js",   // Bassoon  (prog 70)
   "https://surikov.github.io/webaudiofontdata/sound/0710_FluidR3_GM_sf2_file.js",   // Clarinet (prog 71)
   "https://surikov.github.io/webaudiofontdata/sound/0730_FluidR3_GM_sf2_file.js",   // Flute    (prog 73)
   // Brass

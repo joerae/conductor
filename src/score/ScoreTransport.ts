@@ -36,11 +36,30 @@ export class ScoreTransport {
   /** Whether the transport is actively playing. */
   private playing: boolean = false;
 
+  private totalBeats: number = 0;
+
   // ── Public API ──────────────────────────────────────────────────────────
 
   /** Load score events from MidiScore. */
-  setEvents(events: ScoreEvent[]): void {
+  setEvents(events: ScoreEvent[], totalBeats?: number): void {
     this.events = events;
+    if (totalBeats !== undefined) {
+      this.totalBeats = totalBeats;
+    } else {
+      this.totalBeats = events.reduce((max, e) => Math.max(max, e.beat), 0);
+    }
+  }
+
+  setTotalBeats(totalBeats: number): void {
+    this.totalBeats = totalBeats;
+  }
+
+  getTotalBeats(): number {
+    return this.totalBeats;
+  }
+
+  isCompleted(): boolean {
+    return this.totalBeats > 0 && this.cursorBeat >= this.totalBeats;
   }
 
   /**
