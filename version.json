@@ -1,9 +1,21 @@
 {
-  "version": "0.1.1",
+  "version": "0.1.2",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.1.2",
+      "date": "2026-08-31",
+      "summary": "Live visual instrument orchestra (eggs per MIDI track) & dynamic sustained note holding across tempo changes",
+      "details": [
+        "Mapped SVG musician 'eggs' to distinct orchestra sections (Violin I, Violin II, Viola, Cello) with section labels",
+        "Animated live note playing reactions: musicians and sections light up with a warm radiant glow when notes on their track play",
+        "Fixed sustained notes cutting off during tempo changes by decoupling voice GainNodes from static durations",
+        "Supported rubato / held notes: voices sustain indefinitely until their true score beat arrives, allowing expressively slow or fast tempo changes",
+        "Added baton swing animation to conductor podium in rhythm with conducted pulse"
+      ]
+    },
     {
       "version": "0.1.1",
       "date": "2026-08-31",

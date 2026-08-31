@@ -66,10 +66,21 @@ interface WebAudioFontPlayerInstance {
 
 // ─── AudioEngine ────────────────────────────────────────────────────────────
 
+interface ActiveVoice {
+  noteId: string;
+  midiNote: number;
+  channel: number;
+  gainNode: GainNode;
+  envelope: { cancel: () => void };
+  targetVolume: number;
+}
+
+// ─── AudioEngine ────────────────────────────────────────────────────────────
+
 export class AudioEngine {
   private ctx: AudioContext | null = null;
   private player: WebAudioFontPlayerInstance | null = null;
-  private activeNotes: Map<string, { cancel: () => void }> = new Map();
+  private activeVoices: Map<string, ActiveVoice> = new Map();
   private samplesLoaded: boolean = false;
 
   // ── Lifecycle ───────────────────────────────────────────────────────────
@@ -170,21 +181,23 @@ export class AudioEngine {
 
   /**
    * Schedule a note-on event using the WebAudioFont sample bank.
+   * The note is sustained indefinitely until its score noteOff arrives,
+   * allowing the conductor to hold notes across any tempo change.
    *
+   * @param noteId      Unique identifier for the note instance
    * @param midiNote    0–127
    * @param velocity    0–127
    * @param channel     MIDI channel 0–15
    * @param program     MIDI program 0–127
    * @param audioTime   When to start (AudioContext seconds)
-   * @param durationSec Note duration in seconds (computed from score beats * current period)
    */
   scheduleNoteOn(
+    noteId: string,
     midiNote: number,
     velocity: number,
     channel: number,
     program: number,
-    audioTime: number,
-    durationSec: number = 0.5
+    audioTime: number
   ): void {
     if (!this.ctx || !this.player) {
       // Fallback: click if samples aren't ready yet
@@ -201,53 +214,86 @@ export class AudioEngine {
       return;
     }
 
+    const ctx = this.ctx;
     const volume = Math.max(0.1, velocity / 127);
-    // Queue note with its true musical duration
+
+    // Create a dedicated GainNode for this voice to control its attack, sustain, and release
+    const gainNode = ctx.createGain();
+    gainNode.gain.setValueAtTime(0, audioTime);
+    gainNode.gain.linearRampToValueAtTime(volume, audioTime + 0.008);
+    gainNode.connect(ctx.destination);
+
+    // Queue note into the gain node with indefinite hold (duration = 999)
     const envelope = this.player.queueWaveTable(
-      this.ctx,
-      this.ctx.destination,
+      ctx,
+      gainNode,
       preset,
       audioTime,
       midiNote,
-      Math.max(0.05, durationSec),
-      volume
+      999, // Sustains until release is scheduled via scheduleNoteOff
+      1.0
     );
 
-    const key = `${channel}:${midiNote}`;
-    this.activeNotes.set(key, envelope);
+    this.activeVoices.set(noteId, {
+      noteId,
+      midiNote,
+      channel,
+      gainNode,
+      envelope,
+      targetVolume: volume,
+    });
   }
 
   /**
-   * Schedule a note-off event or cancel a ringing note.
+   * Schedule a note-off event with a smooth, musical release.
    *
-   * @param midiNote   0–127
-   * @param channel    MIDI channel 0–15
+   * @param noteId    Unique identifier for the note instance
+   * @param audioTime When to start release (AudioContext seconds)
    */
-  scheduleNoteOff(midiNote: number, channel: number): void {
-    const key = `${channel}:${midiNote}`;
-    const envelope = this.activeNotes.get(key);
-    if (envelope) {
-      try {
-        envelope.cancel();
-      } catch {
-        // Ignore envelope cancellation error
-      }
-      this.activeNotes.delete(key);
+  scheduleNoteOff(noteId: string, audioTime: number): void {
+    const voice = this.activeVoices.get(noteId);
+    if (!voice || !this.ctx) return;
+
+    const { gainNode, envelope, targetVolume } = voice;
+    const releaseTime = 0.08; // 80ms musical release
+
+    try {
+      // Smoothly fade the gain out starting at audioTime
+      gainNode.gain.setValueAtTime(targetVolume, Math.max(this.ctx.currentTime, audioTime));
+      gainNode.gain.linearRampToValueAtTime(0.0001, Math.max(this.ctx.currentTime, audioTime) + releaseTime);
+
+      // Clean up the WebAudioFont envelope after release completes
+      setTimeout(() => {
+        try {
+          envelope.cancel();
+          gainNode.disconnect();
+        } catch {
+          // Ignore if already disconnected
+        }
+      }, Math.max(0, (audioTime + releaseTime - this.ctx!.currentTime) * 1000) + 50);
+    } catch {
+      // Ignore audio scheduling error
     }
+
+    this.activeVoices.delete(noteId);
   }
 
   /**
-   * Cancel all currently active audio envelopes (e.g. on pause, stop, restart).
+   * Cancel all currently active audio voices immediately (e.g. on pause, stop, restart).
    */
   stopAllNotes(): void {
-    for (const envelope of this.activeNotes.values()) {
+    const now = this.ctx?.currentTime ?? 0;
+    for (const voice of this.activeVoices.values()) {
       try {
-        envelope.cancel();
+        voice.gainNode.gain.cancelScheduledValues(now);
+        voice.gainNode.gain.linearRampToValueAtTime(0.0001, now + 0.02);
+        voice.envelope.cancel();
+        voice.gainNode.disconnect();
       } catch {
         // Ignore if already completed
       }
     }
-    this.activeNotes.clear();
+    this.activeVoices.clear();
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────

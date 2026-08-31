@@ -151,9 +151,9 @@ html, body {
   100% { border-color: transparent;         background: transparent; }
 }
 
-/* ── Orchestra silhouette ──────────────────────────────────────────────────── */
+/* ── Orchestra silhouette & Instrument sections ───────────────────────────── */
 #orchestra-silhouette {
-  width: min(680px, 90vw);
+  width: min(760px, 92vw);
   flex-shrink: 0;
 }
 
@@ -161,28 +161,76 @@ html, body {
   width: 100%;
   height: auto;
   color: var(--baton-color);
+  overflow: visible;
+}
+
+.instrument-section {
+  cursor: default;
+  transition: transform var(--transition-fast);
 }
 
 .musician {
-  fill: var(--musician-fill);
-  transition: fill var(--transition-slow);
+  fill: #222634;
+  stroke: rgba(201, 168, 76, 0.2);
+  stroke-width: 1.5;
+  transition: fill 0.08s ease, stroke 0.08s ease, filter 0.08s ease, transform 0.08s ease;
+  transform-origin: center;
 }
 
-.musician.wind { fill: var(--musician-wind); }
-.musician.brass { fill: var(--musician-brass); }
+/* Individual section base styling */
+.musician.violin1 { fill: #242938; }
+.musician.violin2 { fill: #222736; }
+.musician.viola   { fill: #252834; }
+.musician.cello   { fill: #232732; }
+
+/* Visual Note Playing Reaction on Eggs / Musicians */
+.musician.playing {
+  fill: #ffd56b !important;
+  stroke: #fff2c4 !important;
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 14px rgba(255, 213, 107, 0.85)) drop-shadow(0 0 28px rgba(201, 168, 76, 0.5));
+  animation: notePulse 0.12s ease-out;
+}
+
+.instrument-section.playing .section-label {
+  fill: #ffd56b !important;
+  font-weight: 600;
+  filter: drop-shadow(0 0 8px rgba(201, 168, 76, 0.6));
+}
+
+@keyframes notePulse {
+  0%   { transform: scale(1.0); }
+  50%  { transform: scale(1.08) translateY(-2px); }
+  100% { transform: scale(1.04); }
+}
+
+/* Section labels under each group */
+.section-label {
+  fill: #8a8070;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: fill 0.15s ease, filter 0.15s ease;
+  user-select: none;
+}
+
 .conductor { fill: var(--conductor-fill); }
 .podium { fill: var(--podium-fill); }
 .stage-floor { fill: var(--stage-floor); }
 .baton { color: var(--baton-color); }
 
-/* Subtle breathing animation on musicians during playing */
-#stage[data-state="playing"] .musician,
-#stage[data-state="coasting"] .musician {
+/* Breathing animation during playing */
+#stage[data-state="playing"] .musician {
   animation: breathe 3.5s ease-in-out infinite;
 }
 
-#stage[data-state="playing"] .musician:nth-child(even) {
-  animation-delay: 0.7s;
+#stage[data-state="playing"] .egg-1 {
+  animation-delay: 0.6s;
+}
+#stage[data-state="playing"] .egg-2 {
+  animation-delay: 1.2s;
 }
 
 @keyframes breathe {
@@ -190,10 +238,15 @@ html, body {
   50%       { transform: scaleY(1.03); }
 }
 
-/* Conductor baton animate on beat */
-#stage[data-state="playing"] .baton {
-  transform-origin: 408px 60px;
-  animation: batonSwing 0.18s ease-out;
+/* Conductor baton swing */
+.baton.swing {
+  animation: batonDownUp 0.22s cubic-bezier(0.2, 0.8, 0.4, 1.2);
+}
+
+@keyframes batonDownUp {
+  0%   { transform: rotate(0deg); }
+  40%  { transform: rotate(18deg) translateY(4px); }
+  100% { transform: rotate(0deg); }
 }
 
 /* ── Piece info ─────────────────────────────────────────────────────────────── */

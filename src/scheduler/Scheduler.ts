@@ -32,12 +32,23 @@ const TICK_INTERVAL_MS = 25;
 /** How far ahead we look when committing events to the audio engine. */
 const LOOKAHEAD_MS = 150;
 
+export type NotePlaybackEvent = {
+  type: "noteOn" | "noteOff";
+  noteId: string;
+  trackId: string;
+  channel: number;
+  midiNote: number;
+  velocity: number;
+  audioTime: number;
+};
+
 export class Scheduler {
   private transport: ScoreTransport;
   private audioEngine: AudioEngine;
   private committedNoteIds: Set<string> = new Set();
   private tickHandle: ReturnType<typeof setTimeout> | null = null;
   private getAudioTime: () => number;
+  private onNoteEvent?: (event: NotePlaybackEvent) => void;
 
   /** Diagnostic: number of events committed since last reset. */
   public committedCount: number = 0;
@@ -47,11 +58,13 @@ export class Scheduler {
   constructor(
     transport: ScoreTransport,
     audioEngine: AudioEngine,
-    getAudioTime: () => number
+    getAudioTime: () => number,
+    onNoteEvent?: (event: NotePlaybackEvent) => void
   ) {
     this.transport = transport;
     this.audioEngine = audioEngine;
     this.getAudioTime = getAudioTime;
+    this.onNoteEvent = onNoteEvent;
   }
 
   /** Start the scheduler tick loop. */
@@ -111,16 +124,32 @@ export class Scheduler {
 
   private commitEvent(event: ScoreEvent, audioTime: number): void {
     if (event.type === "noteOn") {
-      const periodSec = this.transport.getPeriodSec();
-      const durationSec = Math.max(0.05, (event.durationBeats || 0.5) * periodSec);
       this.audioEngine.scheduleNoteOn(
+        event.noteId,
         event.midiNote,
         event.velocity,
         event.channel,
         event.program,
-        audioTime,
-        durationSec
+        audioTime
       );
+    } else {
+      this.audioEngine.scheduleNoteOff(
+        event.noteId,
+        audioTime
+      );
+    }
+
+    // Emit note event for visual synchronization
+    if (this.onNoteEvent) {
+      this.onNoteEvent({
+        type: event.type,
+        noteId: event.noteId,
+        trackId: event.trackId,
+        channel: event.channel,
+        midiNote: event.midiNote,
+        velocity: event.velocity,
+        audioTime,
+      });
     }
   }
 }

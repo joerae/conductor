@@ -50,6 +50,28 @@ function getPromptText(state: ExperienceState, pausedBeat: number): string {
   }
 }
 
+// ── Visual Orchestra Note Animation ──────────────────────────────────────────
+
+const sectionMap: Record<string, HTMLElement | null> = {
+  "0": document.getElementById("section-0"), // Violin I (channel 0)
+  "3": document.getElementById("section-1"), // Violin II (channel 3)
+  "1": document.getElementById("section-2"), // Viola (channel 1)
+  "2": document.getElementById("section-3"), // Violoncello (channel 2)
+  "Violin I": document.getElementById("section-0"),
+  "Violin II": document.getElementById("section-1"),
+  "Viola": document.getElementById("section-2"),
+  "Violoncello": document.getElementById("section-3"),
+};
+
+function swingBaton(): void {
+  const baton = document.getElementById("baton-line");
+  if (baton) {
+    baton.classList.remove("swing");
+    void baton.offsetWidth;
+    baton.classList.add("swing");
+  }
+}
+
 // ── Experience setup ──────────────────────────────────────────────────────────
 
 const controller = new ExperienceController({
@@ -62,9 +84,38 @@ const controller = new ExperienceController({
       debugHintEl.style.display = state === "ready" ? "inline" : "inline";
     }
     stageEl.dataset.state = state;
+
+    // Reset visual highlights when not playing
+    if (state !== "playing") {
+      document.querySelectorAll(".musician.playing, .instrument-section.playing").forEach(el => {
+        el.classList.remove("playing");
+      });
+    }
   },
   onBeat: () => {
     flashBeat();
+    swingBaton();
+  },
+  onNoteVisual: (event) => {
+    setTimeout(() => {
+      const section = sectionMap[String(event.channel)] || sectionMap[event.trackId] || document.getElementById("section-0");
+      if (!section) return;
+
+      const eggs = section.querySelectorAll<SVGElement>(".musician");
+      const eggIndex = Math.abs(event.midiNote) % Math.max(1, eggs.length);
+      const targetEgg = eggs[eggIndex] || eggs[0];
+
+      if (event.type === "noteOn") {
+        section.classList.add("playing");
+        if (targetEgg) targetEgg.classList.add("playing");
+      } else {
+        if (targetEgg) targetEgg.classList.remove("playing");
+        const anyActive = section.querySelector(".musician.playing");
+        if (!anyActive) {
+          section.classList.remove("playing");
+        }
+      }
+    }, event.delayMs);
   },
 });
 

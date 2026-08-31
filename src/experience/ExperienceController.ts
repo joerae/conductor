@@ -25,6 +25,8 @@ import { Scheduler } from "../scheduler/Scheduler";
 import { DebugOverlay } from "../ui/DebugOverlay";
 import type { ClockEvent } from "../clock/ConductorClock";
 
+import type { NotePlaybackEvent } from "../scheduler/Scheduler";
+
 export type ExperienceState =
   | "loading"
   | "ready"
@@ -32,9 +34,19 @@ export type ExperienceState =
   | "playing"
   | "paused";
 
+export type NoteVisualEvent = {
+  type: "noteOn" | "noteOff";
+  trackId: string;
+  channel: number;
+  midiNote: number;
+  velocity: number;
+  delayMs: number;
+};
+
 interface UICallbacks {
   onStateChange: (state: ExperienceState) => void;
   onBeat: () => void;
+  onNoteVisual?: (event: NoteVisualEvent) => void;
 }
 
 export class ExperienceController {
@@ -68,11 +80,26 @@ export class ExperienceController {
     this.scheduler = new Scheduler(
       this.transport,
       this.audioEngine,
-      () => this.audioEngine.getAudioTime()
+      () => this.audioEngine.getAudioTime(),
+      (event: NotePlaybackEvent) => this.handleNotePlaybackEvent(event)
     );
 
     // Wire clock events → UI + debug
     this.clock.on((event: ClockEvent) => this.handleClockEvent(event));
+  }
+
+  private handleNotePlaybackEvent(event: NotePlaybackEvent): void {
+    if (!this.uiCallbacks.onNoteVisual) return;
+    const now = this.audioEngine.getAudioTime();
+    const delayMs = Math.max(0, (event.audioTime - now) * 1000);
+    this.uiCallbacks.onNoteVisual({
+      type: event.type,
+      trackId: event.trackId,
+      channel: event.channel,
+      midiNote: event.midiNote,
+      velocity: event.velocity,
+      delayMs,
+    });
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
