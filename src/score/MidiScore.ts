@@ -81,6 +81,7 @@ export class MidiScore {
         // Convert Tone.js ticks → beat position
         // @tonejs/midi exposes note.ticks (start) and note.durationTicks
         const startBeat = note.ticks / ppq;
+        const durationBeats = note.durationTicks / ppq;
         const endBeat = (note.ticks + note.durationTicks) / ppq;
 
         if (endBeat > maxBeat) maxBeat = endBeat;
@@ -90,6 +91,7 @@ export class MidiScore {
         events.push({
           beat: startBeat,
           type: "noteOn",
+          durationBeats,
           trackId,
           noteId,
           midiNote: note.midi,
@@ -101,6 +103,7 @@ export class MidiScore {
         events.push({
           beat: endBeat,
           type: "noteOff",
+          durationBeats: 0,
           trackId,
           noteId,
           midiNote: note.midi,

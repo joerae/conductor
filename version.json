@@ -1,0 +1,30 @@
+{
+  "version": "0.1.1",
+  "name": "Conductor",
+  "description": "Interactive orchestral conducting experience in the browser",
+  "localUrl": "http://localhost:5173/",
+  "history": [
+    {
+      "version": "0.1.1",
+      "date": "2026-08-31",
+      "summary": "Resume from paused beat, true note duration scheduling, phase-locked transport, soundfont preloading, version modal",
+      "details": [
+        "Enabled resume from current score beat after pausing (two preparatory taps resume from where left off)",
+        "Fixed note-off scheduling by passing beat-accurate duration to WebAudioFont wave tables",
+        "Preloaded WebAudioFont instrument banks during initial loading screen",
+        "Added phase-correction synchronization to ScoreTransport to prevent conductor-orchestra phase drift",
+        "Added stopAllNotes() to AudioEngine to silence voices cleanly on pause/stop",
+        "Created versioning system and interactive version info modal"
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "date": "2026-08-31",
+      "summary": "Initial Phase 0 & Phase 1 release",
+      "details": [
+        "Phase 0: PLL-inspired ConductorClock and KeyboardBeatInput with synthetic tap acceptance test suite",
+        "Phase 1: MIDI score parsing into beat space (Eine Kleine Nachtmusik), look-ahead Scheduler, WebAudioFont AudioEngine, stage visual and DebugOverlay"
+      ]
+    }
+  ]
+}

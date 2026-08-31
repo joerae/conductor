@@ -98,11 +98,11 @@ export class AudioEngine {
 
   /**
    * Load all WebAudioFont sample banks needed for Phase 1.
-   * Resolves when all scripts are loaded (but samples may still decode async).
+   * Downloads scripts and initializes the player.
+   * Can be called during app initialization (does not require user gesture).
    */
   async loadSamples(): Promise<void> {
     if (this.samplesLoaded) return;
-    if (!this.ctx) throw new Error("Call resume() before loadSamples()");
 
     // Load the WebAudioFontPlayer script if not already present
     await this.loadScript(
@@ -118,15 +118,22 @@ export class AudioEngine {
       WEBAUDIOFONT_SCRIPTS.map(url => this.loadScript(url))
     );
 
-    // Trigger decoding for each loaded bank
-    for (const url of WEBAUDIOFONT_SCRIPTS) {
-      const varName = this.urlToVarName(url);
-      if (varName) {
-        this.player!.loader.decodeAfterLoading(this.ctx!, varName);
-      }
+    // If context is already created, decode sample buffers
+    if (this.ctx && this.player) {
+      this.decodeLoadedSamples();
     }
 
     this.samplesLoaded = true;
+  }
+
+  private decodeLoadedSamples(): void {
+    if (!this.ctx || !this.player) return;
+    for (const url of WEBAUDIOFONT_SCRIPTS) {
+      const varName = this.urlToVarName(url);
+      if (varName && (window as any)[varName]) {
+        this.player.loader.decodeAfterLoading(this.ctx, varName);
+      }
+    }
   }
 
   // ── Phase 0: Click ──────────────────────────────────────────────────────
@@ -163,20 +170,21 @@ export class AudioEngine {
 
   /**
    * Schedule a note-on event using the WebAudioFont sample bank.
-   * The note continues until scheduleNoteOff is called with the same midiNote+channel.
    *
-   * @param midiNote   0–127
-   * @param velocity   0–127
-   * @param channel    MIDI channel 0–15
-   * @param program    MIDI program 0–127
-   * @param audioTime  When to start (AudioContext seconds)
+   * @param midiNote    0–127
+   * @param velocity    0–127
+   * @param channel     MIDI channel 0–15
+   * @param program     MIDI program 0–127
+   * @param audioTime   When to start (AudioContext seconds)
+   * @param durationSec Note duration in seconds (computed from score beats * current period)
    */
   scheduleNoteOn(
     midiNote: number,
     velocity: number,
     channel: number,
     program: number,
-    audioTime: number
+    audioTime: number,
+    durationSec: number = 0.5
   ): void {
     if (!this.ctx || !this.player) {
       // Fallback: click if samples aren't ready yet
@@ -187,40 +195,59 @@ export class AudioEngine {
     const varName = programToWebAudioFontVar(program, channel);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const preset = (window as any)[varName];
-    if (!preset) return;
+    if (!preset) {
+      // Samples not yet decoded — fall back to a click so there is always audio feedback
+      this.scheduleClick(audioTime);
+      return;
+    }
 
-    const volume = velocity / 127;
-    // Duration is intentionally long — we rely on noteOff to cancel it
+    const volume = Math.max(0.1, velocity / 127);
+    // Queue note with its true musical duration
     const envelope = this.player.queueWaveTable(
       this.ctx,
       this.ctx.destination,
       preset,
       audioTime,
       midiNote,
-      999, // Will be cancelled by noteOff
+      Math.max(0.05, durationSec),
       volume
     );
 
     const key = `${channel}:${midiNote}`;
-    // Cancel any existing note on this key (just in case)
-    this.activeNotes.get(key)?.cancel();
     this.activeNotes.set(key, envelope);
   }
 
   /**
-   * Schedule a note-off event. Cancels the active note envelope.
+   * Schedule a note-off event or cancel a ringing note.
    *
    * @param midiNote   0–127
    * @param channel    MIDI channel 0–15
-   * @param audioTime  When to stop (AudioContext seconds, currently immediate)
    */
-  scheduleNoteOff(midiNote: number, channel: number, _audioTime: number): void {
+  scheduleNoteOff(midiNote: number, channel: number): void {
     const key = `${channel}:${midiNote}`;
     const envelope = this.activeNotes.get(key);
     if (envelope) {
-      envelope.cancel();
+      try {
+        envelope.cancel();
+      } catch {
+        // Ignore envelope cancellation error
+      }
       this.activeNotes.delete(key);
     }
+  }
+
+  /**
+   * Cancel all currently active audio envelopes (e.g. on pause, stop, restart).
+   */
+  stopAllNotes(): void {
+    for (const envelope of this.activeNotes.values()) {
+      try {
+        envelope.cancel();
+      } catch {
+        // Ignore if already completed
+      }
+    }
+    this.activeNotes.clear();
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
@@ -240,8 +267,8 @@ export class AudioEngine {
   }
 
   private urlToVarName(url: string): string | null {
-    // e.g. ".../0400_SoundFont_sf2_file.js" → "_tone_0400_SoundFont_sf2_file"
-    const match = url.match(/(\d+_\w+)\.js$/);
+    // Match the full filename stem before .js, e.g. "0400_FluidR3_GM_sf2_file"
+    const match = url.match(/\/([^/]+)\.js$/);
     if (!match) return null;
     return `_tone_${match[1]}`;
   }

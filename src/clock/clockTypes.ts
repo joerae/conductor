@@ -31,6 +31,8 @@ export type ClockState = {
   nextBeatAudioTime: number;
   /** Phase correction accumulated since last tap, in milliseconds. */
   phaseErrorMs: number;
+  /** Phase correction applied to alignment, in seconds. */
+  phaseCorrectionSec?: number;
   /**
    * Confidence in the current estimate [0, 1].
    * Falls after missed beats, rises with consistent tapping.

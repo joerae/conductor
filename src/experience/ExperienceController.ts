@@ -30,7 +30,6 @@ export type ExperienceState =
   | "ready"
   | "preparing"
   | "playing"
-  | "coasting"
   | "paused";
 
 interface UICallbacks {
@@ -51,6 +50,7 @@ export class ExperienceController {
 
   private uiCallbacks: UICallbacks;
   private prepTapCount: number = 0;
+  private pausedBeat: number = 0;
 
   constructor(callbacks: UICallbacks) {
     this.uiCallbacks = callbacks;
@@ -80,11 +80,16 @@ export class ExperienceController {
   async load(): Promise<void> {
     this.setState("loading");
     try {
-      // Load MIDI score
-      await this.midiScore.load("/midi/Eine-Kleine-Nachtmusik1.mid");
+      // Load MIDI score and instrument samples in parallel during loading screen
+      await Promise.all([
+        this.midiScore.load("/midi/Eine-Kleine-Nachtmusik1.mid"),
+        this.audioEngine.loadSamples().catch(err =>
+          console.warn("Conductor: sample loading failed, using fallback click", err)
+        ),
+      ]);
       this.transport.setEvents(this.midiScore.getEvents());
 
-      // Wire input → clock (doesn't need audio yet)
+      // Wire input → clock
       this.input.onBeat(obs => this.handleBeatObservation(obs));
       this.input.start();
 
@@ -100,7 +105,9 @@ export class ExperienceController {
     this.scheduler.reset();
     this.transport.stop();
     this.clock.reset();
+    this.audioEngine.stopAllNotes();
     this.prepTapCount = 0;
+    this.pausedBeat = 0;
     this.setState("ready");
   }
 
@@ -111,25 +118,20 @@ export class ExperienceController {
     source: "keyboard" | "camera";
     confidence: number;
   }): Promise<void> {
-    // First tap ever: resume the AudioContext (requires user gesture)
-    if (this.prepTapCount === 0) {
-      await this.audioEngine.resume();
-      // Load samples in the background (Phase 1 audio)
-      this.audioEngine.loadSamples().catch(err =>
-        console.warn("Conductor: sample loading failed, using fallback click", err)
-      );
-    }
+    // Resume AudioContext on first tap if suspended (requires user gesture)
+    await this.audioEngine.resume();
 
     this.prepTapCount++;
 
+    // First tap from ready or paused: enter preparing state
     if (this.state === "ready" || this.state === "paused") {
       this.setState("preparing");
     }
 
-    // Feed to clock
+    // Feed observation to clock
     this.clock.acceptObservation(obs);
 
-    // After second tap: the clock has a period, start playing
+    // After second tap: clock has calibrated period, start/resume playback
     if (this.prepTapCount === 2 && this.state === "preparing") {
       this.startPlayback();
     }
@@ -142,8 +144,9 @@ export class ExperienceController {
     const periodSec = clockState.periodMs / 1000;
     const nextBeatAudioTime = this.clock.predictNextBeatAudioTime();
 
-    // Anchor score beat 0 at the predicted first downbeat
-    this.transport.start(0, nextBeatAudioTime, periodSec);
+    // Start or resume from pausedBeat
+    const startBeat = this.pausedBeat;
+    this.transport.start(startBeat, nextBeatAudioTime, periodSec);
     this.scheduler.start();
     this.setState("playing");
 
@@ -163,11 +166,12 @@ export class ExperienceController {
     switch (event.type) {
       case "beat": {
         const s = event.state;
-        // Update transport with new period on each beat
-        if (this.state === "playing" || this.state === "coasting") {
+        // Update transport period & phase on every accepted tap while playing
+        if (this.state === "playing") {
           this.transport.updatePeriod(
             this.audioEngine.getAudioTime(),
-            s.periodMs / 1000
+            s.periodMs / 1000,
+            s.phaseCorrectionSec ?? 0
           );
         }
         this.debug.updateClock(s);
@@ -180,16 +184,15 @@ export class ExperienceController {
       case "rejected":
         this.debug.updateTapRejected(event.reason);
         break;
-      case "coasting":
-        this.setState("coasting");
-        break;
-      case "paused":
-        this.setState("paused");
+      case "stopped":
+        // Orchestra pauses: record current beat position to resume seamlessly on next taps
+        this.pausedBeat = this.transport.getCursorBeat();
         this.scheduler.stop();
-        break;
-      case "resumed":
-        this.setState("playing");
-        this.scheduler.start();
+        this.scheduler.reset();
+        this.transport.stop();
+        this.audioEngine.stopAllNotes();
+        this.prepTapCount = 0;
+        this.setState("paused");
         break;
     }
   }
@@ -203,6 +206,14 @@ export class ExperienceController {
 
   getState(): ExperienceState {
     return this.state;
+  }
+
+  getCursorBeat(): number {
+    return this.transport.getCursorBeat();
+  }
+
+  getPausedBeat(): number {
+    return this.pausedBeat;
   }
 
   getMidiMetadata() {

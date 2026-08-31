@@ -111,18 +111,15 @@ export class Scheduler {
 
   private commitEvent(event: ScoreEvent, audioTime: number): void {
     if (event.type === "noteOn") {
+      const periodSec = this.transport.getPeriodSec();
+      const durationSec = Math.max(0.05, (event.durationBeats || 0.5) * periodSec);
       this.audioEngine.scheduleNoteOn(
         event.midiNote,
         event.velocity,
         event.channel,
         event.program,
-        audioTime
-      );
-    } else {
-      this.audioEngine.scheduleNoteOff(
-        event.midiNote,
-        event.channel,
-        audioTime
+        audioTime,
+        durationSec
       );
     }
   }

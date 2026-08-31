@@ -71,17 +71,18 @@ export class ScoreTransport {
   /**
    * Update the beat period when the conductor changes tempo.
    * Also re-anchors the origin to the current cursor position and audio time,
-   * so that future beat→time conversions use the new period without a jump.
+   * applying any phase correction to align the score grid with the conductor's pulse.
    *
-   * @param currentAudioTime  AudioContext.currentTime at the moment of update.
-   * @param newPeriodSec      New period from ConductorClock.
+   * @param currentAudioTime    AudioContext.currentTime at the moment of update.
+   * @param newPeriodSec        New period from ConductorClock.
+   * @param phaseCorrectionSec  Phase adjustment in seconds (optional).
    */
-  updatePeriod(currentAudioTime: number, newPeriodSec: number): void {
-    // Re-anchor: the cursor beat at this audio time becomes the new origin.
-    this.originBeat = this.beatAtAudioTime(currentAudioTime);
-    this.originAudioTime = currentAudioTime;
+  updatePeriod(currentAudioTime: number, newPeriodSec: number, phaseCorrectionSec: number = 0): void {
+    const currentBeat = this.beatAtAudioTime(currentAudioTime);
+    this.originBeat = currentBeat;
+    this.originAudioTime = currentAudioTime + phaseCorrectionSec;
     this.periodSec = newPeriodSec;
-    this.cursorBeat = this.originBeat;
+    this.cursorBeat = currentBeat;
   }
 
   /**

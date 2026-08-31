@@ -13,6 +13,8 @@ export type ScoreEvent = {
   /** Beat position within the score (float, 0-based). */
   beat: number;
   type: "noteOn" | "noteOff";
+  /** Note duration in beats (quarter notes), for noteOn events. 0 for noteOff. */
+  durationBeats: number;
   /** Identifies the MIDI track this note belongs to (for instrument mapping). */
   trackId: string;
   /** Unique string per note instance, used to pair noteOn with its noteOff. */

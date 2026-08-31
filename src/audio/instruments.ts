@@ -55,45 +55,36 @@ export function programName(program: number): string {
 /**
  * Maps a MIDI program number to a WebAudioFont variable name.
  * Falls back to String Ensemble 1 for unknown orchestral programs.
+ * Variable names follow the pattern: _tone_PPPP_FluidR3_GM_sf2_file
+ * where PPPP = program number × 10, zero-padded to 4 digits.
  */
 export function programToWebAudioFontVar(program: number, channel: number): string {
   if (channel === 9) return "_drum_0_SoundFont_sf2_file";
-  const map: Record<number, string> = {
-    0:  "_tone_0000_SoundFont_sf2_file",
-    1:  "_tone_0010_SoundFont_sf2_file",
-    40: "_tone_0400_SoundFont_sf2_file",
-    41: "_tone_0410_SoundFont_sf2_file",
-    42: "_tone_0420_SoundFont_sf2_file",
-    43: "_tone_0430_SoundFont_sf2_file",
-    44: "_tone_0440_SoundFont_sf2_file",
-    48: "_tone_0480_SoundFont_sf2_file",
-    49: "_tone_0490_SoundFont_sf2_file",
-    56: "_tone_0560_SoundFont_sf2_file",
-    57: "_tone_0570_SoundFont_sf2_file",
-    60: "_tone_0600_SoundFont_sf2_file",
-    68: "_tone_0680_SoundFont_sf2_file",
-    71: "_tone_0710_SoundFont_sf2_file",
-    73: "_tone_0730_SoundFont_sf2_file",
-  };
-  // Default: String Ensemble 1
-  return map[program] ?? "_tone_0480_SoundFont_sf2_file";
+  // Zero-pad program*10 to 4 digits
+  const code = String(program * 10).padStart(4, "0");
+  return `_tone_${code}_FluidR3_GM_sf2_file`;
 }
 
 /**
  * All WebAudioFont CDN script URLs needed for Eine Kleine.
- * These define sample banks on window when loaded as <script> tags.
+ * Using FluidR3_GM — a complete 128-program GM SoundFont bank.
+ * Variable names: _tone_PPPP_FluidR3_GM_sf2_file
  */
 export const WEBAUDIOFONT_SCRIPTS: string[] = [
-  "https://surikov.github.io/webaudiofontdata/sound/0000_SoundFont_sf2_file.js",   // Piano
-  "https://surikov.github.io/webaudiofontdata/sound/0400_SoundFont_sf2_file.js",   // Violin
-  "https://surikov.github.io/webaudiofontdata/sound/0410_SoundFont_sf2_file.js",   // Viola
-  "https://surikov.github.io/webaudiofontdata/sound/0420_SoundFont_sf2_file.js",   // Cello
-  "https://surikov.github.io/webaudiofontdata/sound/0430_SoundFont_sf2_file.js",   // Contrabass
-  "https://surikov.github.io/webaudiofontdata/sound/0480_SoundFont_sf2_file.js",   // String Ensemble 1
-  "https://surikov.github.io/webaudiofontdata/sound/0490_SoundFont_sf2_file.js",   // String Ensemble 2
-  "https://surikov.github.io/webaudiofontdata/sound/0560_SoundFont_sf2_file.js",   // Trumpet
-  "https://surikov.github.io/webaudiofontdata/sound/0600_SoundFont_sf2_file.js",   // French Horn
-  "https://surikov.github.io/webaudiofontdata/sound/0680_SoundFont_sf2_file.js",   // Oboe
-  "https://surikov.github.io/webaudiofontdata/sound/0710_SoundFont_sf2_file.js",   // Clarinet
-  "https://surikov.github.io/webaudiofontdata/sound/0730_SoundFont_sf2_file.js",   // Flute
+  // Piano (fallback for unmapped channels)
+  "https://surikov.github.io/webaudiofontdata/sound/0000_FluidR3_GM_sf2_file.js",
+  // Strings
+  "https://surikov.github.io/webaudiofontdata/sound/0400_FluidR3_GM_sf2_file.js",   // Violin   (prog 40)
+  "https://surikov.github.io/webaudiofontdata/sound/0410_FluidR3_GM_sf2_file.js",   // Viola    (prog 41)
+  "https://surikov.github.io/webaudiofontdata/sound/0420_FluidR3_GM_sf2_file.js",   // Cello    (prog 42)
+  "https://surikov.github.io/webaudiofontdata/sound/0430_FluidR3_GM_sf2_file.js",   // Contrabass (prog 43)
+  "https://surikov.github.io/webaudiofontdata/sound/0480_FluidR3_GM_sf2_file.js",   // String Ensemble 1 (prog 48)
+  "https://surikov.github.io/webaudiofontdata/sound/0490_FluidR3_GM_sf2_file.js",   // String Ensemble 2 (prog 49)
+  // Winds
+  "https://surikov.github.io/webaudiofontdata/sound/0680_FluidR3_GM_sf2_file.js",   // Oboe     (prog 68)
+  "https://surikov.github.io/webaudiofontdata/sound/0710_FluidR3_GM_sf2_file.js",   // Clarinet (prog 71)
+  "https://surikov.github.io/webaudiofontdata/sound/0730_FluidR3_GM_sf2_file.js",   // Flute    (prog 73)
+  // Brass
+  "https://surikov.github.io/webaudiofontdata/sound/0560_FluidR3_GM_sf2_file.js",   // Trumpet  (prog 56)
+  "https://surikov.github.io/webaudiofontdata/sound/0600_FluidR3_GM_sf2_file.js",   // French Horn (prog 60)
 ];

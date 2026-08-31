@@ -69,10 +69,27 @@
       </div>
 
       <!-- Restart button (shown during playing / paused) -->
-      <button id="restart-btn" style="display:none" aria-label="Restart piece">↺ Restart</button>
+      <button id="restart-btn" style="display:none" aria-label="Restart piece">↺ Restart from Top</button>
 
-      <!-- Debug hint -->
-      <p id="debug-hint" class="debug-hint">Press D for debug overlay</p>
+      <!-- Footer controls -->
+      <footer id="stage-footer">
+        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.1.1</button>
+        <span class="footer-divider">•</span>
+        <span id="debug-hint" class="debug-hint">Press D for debug overlay</span>
+      </footer>
+    </div>
+
+    <!-- Version & Updates Modal -->
+    <div id="version-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="version-title">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2 id="version-title">Conductor Version History</h2>
+          <button id="close-modal-btn" class="close-btn" aria-label="Close modal">✕</button>
+        </div>
+        <div id="modal-content" class="modal-body">
+          <!-- Populated from version.json -->
+        </div>
+      </div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>
