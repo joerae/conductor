@@ -17,11 +17,13 @@ import type {
   CameraConfig,
   CameraState,
   CameraTelemetry,
+  DynamicsObservation,
   HandSample,
 } from "./cameraTypes";
 import { CameraController } from "./CameraController";
 import { HandTracker } from "./HandTracker";
 import { CameraPreviewOverlay } from "./CameraPreviewOverlay";
+import { DynamicsEstimator } from "./DynamicsEstimator";
 
 export interface CameraBeatInputOptions {
   config?: Partial<CameraConfig>;
@@ -29,17 +31,20 @@ export interface CameraBeatInputOptions {
   onStateChange?: (state: CameraState, error?: string) => void;
   onTelemetry?: (telemetry: CameraTelemetry) => void;
   onSamples?: (samples: HandSample[]) => void;
+  onDynamics?: (dynamics: DynamicsObservation) => void;
 }
 
 export class CameraBeatInputProvider implements BeatInputProvider {
   private cameraController: CameraController;
   private handTracker: HandTracker;
+  private dynamicsEstimator: DynamicsEstimator;
   private previewOverlay: CameraPreviewOverlay | null = null;
 
   private callbacks: Array<(beat: BeatObservation) => void> = [];
   private stateChangeCallbacks: Set<(state: CameraState, error?: string) => void> = new Set();
   private telemetryCallbacks: Set<(telemetry: CameraTelemetry) => void> = new Set();
   private sampleCallbacks: Set<(samples: HandSample[]) => void> = new Set();
+  private dynamicsCallbacks: Set<(dynamics: DynamicsObservation) => void> = new Set();
 
   private isStarted = false;
   private currentTelemetry: CameraTelemetry = {
@@ -57,6 +62,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     });
 
     this.handTracker = new HandTracker(options?.config);
+    this.dynamicsEstimator = new DynamicsEstimator();
 
     if (options?.mountOverlay !== false && typeof document !== "undefined") {
       this.previewOverlay = new CameraPreviewOverlay({
@@ -68,13 +74,21 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     if (options?.onStateChange) this.onStateChange(options.onStateChange);
     if (options?.onTelemetry) this.onTelemetry(options.onTelemetry);
     if (options?.onSamples) this.onSamples(options.onSamples);
+    if (options?.onDynamics) this.onDynamics(options.onDynamics);
 
-    // Wire tracker frame output to preview overlay & sample callbacks
+    // Wire tracker frame output to dynamics estimator, preview overlay & callbacks
     this.handTracker.onFrame((samples, telemetry) => {
-      this.currentTelemetry = telemetry;
-      this.previewOverlay?.render(samples, telemetry);
-      this.telemetryCallbacks.forEach(cb => cb(telemetry));
+      const dynamicsObs = this.dynamicsEstimator.update(samples, performance.now());
+      const fullTelemetry: CameraTelemetry = {
+        ...telemetry,
+        dynamics: dynamicsObs,
+      };
+
+      this.currentTelemetry = fullTelemetry;
+      this.previewOverlay?.render(samples, fullTelemetry);
+      this.telemetryCallbacks.forEach(cb => cb(fullTelemetry));
       this.sampleCallbacks.forEach(cb => cb(samples));
+      this.dynamicsCallbacks.forEach(cb => cb(dynamicsObs));
     });
 
     this.handTracker.onStateChange((state, error) => {
@@ -102,6 +116,11 @@ export class CameraBeatInputProvider implements BeatInputProvider {
   onSamples(callback: (samples: HandSample[]) => void): () => void {
     this.sampleCallbacks.add(callback);
     return () => this.sampleCallbacks.delete(callback);
+  }
+
+  onDynamics(callback: (dynamics: DynamicsObservation) => void): () => void {
+    this.dynamicsCallbacks.add(callback);
+    return () => this.dynamicsCallbacks.delete(callback);
   }
 
   getState(): CameraState {

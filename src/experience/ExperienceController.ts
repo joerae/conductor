@@ -19,7 +19,6 @@
 
 import { ConductorClock } from "../clock/ConductorClock";
 import type { ClockEvent, TempoMode } from "../clock/ConductorClock";
-import type { BeatInputProvider } from "../input/BeatInputProvider";
 import { KeyboardBeatInput } from "../input/KeyboardBeatInput";
 import { CameraBeatInputProvider } from "../camera/CameraBeatInputProvider";
 import { AudioEngine } from "../audio/AudioEngine";
@@ -79,8 +78,6 @@ export class ExperienceController {
   private inputSource: InputSource = "keyboard";
   private keyboardInput: KeyboardBeatInput;
   private cameraInput: CameraBeatInputProvider | null = null;
-  private currentInputProvider: BeatInputProvider;
-  private inputUnsubscribe: (() => void) | null = null;
   private midiScore: MidiScore;
   private transport: ScoreTransport;
   private scheduler: Scheduler;
@@ -121,7 +118,6 @@ export class ExperienceController {
     });
 
     this.keyboardInput = new KeyboardBeatInput();
-    this.currentInputProvider = this.keyboardInput;
     this.midiScore = new MidiScore();
     this.transport = new ScoreTransport();
     this.scheduler = new Scheduler(
@@ -186,7 +182,12 @@ export class ExperienceController {
       this.transport.setBeatsPerTap(piece.beatsPerTap || 1);
 
       // Wire active input provider → clock
-      this.attachInputProvider(this.inputSource === "camera" && this.cameraInput ? this.cameraInput : this.keyboardInput);
+      this.keyboardInput.onBeat(obs => this.handleBeatObservation(obs));
+      this.keyboardInput.start();
+
+      if (this.inputSource === "camera" && this.cameraInput) {
+        this.cameraInput.start();
+      }
 
       this.prepTapCount = 0;
       this.pausedBeat = 0;
@@ -197,29 +198,28 @@ export class ExperienceController {
     }
   }
 
-  private attachInputProvider(provider: BeatInputProvider): void {
-    if (this.inputUnsubscribe) {
-      this.inputUnsubscribe();
-      this.inputUnsubscribe = null;
-    }
-    this.currentInputProvider.stop();
-    this.currentInputProvider = provider;
-    this.inputUnsubscribe = this.currentInputProvider.onBeat(obs => this.handleBeatObservation(obs));
-    this.currentInputProvider.start();
-  }
-
   async setInputSource(source: InputSource): Promise<void> {
     if (source === this.inputSource) return;
 
     if (source === "camera") {
       if (!this.cameraInput) {
         this.cameraInput = new CameraBeatInputProvider();
+        // Wire camera dynamics directly into existing orchestral dynamic ladder & AudioEngine
+        this.cameraInput.onDynamics(dyn => {
+          if (this.inputSource === "camera") {
+            this.setDynamicLevel(dyn.level);
+          }
+        });
+        // Wire camera beat observations into clock (for Phase C1+)
+        this.cameraInput.onBeat(obs => this.handleBeatObservation(obs));
       }
       this.inputSource = "camera";
-      this.attachInputProvider(this.cameraInput);
+      await this.cameraInput.start();
     } else {
       this.inputSource = "keyboard";
-      this.attachInputProvider(this.keyboardInput);
+      if (this.cameraInput) {
+        this.cameraInput.stop();
+      }
     }
 
     this.uiCallbacks.onInputSourceChange?.(this.inputSource);

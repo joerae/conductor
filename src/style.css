@@ -1074,13 +1074,14 @@ body.debug-mode-active .section-debug-hud {
 /* ── Floating Conductor Camera Preview Overlay ───────────────────────────── */
 .camera-preview-overlay {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 320px;
-  background: rgba(10, 14, 22, 0.90);
+  top: 20px;
+  left: 20px;
+  width: 640px;
+  max-width: min(640px, 48vw);
+  background: rgba(10, 14, 22, 0.92);
   border: 1px solid rgba(255, 213, 107, 0.35);
   border-radius: 14px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 24px rgba(255, 213, 107, 0.12);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85), 0 0 28px rgba(255, 213, 107, 0.15);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   z-index: 90;

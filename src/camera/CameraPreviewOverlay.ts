@@ -70,7 +70,7 @@ export class CameraPreviewOverlay {
           <div class="telemetry-item"><span class="label">FPS:</span> <span id="tel-fps" class="val">—</span></div>
           <div class="telemetry-item"><span class="label">Inference:</span> <span id="tel-inf" class="val">—</span></div>
           <div class="telemetry-item"><span class="label">Hands:</span> <span id="tel-hands" class="val">0</span></div>
-          <div class="telemetry-item"><span class="label">Latency:</span> <span id="tel-lat" class="val">—</span></div>
+          <div class="telemetry-item"><span class="label">Dynamics:</span> <span id="tel-dyn" class="val">mf</span></div>
         </div>
       </div>
     `;
@@ -130,10 +130,10 @@ export class CameraPreviewOverlay {
         if (placeholderText) placeholderText.textContent = "Allow camera in browser prompt…";
         break;
       case "loading_model":
-        this.statusBadgeEl.textContent = "Loading AI model…";
+        this.statusBadgeEl.textContent = "loading magic finger detecting coolness!";
         this.statusBadgeEl.classList.add("badge-info");
         if (placeholder) placeholder.style.display = "flex";
-        if (placeholderText) placeholderText.textContent = "Loading MediaPipe HandLandmarker…";
+        if (placeholderText) placeholderText.textContent = "loading magic finger detecting coolness!";
         break;
       case "tracking":
         this.statusBadgeEl.textContent = "Live Tracking";
@@ -256,12 +256,18 @@ export class CameraPreviewOverlay {
     const fpsEl = this.telemetryEl.querySelector("#tel-fps");
     const infEl = this.telemetryEl.querySelector("#tel-inf");
     const handsEl = this.telemetryEl.querySelector("#tel-hands");
-    const latEl = this.telemetryEl.querySelector("#tel-lat");
+    const dynEl = this.telemetryEl.querySelector("#tel-dyn");
 
     if (fpsEl) fpsEl.textContent = `${telemetry.cameraFps}`;
     if (infEl) infEl.textContent = `${telemetry.inferenceFps} fps`;
     if (handsEl) handsEl.textContent = `${telemetry.handsDetected}`;
-    if (latEl) latEl.textContent = `${telemetry.inferenceDurationMs}ms`;
+    if (dynEl) {
+      if (telemetry.dynamics) {
+        dynEl.textContent = `${telemetry.dynamics.level.toUpperCase()} (${Math.round(telemetry.dynamics.value * 100)}%)`;
+      } else {
+        dynEl.textContent = "—";
+      }
+    }
   }
 
   unmount(): void {

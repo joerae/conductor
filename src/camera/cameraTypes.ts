@@ -1,7 +1,4 @@
-/**
- * cameraTypes.ts
- * Type definitions for the Conductor camera and local hand tracking subsystem.
- */
+import type { DynamicLevel } from "../audio/dynamicsTypes";
 
 export interface NormalizedPoint {
   /** Normalized X coordinate [0, 1] (0 = left, 1 = right in image space). */
@@ -46,6 +43,19 @@ export interface HandSample {
   conductorPoint: ConductorPoint;
 }
 
+export interface DynamicsObservation {
+  timestampMs: number;
+  /** Normalized continuous dynamic value [0, 1] (0 = quietest pp, 1 = loudest fff). */
+  value: number;
+  /** Smoothed conductor-space Y height [0, 1]. */
+  smoothedY: number;
+  /** Corresponding discrete orchestral dynamic level. */
+  level: DynamicLevel;
+  /** Number of hands currently contributing to dynamics (0, 1, or 2). */
+  handCount: number;
+  confidence: number;
+}
+
 export type CameraState =
   | "idle"
   | "requesting_permission"
@@ -67,6 +77,7 @@ export interface CameraTelemetry {
   inferenceDurationMs: number;
   handsDetected: number;
   handDetails: HandTelemetryDetail[];
+  dynamics?: DynamicsObservation;
   errorMessage?: string;
 }
 
