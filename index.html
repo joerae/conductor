@@ -93,6 +93,20 @@
         <p id="piece-subtitle">W.A. Mozart</p>
       </div>
 
+      <!-- A/B Tempo Mode Switcher -->
+      <div id="tempo-mode-selector" class="mode-selector-container">
+        <span class="mode-label">A/B Testing:</span>
+        <div class="mode-pill-group">
+          <button id="mode-btn-a" class="mode-pill active" data-mode="balanced" title="Mode A: Balanced PLL smoothing (inertia over ~3 beats)">
+            Mode A: Balanced
+          </button>
+          <button id="mode-btn-b" class="mode-pill" data-mode="instant" title="Mode B: Super-responsive on a dime (follows last 2 gaps)">
+            Mode B: Instant (Dime)
+          </button>
+        </div>
+        <span class="mode-shortcut-hint">Press <strong>T</strong> to toggle</span>
+      </div>
+
       <!-- Prompt -->
       <div id="prompt-area">
         <p id="prompt">Tap SPACE twice to set the pulse.</p>

@@ -16,4 +16,18 @@ describe("Inspect MIDI File", () => {
     });
     expect(midi.tracks.length).toBeGreaterThan(0);
   });
+
+  it("inspects Beethoven Symphony 5", () => {
+    const filePath = path.resolve(__dirname, "../public/midi/5th-Symphony-Part-1.mid");
+    const buffer = fs.readFileSync(filePath);
+    const midi = new Midi(buffer);
+    console.log("--- Beethoven 5th ---");
+    console.log("MIDI Name:", midi.header.name);
+    console.log("PPQ:", midi.header.ppq);
+    console.log("Number of tracks:", midi.tracks.length);
+    midi.tracks.forEach((t, i) => {
+      console.log(`Track ${i}: name="${t.name}", channel=${t.channel}, instrument="${t.instrument.name}" (${t.instrument.number}), noteCount=${t.notes.length}`);
+    });
+    expect(midi.tracks.length).toBeGreaterThan(0);
+  });
 });

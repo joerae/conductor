@@ -256,4 +256,50 @@ describe("ConductorClock — Phase 0 acceptance tests", () => {
     const state = clock.getState();
     expect(state.acceptedBeatCount).toBe(0);
   });
+
+  describe("A/B Tempo Modes comparison", () => {
+    it("Mode B (Instant) adapts to a sudden 120 -> 60 BPM step change immediately on a dime", () => {
+      const { clock: clockA, setAudioTime: setTimeA } = makeClock();
+      clockA.setTempoMode("balanced");
+
+      const { clock: clockB, setAudioTime: setTimeB } = makeClock();
+      clockB.setTempoMode("instant");
+
+      // Establish 120 BPM (500ms period) with first 3 taps: 0, 500, 1000
+      feedTapsWithAudio(clockA, setTimeA, [0, 500, 1000]);
+      feedTapsWithAudio(clockB, setTimeB, [0, 500, 1000]);
+
+      // Sudden drastic step change: next tap arrives after 1000ms (60 BPM) at t=2000
+      const eventsA = feedTapsWithAudio(clockA, setTimeA, [2000]);
+      const eventsB = feedTapsWithAudio(clockB, setTimeB, [2000]);
+
+      const stateA = (eventsA[eventsA.length - 1] as any).state;
+      const stateB = (eventsB[eventsB.length - 1] as any).state;
+
+      // Mode A has smoothed inertia: period is blended ~675ms (~88 BPM)
+      expect(stateA.periodMs).toBeLessThan(800);
+      expect(stateA.bpm).toBeGreaterThan(75);
+
+      // Mode B is super-responsive on a dime: period jumps immediately to ~925-1000ms (~65 BPM)
+      expect(stateB.periodMs).toBeGreaterThan(850);
+      expect(stateB.bpm).toBeLessThan(70);
+    });
+
+    it("Mode B (Instant) responds to an immediate 60 -> 180 BPM jump", () => {
+      const { clock, setAudioTime } = makeClock();
+      clock.setTempoMode("instant");
+
+      // Start at 60 BPM (1000ms period)
+      feedTapsWithAudio(clock, setAudioTime, [0, 1000, 2000]);
+      expect(clock.getState().bpm).toBeCloseTo(60, 0);
+
+      // Instant jump to 180 BPM (333ms gap) at t=2333
+      feedTapsWithAudio(clock, setAudioTime, [2333]);
+      expect(clock.getState().bpm).toBeGreaterThan(135);
+
+      // Second fast tap at t=2666
+      feedTapsWithAudio(clock, setAudioTime, [2666]);
+      expect(clock.getState().bpm).toBeGreaterThan(165);
+    });
+  });
 });

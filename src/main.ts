@@ -119,6 +119,37 @@ const controller = new ExperienceController({
   },
 });
 
+// ── A/B Tempo Mode Controls ──────────────────────────────────────────────────
+
+const modeBtnA = document.getElementById("mode-btn-a") as HTMLButtonElement;
+const modeBtnB = document.getElementById("mode-btn-b") as HTMLButtonElement;
+
+function updateModeButtons(mode: "balanced" | "instant"): void {
+  if (mode === "balanced") {
+    modeBtnA?.classList.add("active");
+    modeBtnB?.classList.remove("active");
+  } else {
+    modeBtnA?.classList.remove("active");
+    modeBtnB?.classList.add("active");
+  }
+}
+
+function setMode(mode: "balanced" | "instant"): void {
+  controller.setTempoMode(mode);
+  updateModeButtons(mode);
+}
+
+modeBtnA?.addEventListener("click", () => setMode("balanced"));
+modeBtnB?.addEventListener("click", () => setMode("instant"));
+
+window.addEventListener("keydown", (e) => {
+  if (e.code === "KeyT" && !e.repeat && versionModal.style.display !== "flex") {
+    const current = controller.getTempoMode();
+    const next = current === "balanced" ? "instant" : "balanced";
+    setMode(next);
+  }
+});
+
 restartBtn.addEventListener("click", () => controller.restart());
 
 // ── Version Modal Handling ────────────────────────────────────────────────────

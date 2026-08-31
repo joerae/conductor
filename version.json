@@ -1,9 +1,21 @@
 {
-  "version": "0.1.2",
+  "version": "0.1.3",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.1.3",
+      "date": "2026-08-31",
+      "summary": "A/B Tempo Modes: Mode A (Balanced PLL) vs Mode B (Instant / On a Dime)",
+      "details": [
+        "Added Mode A (Balanced PLL): smoothed inertia over 3-4 beats, absorbing human finger jitter",
+        "Added Mode B (Instant / On a Dime): super-responsive direct 2-gap follower for instantaneous tempo jumps",
+        "Added interactive stage pill selector for live A/B switching during conducting",
+        "Added keyboard shortcut 'T' to toggle between Mode A and Mode B in real time",
+        "Updated DebugOverlay with active tempo mode indicator"
+      ]
+    },
     {
       "version": "0.1.2",
       "date": "2026-08-31",

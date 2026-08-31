@@ -59,6 +59,8 @@ const STOP_AFTER_PERIODS = 3.0;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+export type TempoMode = "balanced" | "instant";
+
 export type ClockEventType = "beat" | "rejected" | "stopped";
 
 export type ClockEvent =
@@ -77,6 +79,7 @@ export type ConductorClockConfig = {
   /** Optional overrides for tuning constants. */
   tempoGain?: number;
   phaseGain?: number;
+  initialMode?: TempoMode;
 };
 
 // ─── ConductorClock ──────────────────────────────────────────────────────────
@@ -85,10 +88,12 @@ export class ConductorClock {
   private readonly getAudioTime: () => number;
   private readonly tempoGain: number;
   private readonly phaseGain: number;
+  private mode: TempoMode = "balanced";
 
   // Internal state
   private periodMs: number = 500;          // Default 120 BPM until calibrated
   private lastAcceptedTapMs: number = -1;  // performance.now() timestamp of last accepted tap
+  private prevIntervalMs: number = 500;
   private nextBeatAudioTime: number = -1;  // Predicted AudioContext time of next beat (seconds)
   private acceptedBeatCount: number = 0;
   private phaseErrorMs: number = 0;
@@ -102,6 +107,16 @@ export class ConductorClock {
     this.getAudioTime = config.getAudioTime;
     this.tempoGain = config.tempoGain ?? TEMPO_GAIN;
     this.phaseGain = config.phaseGain ?? PHASE_GAIN;
+    this.mode = config.initialMode ?? "balanced";
+  }
+
+  /** Set the tempo following mode: 'balanced' (Mode A) or 'instant' (Mode B) */
+  setTempoMode(mode: TempoMode): void {
+    this.mode = mode;
+  }
+
+  getTempoMode(): TempoMode {
+    return this.mode;
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
@@ -142,33 +157,47 @@ export class ConductorClock {
     // Cancel the stop timer — a tap arrived in time.
     this.cancelStopTimer();
 
-    // Compute true phase error: compare current audio time to the previously predicted next beat
+    // Compute phase error: compare current audio time to the previously predicted next beat
     let phaseErrorMs = 0;
     if (this.nextBeatAudioTime > 0 && this.acceptedBeatCount >= 2) {
-      // Positive phaseError = player tapped later than predicted; Negative = tapped earlier
       phaseErrorMs = (audioNow - this.nextBeatAudioTime) * 1000;
-      // Clamp to ±50% period to prevent disruptive snapping on large tempo shifts
       const maxPhaseError = this.periodMs * 0.5;
       phaseErrorMs = Math.max(-maxPhaseError, Math.min(maxPhaseError, phaseErrorMs));
     }
 
-    // ── PLL update: blend period and correct phase
-    if (this.acceptedBeatCount === 1) {
-      // Second tap ever: establish the initial period directly
-      this.periodMs = intervalMs;
+    if (this.mode === "instant") {
+      // ── Mode B: Instant / On a Dime
+      // Follows the latest 2 intervals directly so tempo changes instantaneously
+      if (this.acceptedBeatCount === 1) {
+        this.periodMs = intervalMs;
+        this.prevIntervalMs = intervalMs;
+      } else {
+        // Fast responsive blend (85% latest gap + 15% previous gap)
+        this.periodMs = intervalMs * 0.85 + this.prevIntervalMs * 0.15;
+        this.prevIntervalMs = intervalMs;
+      }
+      // Instant phase synchronization
+      const phaseCorrectionMs = phaseErrorMs * 0.85;
+      this.phaseCorrectionSec = phaseCorrectionMs / 1000;
     } else {
-      this.periodMs = this.periodMs * (1 - this.tempoGain) + intervalMs * this.tempoGain;
+      // ── Mode A: Balanced PLL
+      // Blends tempo smoothly with momentum over 3-4 beats
+      if (this.acceptedBeatCount === 1) {
+        this.periodMs = intervalMs;
+        this.prevIntervalMs = intervalMs;
+      } else {
+        this.periodMs = this.periodMs * (1 - this.tempoGain) + intervalMs * this.tempoGain;
+      }
+      const phaseCorrectionMs = phaseErrorMs * this.phaseGain;
+      this.phaseCorrectionSec = phaseCorrectionMs / 1000;
     }
-
-    const phaseCorrectionMs = phaseErrorMs * this.phaseGain;
-    this.phaseCorrectionSec = phaseCorrectionMs / 1000;
 
     this.phaseErrorMs = phaseErrorMs;
     this.lastAcceptedTapMs = nowMs;
     this.acceptedBeatCount++;
     this.confidence = Math.min(1.0, this.confidence + 0.15);
 
-    // Predict next beat in AudioContext time: audioNow + period + phase correction
+    // Predict next beat in AudioContext time
     const periodSec = this.periodMs / 1000;
     this.nextBeatAudioTime = audioNow + periodSec + this.phaseCorrectionSec;
 

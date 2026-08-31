@@ -21,6 +21,7 @@
 import type { ClockState, TapRejectionReason } from "../clock/clockTypes";
 
 interface DebugSnapshot {
+  tempoMode: string;
   bpm: number;
   periodMs: number;
   nextBeatAudioTime: number;
@@ -39,6 +40,7 @@ export class DebugOverlay {
   private container: HTMLElement;
   private visible: boolean = false;
   private snapshot: DebugSnapshot = {
+    tempoMode: "A (Balanced PLL)",
     bpm: 0, periodMs: 500, nextBeatAudioTime: 0, phaseErrorMs: 0,
     confidence: 0, acceptedBeatCount: 0, lastTapStatus: "—",
     scoreBeat: 0, schedulerHorizon: 0, schedulerCommitted: 0,
@@ -60,6 +62,10 @@ export class DebugOverlay {
   }
 
   // ── Update methods (called by ExperienceController) ─────────────────────
+
+  updateTempoMode(mode: "balanced" | "instant"): void {
+    this.snapshot.tempoMode = mode === "balanced" ? "A (Balanced PLL)" : "B (Instant / Dime)";
+  }
 
   updateClock(state: ClockState): void {
     this.snapshot.bpm = state.bpm;
@@ -114,6 +120,7 @@ export class DebugOverlay {
     this.container.innerHTML = `
       <div class="debug-title">DEBUG (D to hide)</div>
       <table class="debug-table">
+        <tr><td>Mode</td><td style="color:#ffd56b">${s.tempoMode}</td></tr>
         <tr><td>BPM</td><td>${s.bpm.toFixed(1)}</td></tr>
         <tr><td>Period</td><td>${s.periodMs.toFixed(1)} ms</td></tr>
         <tr><td>Next beat (audio)</td><td>${s.nextBeatAudioTime.toFixed(3)} s</td></tr>

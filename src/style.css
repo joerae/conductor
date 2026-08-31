@@ -273,6 +273,75 @@ html, body {
   text-transform: uppercase;
 }
 
+/* ── A/B Tempo Mode Selector ──────────────────────────────────────────────── */
+.mode-selector-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 6px 14px;
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  margin-bottom: var(--spacing-xs);
+  transition: border-color var(--transition-fast);
+}
+
+.mode-selector-container:hover {
+  border-color: rgba(201, 168, 76, 0.3);
+}
+
+.mode-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.mode-pill-group {
+  display: flex;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.mode-pill {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: all var(--transition-fast);
+}
+
+.mode-pill:hover {
+  color: var(--text-primary);
+}
+
+.mode-pill.active {
+  background: var(--accent-gold);
+  color: #12151e;
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(201, 168, 76, 0.4);
+}
+
+.mode-shortcut-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.mode-shortcut-hint strong {
+  color: var(--accent-gold);
+}
+
 /* ── Prompt area ────────────────────────────────────────────────────────────── */
 #prompt-area {
   display: flex;

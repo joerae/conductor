@@ -17,13 +17,13 @@
  */
 
 import { ConductorClock } from "../clock/ConductorClock";
+import type { ClockEvent, TempoMode } from "../clock/ConductorClock";
 import { KeyboardBeatInput } from "../input/KeyboardBeatInput";
 import { AudioEngine } from "../audio/AudioEngine";
 import { MidiScore } from "../score/MidiScore";
 import { ScoreTransport } from "../score/ScoreTransport";
 import { Scheduler } from "../scheduler/Scheduler";
 import { DebugOverlay } from "../ui/DebugOverlay";
-import type { ClockEvent } from "../clock/ConductorClock";
 
 import type { NotePlaybackEvent } from "../scheduler/Scheduler";
 
@@ -233,6 +233,15 @@ export class ExperienceController {
 
   getState(): ExperienceState {
     return this.state;
+  }
+
+  setTempoMode(mode: TempoMode): void {
+    this.clock.setTempoMode(mode);
+    this.debug.updateTempoMode(mode);
+  }
+
+  getTempoMode(): TempoMode {
+    return this.clock.getTempoMode();
   }
 
   getCursorBeat(): number {
