@@ -404,11 +404,12 @@ export class AudioEngine {
       }
     }
 
-    // Proportional velocity scaling
+    // Proportional velocity scaling + macro-dynamics compression
     const effectiveVelocity = scaleVelocity(
       velocity,
       this.dynamicLevel,
-      this.dspBypassFlags.velocityScaling
+      this.dspBypassFlags.velocityScaling,
+      this.dspBypassFlags.scoreCompression
     );
 
     const rawVelRatio = Math.max(0.08, effectiveVelocity / 127);

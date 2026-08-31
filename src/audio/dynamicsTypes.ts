@@ -5,7 +5,7 @@
  * DSP acoustic parameters, and bypass flags for A/B testing in Conductor.
  */
 
-export type DynamicLevel = "pp" | "p" | "mp" | "mf" | "f" | "ff";
+export type DynamicLevel = "pp" | "p" | "mp" | "mf" | "f" | "ff" | "fff";
 
 export interface DynamicPreset {
   level: DynamicLevel;
@@ -25,6 +25,7 @@ export const DYNAMIC_ORDER: readonly DynamicLevel[] = [
   "mf",
   "f",
   "ff",
+  "fff",
 ] as const;
 
 export const DYNAMIC_PRESETS: Record<DynamicLevel, DynamicPreset> = {
@@ -32,29 +33,29 @@ export const DYNAMIC_PRESETS: Record<DynamicLevel, DynamicPreset> = {
     level: "pp",
     label: "Pianissimo",
     symbol: "pp",
-    velocityMultiplier: 0.50,
-    filterCutoffHz: 5500,
-    highShelfGainDb: -3.0,
-    reverbWet: 0.07,
-    attackTimeSec: 0.016,
+    velocityMultiplier: 0.30,
+    filterCutoffHz: 4000,
+    highShelfGainDb: -5.0,
+    reverbWet: 0.05,
+    attackTimeSec: 0.018,
   },
   p: {
     level: "p",
     label: "Piano",
     symbol: "p",
-    velocityMultiplier: 0.68,
-    filterCutoffHz: 7500,
-    highShelfGainDb: -2.0,
-    reverbWet: 0.09,
+    velocityMultiplier: 0.50,
+    filterCutoffHz: 6000,
+    highShelfGainDb: -3.0,
+    reverbWet: 0.08,
     attackTimeSec: 0.014,
   },
   mp: {
     level: "mp",
     label: "Mezzo-piano",
     symbol: "mp",
-    velocityMultiplier: 0.84,
-    filterCutoffHz: 10500,
-    highShelfGainDb: -1.0,
+    velocityMultiplier: 0.75,
+    filterCutoffHz: 9500,
+    highShelfGainDb: -1.2,
     reverbWet: 0.12,
     attackTimeSec: 0.011,
   },
@@ -72,7 +73,7 @@ export const DYNAMIC_PRESETS: Record<DynamicLevel, DynamicPreset> = {
     level: "f",
     label: "Forte",
     symbol: "f",
-    velocityMultiplier: 1.18,
+    velocityMultiplier: 1.20,
     filterCutoffHz: 17500,
     highShelfGainDb: 1.2,
     reverbWet: 0.24,
@@ -80,13 +81,23 @@ export const DYNAMIC_PRESETS: Record<DynamicLevel, DynamicPreset> = {
   },
   ff: {
     level: "ff",
-    label: "Fortissimo (Overburn)",
+    label: "Fortissimo",
     symbol: "ff",
-    velocityMultiplier: 1.36,
-    filterCutoffHz: 20000,
+    velocityMultiplier: 1.38,
+    filterCutoffHz: 19500,
     highShelfGainDb: 2.2,
-    reverbWet: 0.30,
+    reverbWet: 0.28,
     attackTimeSec: 0.003,
+  },
+  fff: {
+    level: "fff",
+    label: "Fortississimo (Overburn ⚡)",
+    symbol: "fff",
+    velocityMultiplier: 1.55,
+    filterCutoffHz: 20000,
+    highShelfGainDb: 3.5,
+    reverbWet: 0.34,
+    attackTimeSec: 0.002,
   },
 };
 
@@ -96,6 +107,7 @@ export interface DSPBypassFlags {
   reverbScaling: boolean;
   attackEnvelope: boolean;
   safetyLimiter: boolean;
+  scoreCompression: boolean;
 }
 
 export const DEFAULT_DSP_BYPASS_FLAGS: DSPBypassFlags = {
@@ -104,6 +116,7 @@ export const DEFAULT_DSP_BYPASS_FLAGS: DSPBypassFlags = {
   reverbScaling: true,
   attackEnvelope: true,
   safetyLimiter: true,
+  scoreCompression: true,
 };
 
 export interface DynamicsTelemetry {
@@ -117,19 +130,36 @@ export interface DynamicsTelemetry {
 }
 
 /**
+ * Baseline center velocity in GM score space (~72).
+ * Compressing baked-in score macro swings gives the conductor full dynamic authority
+ * while preserving natural phrasing, note-to-note expression, and lead vs accompaniment.
+ */
+const SCORE_VELOCITY_CENTER = 72;
+const SCORE_MACRO_RATIO = 0.45;
+
+/**
  * Proportionally scales a MIDI velocity (0–127) according to dynamic level.
- * Preserves melody vs accompaniment balance without clipping.
- * Always clamped between MIN_VELOCITY (18) and MAX_VELOCITY (127).
+ * Optionally compresses baked-in MIDI terraced macro dynamics so the conductor
+ * commands the ensemble volume without losing intra-measure phrasing.
  */
 export function scaleVelocity(
   rawVelocity: number,
   level: DynamicLevel,
-  enabled: boolean = true
+  enabled: boolean = true,
+  scoreCompression: boolean = true
 ): number {
   if (!enabled || rawVelocity <= 0) return rawVelocity;
+
+  // 1. Gentle score macro-dynamics compression
+  const baseVelocity = scoreCompression
+    ? SCORE_VELOCITY_CENTER + (rawVelocity - SCORE_VELOCITY_CENTER) * SCORE_MACRO_RATIO
+    : rawVelocity;
+
+  // 2. Conductor dynamic tier scaling
   const preset = DYNAMIC_PRESETS[level] || DYNAMIC_PRESETS.mf;
-  const scaled = Math.round(rawVelocity * preset.velocityMultiplier);
-  return Math.max(18, Math.min(127, scaled));
+  const scaled = Math.round(baseVelocity * preset.velocityMultiplier);
+
+  return Math.max(10, Math.min(127, scaled));
 }
 
 /**

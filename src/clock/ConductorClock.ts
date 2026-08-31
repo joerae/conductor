@@ -1,17 +1,10 @@
 /**
  * ConductorClock.ts
  *
- * PLL-inspired beat follower.
- *
- * Simplified model based on Phase 0/1 playtesting:
- *   - If a beat is not received within STOP_AFTER_PERIODS × period, the clock
- *     stops and emits "stopped". The orchestra should halt immediately.
- *   - No coasting or gradual fade — stop is binary.
- *   - Tempo gain is higher so deliberate accelerandos and ritardandos
- *     are followed within 2–3 beats, not 8–10.
- *   - BPM range is wider so fast conducting doesn't get rejected.
- *
- * ── Tuning constants (all documented with rationale) ────────────────────────
+ * PLL-inspired beat follower with three operating modes:
+ *   - Mode A (Balanced): Blends tempo with inertia over ~3-4 beats, absorbing finger jitter.
+ *   - Mode B (Instant / On a Dime): Super-responsive to deliberate tempo cuts and accelerandos.
+ *   - Mode C (Autoplay): Tap Space twice to set pulse, plays continuously at tempo without stopping.
  */
 
 import type { BeatObservation, ClockState, TapRejectionReason } from "./clockTypes";
@@ -20,46 +13,30 @@ import type { BeatObservation, ClockState, TapRejectionReason } from "./clockTyp
 
 /**
  * Blend factor for tempo updates. Higher = follows deliberate changes faster
- * but is more sensitive to jitter. 0.35 gives a smooth, natural response:
- * a deliberate change is followed within ~3-4 beats without twitching on jitter.
- * Range: 0–1. Design doc suggests 0.25–0.40.
+ * but is more sensitive to jitter. 0.35 gives a smooth, natural response.
  */
 const TEMPO_GAIN = 0.35;
 
 /**
  * Fraction of phase error applied to correct the predicted beat time and transport phase.
- * Snaps the clock into phase with the conductor's ictus.
- * Range: 0–1. Design doc suggests 0.30–0.50.
  */
 const PHASE_GAIN = 0.40;
 
-/**
- * Minimum accepted BPM. Below this = implausible conducting speed.
- */
+/** Minimum accepted BPM. */
 const BPM_MIN = 30;
 
-/**
- * Maximum accepted BPM. Above this = implausible conducting speed.
- */
+/** Maximum accepted BPM. */
 const BPM_MAX = 280;
 
-/**
- * Reject a tap if it arrives less than this many ms after the previous accepted tap.
- * Guards against accidental double-taps from keyboard bounce.
- */
+/** Guard against accidental keyboard bounce. */
 const DOUBLE_TAP_GUARD_MS = 80;
 
-/**
- * If no tap arrives within this many periods after the last accepted tap,
- * the clock emits "stopped" and resets itself.
- * 3.0 = 3 full beat periods of tolerance before the orchestra pauses.
- * E.g. at 120 BPM (500ms period) → pauses after 1500ms of silence.
- */
+/** Stop after this many silent beat periods in human conducting modes. */
 const STOP_AFTER_PERIODS = 3.0;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type TempoMode = "balanced" | "instant";
+export type TempoMode = "balanced" | "instant" | "autoplay";
 
 export type ClockEventType = "beat" | "rejected" | "stopped";
 
@@ -71,12 +48,7 @@ export type ClockEvent =
 type Listener = (event: ClockEvent) => void;
 
 export type ConductorClockConfig = {
-  /**
-   * Returns AudioContext.currentTime (seconds).
-   * Inject to keep ConductorClock audio-free in tests.
-   */
   getAudioTime: () => number;
-  /** Optional overrides for tuning constants. */
   tempoGain?: number;
   phaseGain?: number;
   initialMode?: TempoMode;
@@ -102,6 +74,7 @@ export class ConductorClock {
 
   private listeners: Listener[] = [];
   private stopTimer: ReturnType<typeof setTimeout> | null = null;
+  private autoplayTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(config: ConductorClockConfig) {
     this.getAudioTime = config.getAudioTime;
@@ -110,9 +83,20 @@ export class ConductorClock {
     this.mode = config.initialMode ?? "balanced";
   }
 
-  /** Set the tempo following mode: 'balanced' (Mode A) or 'instant' (Mode B) */
+  /** Set the tempo following mode: 'balanced', 'instant', or 'autoplay' */
   setTempoMode(mode: TempoMode): void {
+    const prevMode = this.mode;
     this.mode = mode;
+
+    if (this.isRunning()) {
+      if (mode === "autoplay" && prevMode !== "autoplay") {
+        this.cancelStopTimer();
+        this.startAutoplayLoop();
+      } else if (mode !== "autoplay" && prevMode === "autoplay") {
+        this.cancelAutoplayLoop();
+        this.scheduleStopTimer();
+      }
+    }
   }
 
   getTempoMode(): TempoMode {
@@ -133,13 +117,12 @@ export class ConductorClock {
       this.lastAcceptedTapMs = nowMs;
       this.acceptedBeatCount = 1;
       this.confidence = 0.1;
-      // No beat event yet — period is not yet established.
       return;
     }
 
     const intervalMs = nowMs - this.lastAcceptedTapMs;
 
-    // ── Reject: double-tap (keyboard bounce, accidental repeat)
+    // ── Reject: double-tap (keyboard bounce)
     if (intervalMs < DOUBLE_TAP_GUARD_MS) {
       this.emit({ type: "rejected", reason: "double_tap", timestampMs: nowMs });
       return;
@@ -150,10 +133,10 @@ export class ConductorClock {
     if (impliedBpm < BPM_MIN || impliedBpm > BPM_MAX) {
       if (impliedBpm < BPM_MIN) {
         // Conductor paused or took a long gap: treat this tap as a fresh preparatory tap (Tap 1)
-        // so subsequent taps establish the new tempo immediately rather than being permanently locked out!
         this.lastAcceptedTapMs = nowMs;
         this.acceptedBeatCount = 1;
         this.confidence = 0.1;
+        this.cancelAutoplayLoop();
       }
       this.emit({ type: "rejected", reason: "out_of_range", timestampMs: nowMs });
       return;
@@ -161,10 +144,9 @@ export class ConductorClock {
 
     // ── Accept ──────────────────────────────────────────────────────────────
 
-    // Cancel the stop timer — a tap arrived in time.
     this.cancelStopTimer();
 
-    // Compute phase error: compare current audio time to the previously predicted next beat
+    // Compute phase error: compare current audio time to previously predicted next beat
     let phaseErrorMs = 0;
     if (this.nextBeatAudioTime > 0 && this.acceptedBeatCount >= 2) {
       phaseErrorMs = (audioNow - this.nextBeatAudioTime) * 1000;
@@ -172,23 +154,25 @@ export class ConductorClock {
       phaseErrorMs = Math.max(-maxPhaseError, Math.min(maxPhaseError, phaseErrorMs));
     }
 
-    if (this.mode === "instant") {
+    if (this.mode === "autoplay") {
+      // ── Mode C: Autoplay
+      // Tap sets tempo immediately and restarts autoplay pulse loop at the new speed
+      this.periodMs = intervalMs;
+      this.prevIntervalMs = intervalMs;
+      this.phaseCorrectionSec = 0;
+    } else if (this.mode === "instant") {
       // ── Mode B: Instant / On a Dime
-      // Follows the latest 2 intervals directly so tempo changes instantaneously
       if (this.acceptedBeatCount === 1) {
         this.periodMs = intervalMs;
         this.prevIntervalMs = intervalMs;
       } else {
-        // Fast responsive blend (85% latest gap + 15% previous gap)
         this.periodMs = intervalMs * 0.85 + this.prevIntervalMs * 0.15;
         this.prevIntervalMs = intervalMs;
       }
-      // Instant phase synchronization
       const phaseCorrectionMs = phaseErrorMs * 0.85;
       this.phaseCorrectionSec = phaseCorrectionMs / 1000;
     } else {
       // ── Mode A: Balanced PLL
-      // Blends tempo smoothly with momentum over 3-4 beats
       if (this.acceptedBeatCount === 1) {
         this.periodMs = intervalMs;
         this.prevIntervalMs = intervalMs;
@@ -210,8 +194,11 @@ export class ConductorClock {
 
     this.emit({ type: "beat", state: this.getState(), beatNumber: this.acceptedBeatCount });
 
-    // Schedule stop timer
-    this.scheduleStopTimer();
+    if (this.mode === "autoplay") {
+      this.startAutoplayLoop();
+    } else {
+      this.scheduleStopTimer();
+    }
   }
 
   /** Current clock state snapshot. */
@@ -229,7 +216,6 @@ export class ConductorClock {
 
   /**
    * Predicted AudioContext time (seconds) of the next beat.
-   * Use this to anchor the score transport before the downbeat arrives.
    */
   predictNextBeatAudioTime(): number {
     return this.nextBeatAudioTime;
@@ -252,15 +238,15 @@ export class ConductorClock {
     };
   }
 
-  /** Reset the clock to its initial state (called automatically on stop). */
+  /** Reset the clock to its initial state. */
   reset(): void {
     this.cancelStopTimer();
+    this.cancelAutoplayLoop();
     this.lastAcceptedTapMs = -1;
     this.nextBeatAudioTime = -1;
     this.acceptedBeatCount = 0;
     this.phaseErrorMs = 0;
     this.confidence = 0;
-    // Note: we intentionally keep periodMs so a restart can use it as an initial guess.
   }
 
   // ── Private ─────────────────────────────────────────────────────────────────
@@ -270,12 +256,45 @@ export class ConductorClock {
   }
 
   /**
-   * Start a stop timer. If no tap arrives within STOP_AFTER_PERIODS × period,
-   * the clock resets and emits "stopped". The experience controller should
-   * halt the orchestra and return to the ready state.
+   * In Autoplay mode, generates continuous periodic beat events on every periodMs.
    */
+  private startAutoplayLoop(): void {
+    this.cancelAutoplayLoop();
+    if (this.mode !== "autoplay" || this.acceptedBeatCount < 2) return;
+
+    const scheduleNext = () => {
+      this.autoplayTimer = setTimeout(() => {
+        if (this.mode !== "autoplay" || this.acceptedBeatCount < 2) return;
+
+        const audioNow = this.getAudioTime();
+        const periodSec = this.periodMs / 1000;
+        this.nextBeatAudioTime = audioNow + periodSec;
+        this.acceptedBeatCount++;
+
+        this.emit({
+          type: "beat",
+          state: this.getState(),
+          beatNumber: this.acceptedBeatCount,
+        });
+
+        scheduleNext();
+      }, this.periodMs);
+    };
+
+    scheduleNext();
+  }
+
+  private cancelAutoplayLoop(): void {
+    if (this.autoplayTimer !== null) {
+      clearTimeout(this.autoplayTimer);
+      this.autoplayTimer = null;
+    }
+  }
+
   private scheduleStopTimer(): void {
     this.cancelStopTimer();
+    if (this.mode === "autoplay") return; // Autoplay never halts on silence
+
     this.stopTimer = setTimeout(() => {
       this.reset();
       this.emit({ type: "stopped" });

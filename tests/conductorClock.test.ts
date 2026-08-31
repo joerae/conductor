@@ -320,5 +320,23 @@ describe("ConductorClock — Phase 0 acceptance tests", () => {
         expect(lastBeat.state.periodMs).toBeCloseTo(500, 0);
       }
     });
+
+    it("Mode C: Autoplay runs continuously after 2 taps and updates tempo on new taps", () => {
+      const { clock, setAudioTime } = makeClock();
+      clock.setTempoMode("autoplay");
+      expect(clock.getTempoMode()).toBe("autoplay");
+
+      // First two taps establish period of 500ms (120 BPM)
+      feedTapsWithAudio(clock, setAudioTime, [0, 500]);
+      expect(clock.isRunning()).toBe(true);
+      expect(clock.getState().bpm).toBe(120);
+
+      // Third tap at 800 (gap of 300ms = 200 BPM) immediately updates autoplay tempo
+      feedTapsWithAudio(clock, setAudioTime, [800]);
+      expect(clock.getState().bpm).toBe(200);
+
+      clock.reset();
+      expect(clock.isRunning()).toBe(false);
+    });
   });
 });

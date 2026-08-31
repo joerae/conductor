@@ -208,11 +208,11 @@ export class ExperienceController {
       this.uiCallbacks.onDynamicChange(level);
     }
 
-    // If pushed to ff (overburn), schedule automatic decay back to f after 1.5s
-    if (level === "ff") {
+    // If pushed to fff (overburn ⚡), schedule automatic decay back to ff after 1.5s
+    if (level === "fff") {
       this.overburnTimer = setTimeout(() => {
-        if (this.audioEngine.getDynamicLevel() === "ff") {
-          this.setDynamicLevel("f");
+        if (this.audioEngine.getDynamicLevel() === "fff") {
+          this.setDynamicLevel("ff");
         }
       }, 1500);
     }

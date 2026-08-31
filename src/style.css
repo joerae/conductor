@@ -907,10 +907,17 @@ html, body {
 }
 
 /* ── Dynamic Ambient Stage Lighting ──────────────────────────────────────── */
+#stage.dynamic-fff {
+  background:
+    radial-gradient(ellipse 95% 75% at 50% 80%, rgba(255, 110, 40, 0.22) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(60, 20, 10, 0.95) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
 #stage.dynamic-ff {
   background:
-    radial-gradient(ellipse 90% 70% at 50% 80%, rgba(255, 140, 66, 0.16) 0%, transparent 70%),
-    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(45, 25, 15, 0.9) 0%, transparent 60%),
+    radial-gradient(ellipse 90% 70% at 50% 80%, rgba(255, 170, 60, 0.16) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(45, 28, 15, 0.9) 0%, transparent 60%),
     var(--bg-stage);
 }
 

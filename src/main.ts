@@ -5,6 +5,7 @@
 
 import { ExperienceController } from "./experience/ExperienceController";
 import type { ExperienceState } from "./experience/ExperienceController";
+import type { TempoMode } from "./clock/ConductorClock";
 import { loadRepertoireCatalog } from "./score/repertoire";
 import type { PieceDefinition } from "./score/repertoire";
 import type { DynamicLevel } from "./audio/dynamicsTypes";
@@ -203,28 +204,26 @@ const controller = new ExperienceController({
   },
 });
 
-// ── A/B Tempo Mode Controls ──────────────────────────────────────────────────
+// ── Time Input / Tempo Mode Controls ─────────────────────────────────────────
 
 const modeBtnA = document.getElementById("mode-btn-a") as HTMLButtonElement;
 const modeBtnB = document.getElementById("mode-btn-b") as HTMLButtonElement;
+const modeBtnC = document.getElementById("mode-btn-c") as HTMLButtonElement;
 
-function updateModeButtons(mode: "balanced" | "instant"): void {
-  if (mode === "balanced") {
-    modeBtnA?.classList.add("active");
-    modeBtnB?.classList.remove("active");
-  } else {
-    modeBtnA?.classList.remove("active");
-    modeBtnB?.classList.add("active");
-  }
+function updateModeButtons(mode: TempoMode): void {
+  modeBtnA?.classList.toggle("active", mode === "balanced");
+  modeBtnB?.classList.toggle("active", mode === "instant");
+  modeBtnC?.classList.toggle("active", mode === "autoplay");
 }
 
-function setMode(mode: "balanced" | "instant"): void {
+function setMode(mode: TempoMode): void {
   controller.setTempoMode(mode);
   updateModeButtons(mode);
 }
 
 modeBtnA?.addEventListener("click", () => setMode("balanced"));
 modeBtnB?.addEventListener("click", () => setMode("instant"));
+modeBtnC?.addEventListener("click", () => setMode("autoplay"));
 
 // ── Orchestral Dynamics & Vertical Dynamic Ladder ───────────────────────────
 
@@ -237,14 +236,14 @@ function updateDynamicLadderUI(level: DynamicLevel): void {
     btn.classList.toggle("active", isMatch);
   });
 
-  if (level === "ff") {
+  if (level === "fff") {
     dynamicLadderContainer?.classList.add("overburn");
   } else {
     dynamicLadderContainer?.classList.remove("overburn");
   }
 
   // Update stage ambient dynamic classes
-  const allLevels: DynamicLevel[] = ["pp", "p", "mp", "mf", "f", "ff"];
+  const allLevels: DynamicLevel[] = ["pp", "p", "mp", "mf", "f", "ff", "fff"];
   allLevels.forEach(d => stageEl.classList.remove(`dynamic-${d}`));
   stageEl.classList.add(`dynamic-${level}`);
 }
@@ -282,8 +281,9 @@ window.addEventListener("keydown", (e) => {
 
   if (e.code === "KeyT" && !e.repeat) {
     const current = controller.getTempoMode();
-    const next = current === "balanced" ? "instant" : "balanced";
-    setMode(next);
+    const modes: TempoMode[] = ["balanced", "instant", "autoplay"];
+    const nextIdx = (modes.indexOf(current) + 1) % modes.length;
+    setMode(modes[nextIdx]);
   } else if (e.code === "ArrowUp") {
     e.preventDefault();
     controller.stepDynamicLevel(1);

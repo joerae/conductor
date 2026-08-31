@@ -96,9 +96,12 @@
             <span class="dynamic-title">Dynamics</span>
           </div>
           <div class="dynamic-ladder" id="dynamic-ladder" role="group" aria-label="Orchestral dynamic levels">
-            <button class="dynamic-step" data-dynamic="ff" title="Fortissimo (Overburn ⚡)">
-              <span class="dynamic-symbol">ff</span>
+            <button class="dynamic-step" data-dynamic="fff" title="Fortississimo (Overburn ⚡)">
+              <span class="dynamic-symbol">fff</span>
               <span class="dynamic-sparkle">⚡</span>
+            </button>
+            <button class="dynamic-step" data-dynamic="ff" title="Fortissimo (Very Loud)">
+              <span class="dynamic-symbol">ff</span>
             </button>
             <button class="dynamic-step" data-dynamic="f" title="Forte (Loud)">
               <span class="dynamic-symbol">f</span>
@@ -133,18 +136,21 @@
         <p id="piece-subtitle">W.A. Mozart</p>
       </div>
 
-      <!-- A/B Tempo Mode Switcher -->
+      <!-- Time Input & Tempo Mode Switcher -->
       <div id="tempo-mode-selector" class="mode-selector-container">
-        <span class="mode-label">A/B Testing:</span>
+        <span class="mode-label">Time Input:</span>
         <div class="mode-pill-group">
           <button id="mode-btn-a" class="mode-pill active" data-mode="balanced" title="Mode A: Balanced PLL smoothing (inertia over ~3 beats)">
             Mode A: Balanced
           </button>
-          <button id="mode-btn-b" class="mode-pill" data-mode="instant" title="Mode B: Super-responsive on a dime (follows last 2 gaps)">
-            Mode B: Instant (Dime)
+          <button id="mode-btn-b" class="mode-pill" data-mode="instant" title="Mode B: Super-responsive on a dime (instant cuts & speedups)">
+            Mode B: Instant
+          </button>
+          <button id="mode-btn-c" class="mode-pill" data-mode="autoplay" title="Mode C: Autoplay (tap twice to set tempo, plays continuously at tempo)">
+            Mode C: Autoplay ⚡
           </button>
         </div>
-        <span class="mode-shortcut-hint">Press <strong>T</strong> to toggle</span>
+        <span class="mode-shortcut-hint">Press <strong>T</strong> to cycle</span>
       </div>
 
       <!-- Prompt -->
