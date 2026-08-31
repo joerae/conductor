@@ -302,12 +302,11 @@ export class AudioEngine {
       }
     }
 
-    // Expressive dynamic velocity curve with score dynamic range compression:
-    // Compresses raw MIDI velocity [0..127] into a tight musical baseline [0.65..0.85],
-    // allowing the conductor's master volume wheel to have commanding dynamic authority!
-    const rawVelRatio = Math.max(0.1, velocity / 127);
-    const compressedScoreVel = 0.70 + (rawVelRatio - 0.5) * 0.25;
-    const volume = Math.min(1.0, Math.max(0.1, compressedScoreVel));
+    // Natural expressive MIDI velocity dynamics (Phase 2):
+    // Preserves the score's authentic phrasing while master DynamicsCompressorNode
+    // smooths master acoustic peaks and lets the conductor's volume wheel shape overall level.
+    const rawVelRatio = Math.max(0.08, velocity / 127);
+    const volume = Math.min(1.0, Math.pow(rawVelRatio, 1.15) * 1.05);
 
     // Create dedicated GainNode for this voice connected to master bus
     const gainNode = ctx.createGain();

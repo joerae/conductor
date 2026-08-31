@@ -301,5 +301,24 @@ describe("ConductorClock — Phase 0 acceptance tests", () => {
       feedTapsWithAudio(clock, setAudioTime, [2666]);
       expect(clock.getState().bpm).toBeGreaterThan(165);
     });
+
+    it("recovers immediately after a long gap/pause without locking out future taps", () => {
+      const { clock, setAudioTime } = makeClock();
+      // Establish 120 BPM
+      feedTapsWithAudio(clock, setAudioTime, [0, 500, 1000]);
+      expect(clock.isRunning()).toBe(true);
+
+      // Long pause of 4000ms: tap at t=5000 is out of range (< 45 BPM)
+      const eventsGap = feedTapsWithAudio(clock, setAudioTime, [5000]);
+      expect(eventsGap.some(e => e.type === "rejected")).toBe(true);
+
+      // Subsequent tap at t=5500 (500ms later = 120 BPM) MUST be accepted immediately as a valid new beat
+      const eventsResume = feedTapsWithAudio(clock, setAudioTime, [5500]);
+      const lastBeat = eventsResume.find(e => e.type === "beat");
+      expect(lastBeat).toBeDefined();
+      if (lastBeat?.type === "beat") {
+        expect(lastBeat.state.periodMs).toBeCloseTo(500, 0);
+      }
+    });
   });
 });

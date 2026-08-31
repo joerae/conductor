@@ -5,6 +5,7 @@
 
 import { ExperienceController } from "./experience/ExperienceController";
 import type { ExperienceState } from "./experience/ExperienceController";
+import { loadRepertoireCatalog } from "./score/repertoire";
 import type { PieceDefinition } from "./score/repertoire";
 import "./style.css";
 
@@ -358,7 +359,7 @@ function renderRepertoireList(): void {
       <div class="piece-card ${isActive ? "active-piece" : ""}">
         <div class="piece-card-info">
           <div class="piece-card-title">${piece.title}</div>
-          <div class="piece-card-composer">${piece.composer} — ${piece.movement} (${piece.year})</div>
+          <div class="piece-card-composer">${piece.composer} — ${piece.movement} (${piece.year}) • <span style="color:#ffd56b">${piece.conductMode || "Standard"}</span></div>
           <div class="piece-card-desc">${piece.description}</div>
         </div>
         <button class="piece-select-btn" data-piece-id="${piece.id}">
@@ -389,7 +390,7 @@ async function switchPiece(pieceId: string): Promise<void> {
     await controller.loadPiece(pieceId);
     const piece = controller.getCurrentPiece();
     titleEl.textContent = piece.title;
-    subtitleEl.textContent = `${piece.composer} — ${piece.movement}`;
+    subtitleEl.textContent = `${piece.composer} — ${piece.movement} • ${piece.conductMode || ""}`;
     renderOrchestraStage(piece);
   } catch (err) {
     console.error("Failed to switch piece", err);
@@ -477,14 +478,16 @@ window.addEventListener("keydown", (e) => {
 
 loadVersionInfo();
 
-const initialPiece = controller.getCurrentPiece();
-titleEl.textContent = initialPiece.title;
-subtitleEl.textContent = `${initialPiece.composer} — ${initialPiece.movement}`;
-renderOrchestraStage(initialPiece);
+loadRepertoireCatalog().then(() => {
+  const initialPiece = controller.getCurrentPiece();
+  titleEl.textContent = initialPiece.title;
+  subtitleEl.textContent = `${initialPiece.composer} — ${initialPiece.movement} • ${initialPiece.conductMode || ""}`;
+  renderOrchestraStage(initialPiece);
 
-controller.load().then(() => {
-  loadingEl.style.display = "none";
-  stageEl.style.display = "flex";
-}).catch(err => {
-  loadingEl.innerHTML = `<p class="error">Failed to load: ${err.message}</p>`;
+  controller.load().then(() => {
+    loadingEl.style.display = "none";
+    stageEl.style.display = "flex";
+  }).catch(err => {
+    loadingEl.innerHTML = `<p class="error">Failed to load: ${err.message}</p>`;
+  });
 });

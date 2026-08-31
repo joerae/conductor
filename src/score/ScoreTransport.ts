@@ -37,8 +37,17 @@ export class ScoreTransport {
   private playing: boolean = false;
 
   private totalBeats: number = 0;
+  private beatsPerTap: number = 1;
 
   // ── Public API ──────────────────────────────────────────────────────────
+
+  setBeatsPerTap(multiplier: number): void {
+    this.beatsPerTap = Math.max(1, multiplier);
+  }
+
+  getBeatsPerTap(): number {
+    return this.beatsPerTap;
+  }
 
   /** Load score events from MidiScore. */
   setEvents(events: ScoreEvent[], totalBeats?: number): void {
@@ -65,14 +74,16 @@ export class ScoreTransport {
   /**
    * Start or re-anchor the transport.
    *
-   * @param startBeat   The beat in the score to start from (usually 0).
-   * @param audioTime   The AudioContext time corresponding to startBeat.
-   * @param periodSec   The current beat period from ConductorClock.
+   * @param startBeat     The beat in the score to start from (usually 0).
+   * @param audioTime     The AudioContext time corresponding to startBeat.
+   * @param periodSec     The current beat period from ConductorClock.
+   * @param beatsPerTap   Beats advanced per tap (1 for 4/4, 2 for cut time).
    */
-  start(startBeat: number, audioTime: number, periodSec: number): void {
+  start(startBeat: number, audioTime: number, periodSec: number, beatsPerTap: number = 1): void {
+    this.beatsPerTap = Math.max(1, beatsPerTap);
     this.originBeat = startBeat;
     this.originAudioTime = audioTime;
-    this.periodSec = periodSec;
+    this.periodSec = periodSec / this.beatsPerTap;
     this.cursorBeat = startBeat;
     this.playing = true;
   }
@@ -100,7 +111,7 @@ export class ScoreTransport {
     const currentBeat = this.beatAtAudioTime(currentAudioTime);
     this.originBeat = currentBeat;
     this.originAudioTime = currentAudioTime + phaseCorrectionSec;
-    this.periodSec = newPeriodSec;
+    this.periodSec = newPeriodSec / this.beatsPerTap;
     this.cursorBeat = currentBeat;
   }
 
@@ -117,13 +128,14 @@ export class ScoreTransport {
    * Return all score events whose beat position falls within the given audio time window.
    * Events are returned in ascending beat order.
    *
-   * @param fromAudioTime  Start of the window (exclusive — events after cursor).
+   * @param fromAudioTime  Start of the window.
    * @param toAudioTime    End of the window (look-ahead horizon).
    */
   eventsInWindow(fromAudioTime: number, toAudioTime: number): ScoreEvent[] {
     const fromBeat = this.beatAtAudioTime(fromAudioTime);
     const toBeat = this.beatAtAudioTime(toAudioTime);
-    return this.events.filter(e => e.beat > fromBeat && e.beat <= toBeat);
+    // Include boundary margin so opening downbeat notes at originBeat are never missed
+    return this.events.filter(e => e.beat >= fromBeat - 0.05 && e.beat <= toBeat);
   }
 
   /**

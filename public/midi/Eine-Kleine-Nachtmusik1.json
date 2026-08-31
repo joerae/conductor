@@ -1,0 +1,21 @@
+{
+  "id": "eine-kleine",
+  "title": "Eine Kleine Nachtmusik",
+  "subtitle": "Serenade No. 13 in G major, K. 525",
+  "composer": "W.A. Mozart",
+  "movement": "I. Allegro",
+  "year": 1787,
+  "midiFile": "Eine-Kleine-Nachtmusik1.mid",
+  "defaultBpm": 140,
+  "timeSignature": "4/4",
+  "beatsPerTap": 1,
+  "conductMode": "In 4 (1 tap = 1 beat)",
+  "layout": "chamber_strings",
+  "description": "Mozart's celebrated serenade, opening with its iconic unison Mannheim rocket motif across all strings.",
+  "sections": [
+    { "id": "violin1", "name": "Violin I", "channels": [0], "programs": [48, 40], "trackNames": ["Violin I"] },
+    { "id": "violin2", "name": "Violin II", "channels": [3], "programs": [48, 40], "trackNames": ["Violin II"] },
+    { "id": "viola", "name": "Viola", "channels": [1], "programs": [48, 41], "trackNames": ["Viola"] },
+    { "id": "cello", "name": "Cello / Bass", "channels": [2], "programs": [48, 42, 43], "trackNames": ["Violoncello"] }
+  ]
+}

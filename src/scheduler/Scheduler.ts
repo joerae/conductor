@@ -119,10 +119,17 @@ export class Scheduler {
         const key = `${event.noteId}:${event.type}`;
         if (this.committedNoteIds.has(key)) continue;
 
-        const audioTime = this.transport.audioTimeForBeat(event.beat);
+        let audioTime = this.transport.audioTimeForBeat(event.beat);
 
-        // Don't commit events that are already in the past
-        if (audioTime < audioNow - 0.010) continue;
+        // If audioTime is slightly in the past due to start tap jitter (up to 300ms),
+        // schedule immediately (audioNow + 0.004) so opening downbeat notes are NEVER dropped!
+        if (audioTime < audioNow) {
+          if (audioTime >= audioNow - 0.300) {
+            audioTime = audioNow + 0.004;
+          } else {
+            continue;
+          }
+        }
 
         this.commitEvent(event, audioTime);
         this.committedNoteIds.add(key);

@@ -132,6 +132,7 @@ export class ExperienceController {
         ),
       ]);
       this.transport.setEvents(this.midiScore.getEvents(), this.midiScore.getMetadata().totalBeats);
+      this.transport.setBeatsPerTap(piece.beatsPerTap || 1);
 
       // Wire input → clock
       this.input.onBeat(obs => this.handleBeatObservation(obs));
@@ -206,10 +207,11 @@ export class ExperienceController {
     const clockState = this.clock.getState();
     const periodSec = clockState.periodMs / 1000;
     const nextBeatAudioTime = this.clock.predictNextBeatAudioTime();
+    const piece = this.getCurrentPiece();
 
     // Start or resume from pausedBeat
     const startBeat = this.pausedBeat;
-    this.transport.start(startBeat, nextBeatAudioTime, periodSec);
+    this.transport.start(startBeat, nextBeatAudioTime, periodSec, piece.beatsPerTap || 1);
     this.scheduler.start();
     this.setState("playing");
 

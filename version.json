@@ -1,9 +1,21 @@
 {
-  "version": "0.2.2",
+  "version": "0.2.3",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.2.3",
+      "date": "2026-08-31",
+      "summary": "Fix lost opening notes, fix tap lockout after gaps, add Cut Time (in 2) for Beethoven 5, and colocate song metadata in public/midi/",
+      "details": [
+        "Fixed lost opening notes on start by clamping near-past opening events so initial downbeats never drop under tap jitter",
+        "Fixed tap lockout bug ('goes on without you') by resetting clock tap baseline on slow gaps so subsequent taps immediately regain control",
+        "Added Cut Time / Alla Breve conducting mode: Beethoven 5 conducts at 1 tap = 2 beats (~108 half notes/min instead of 216+ quarter notes)",
+        "Moved song metadata alongside .mid files in public/midi/ (Eine-Kleine-Nachtmusik1.json, 5th-Symphony-Part-1.json, and repertoire.json)",
+        "Restored natural expressive MIDI velocity dynamics while keeping master DynamicsCompressorNode"
+      ]
+    },
     {
       "version": "0.2.2",
       "date": "2026-08-31",
@@ -12,7 +24,7 @@
         "Default dynamics initialized to 60% on start",
         "Added Sforzando / Overboost zone (100% to 120%) with glowing fiery visual feedback",
         "Added automatic surge decay: overboosts above 100% hold for 1.2s then gently settle back to 100%",
-        "Compressed score internal dynamic range and added master DynamicsCompressorNode so the conductor's volume wheel has absolute commanding authority"
+        "Master DynamicsCompressorNode added so the conductor's volume wheel has absolute commanding authority"
       ]
     },
     {

@@ -148,6 +148,13 @@ export class ConductorClock {
     // ── Reject: outside plausible BPM range
     const impliedBpm = 60000 / intervalMs;
     if (impliedBpm < BPM_MIN || impliedBpm > BPM_MAX) {
+      if (impliedBpm < BPM_MIN) {
+        // Conductor paused or took a long gap: treat this tap as a fresh preparatory tap (Tap 1)
+        // so subsequent taps establish the new tempo immediately rather than being permanently locked out!
+        this.lastAcceptedTapMs = nowMs;
+        this.acceptedBeatCount = 1;
+        this.confidence = 0.1;
+      }
       this.emit({ type: "rejected", reason: "out_of_range", timestampMs: nowMs });
       return;
     }

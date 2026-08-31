@@ -46,12 +46,12 @@ describe("ScoreTransport", () => {
     // Start at beat 0, audio time 0.0, period 0.5s (120 BPM)
     transport.start(0, 0.0, 0.5);
 
-    // Query window from 0.0s to 0.6s (covers beats > 0.0 and <= 1.2) -> should include beat 1.0
+    // Query window from 0.0s to 0.6s (covers beats >= 0.0 and <= 1.2) -> includes beat 0.0 (n1) and beat 1.0 (n2)
     const window1 = transport.eventsInWindow(0.0, 0.6);
-    expect(window1.length).toBe(1);
-    expect(window1[0].noteId).toBe("n2");
+    expect(window1.length).toBe(2);
+    expect(window1.map(e => e.noteId)).toEqual(["n1", "n2"]);
 
-    // Query window from 0.4s to 1.1s (covers beats > 0.8 and <= 2.2) -> should include beat 1.0 and 2.0
+    // Query window from 0.4s to 1.1s (covers beats >= 0.8 and <= 2.2) -> should include beat 1.0 and 2.0
     const window2 = transport.eventsInWindow(0.4, 1.1);
     expect(window2.length).toBe(2);
     expect(window2.map(e => e.noteId)).toEqual(["n2", "n3"]);
@@ -72,5 +72,19 @@ describe("ScoreTransport", () => {
     // Beat 3.0 was originally at 1.5s, with new period and phase it should be:
     // originAudioTime (1.0 - 0.020 = 0.98) + (3.0 - 2.0) * 0.4 = 1.38s
     expect(transport.audioTimeForBeat(3.0)).toBeCloseTo(1.38);
+  });
+
+  it("supports Cut Time (beatsPerTap: 2) advancing score at double speed", () => {
+    const transport = new ScoreTransport();
+    // Conductor taps at 108 BPM (0.5555s per tap), with beatsPerTap: 2 (cut time)
+    transport.start(0, 10.0, 0.5555, 2);
+
+    expect(transport.getBeatsPerTap()).toBe(2);
+    // Period per beat is half of tap period
+    expect(transport.getPeriodSec()).toBeCloseTo(0.5555 / 2);
+
+    // After 1 tap interval (0.5555s), 2 full score beats have elapsed
+    expect(transport.audioTimeForBeat(2.0)).toBeCloseTo(10.5555);
+    expect(transport.audioTimeForBeat(4.0)).toBeCloseTo(10.0 + 0.5555 * 2);
   });
 });

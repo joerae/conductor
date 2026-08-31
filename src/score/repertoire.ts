@@ -2,6 +2,7 @@
  * repertoire.ts
  *
  * Defines the playable repertoire catalog for Conductor.
+ * Metadata is colocated with .mid files in public/midi/ and loaded dynamically.
  */
 
 export interface PieceSection {
@@ -19,9 +20,12 @@ export interface PieceDefinition {
   composer: string;
   movement: string;
   year: number;
+  midiFile: string;
   midiUrl: string;
   defaultBpm: number;
   timeSignature: string;
+  beatsPerTap: number;       // 1 = in 4 / normal, 2 = cut time / alla breve
+  conductMode: string;
   layout: "chamber_strings" | "full_orchestra";
   description: string;
   sections: PieceSection[];
@@ -35,9 +39,12 @@ export const REPERTOIRE: PieceDefinition[] = [
     composer: "W.A. Mozart",
     movement: "I. Allegro",
     year: 1787,
+    midiFile: "Eine-Kleine-Nachtmusik1.mid",
     midiUrl: "/midi/Eine-Kleine-Nachtmusik1.mid",
     defaultBpm: 140,
     timeSignature: "4/4",
+    beatsPerTap: 1,
+    conductMode: "In 4 (1 tap = 1 beat)",
     layout: "chamber_strings",
     description: "Mozart's celebrated serenade, opening with its iconic unison Mannheim rocket motif across all strings.",
     sections: [
@@ -54,11 +61,14 @@ export const REPERTOIRE: PieceDefinition[] = [
     composer: "L.v. Beethoven",
     movement: "I. Allegro con brio",
     year: 1808,
+    midiFile: "5th-Symphony-Part-1.mid",
     midiUrl: "/midi/5th-Symphony-Part-1.mid",
     defaultBpm: 108,
     timeSignature: "2/4",
+    beatsPerTap: 2,
+    conductMode: "Cut Time / Alla Breve (1 tap = 2 beats / 1 bar)",
     layout: "full_orchestra",
-    description: "The most famous four-note motif in music history. Demands authoritative downbeats, dramatic holds, and explosive accelerandos.",
+    description: "The most famous four-note motif in music history. Conducted in cut time (1 tap = 2 beats / 1 bar of 2/4) at ~108 half notes/min.",
     sections: [
       { id: "woodwinds", name: "Flute & Oboe", channels: [0, 1], programs: [73, 68], trackNames: ["FLUTE", "OBOE"] },
       { id: "reeds", name: "Clarinet & Bassoon", channels: [2, 3], programs: [71, 70], trackNames: ["CLARINET", "BASSOON"] },
@@ -70,6 +80,40 @@ export const REPERTOIRE: PieceDefinition[] = [
     ],
   },
 ];
+
+/**
+ * Loads repertoire metadata dynamically from public/midi/*.json if available.
+ */
+export async function loadRepertoireCatalog(): Promise<PieceDefinition[]> {
+  try {
+    const res = await fetch("/midi/repertoire.json");
+    if (!res.ok) return REPERTOIRE;
+    const indexData = await res.json();
+    const loadedPieces: PieceDefinition[] = [];
+
+    for (const jsonFile of indexData.pieces) {
+      try {
+        const pieceRes = await fetch(`/midi/${jsonFile}`);
+        if (pieceRes.ok) {
+          const pieceData = await pieceRes.json();
+          pieceData.midiUrl = `/midi/${pieceData.midiFile}`;
+          loadedPieces.push(pieceData);
+        }
+      } catch (err) {
+        console.warn(`Could not load piece json: ${jsonFile}`, err);
+      }
+    }
+
+    if (loadedPieces.length > 0) {
+      // Update in-memory REPERTOIRE array in place
+      REPERTOIRE.length = 0;
+      REPERTOIRE.push(...loadedPieces);
+    }
+  } catch {
+    // Fall back to built-in REPERTOIRE definition
+  }
+  return REPERTOIRE;
+}
 
 export function getPieceById(id: string): PieceDefinition | undefined {
   return REPERTOIRE.find(p => p.id === id);
