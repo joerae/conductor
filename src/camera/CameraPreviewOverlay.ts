@@ -13,7 +13,6 @@ import type {
 } from "./cameraTypes";
 import {
   HAND_CONNECTIONS,
-  HAND_LANDMARK_INDICES,
 } from "./cameraTypes";
 
 export interface CameraPreviewOverlayOptions {
@@ -288,44 +287,6 @@ export class CameraPreviewOverlay {
       ctx.fill();
       ctx.restore();
 
-      // 4. Handedness & confidence label
-      const wristLm = sample.landmarks[HAND_LANDMARK_INDICES.WRIST] || sample.conductingPoint;
-      const labelX = wristLm.x * width;
-      const labelY = Math.max(16, wristLm.y * height - 12);
-
-      ctx.save();
-      ctx.font = "600 11px Inter, sans-serif";
-      ctx.fillStyle = "rgba(10, 12, 18, 0.75)";
-      
-      let gestureBadge = "";
-      let gestureColor = primaryColor;
-
-      if (sample.gesture === "Thumb_Down") {
-        gestureBadge = " • 👎 Cutoff";
-        gestureColor = "#ff4d6d";
-      } else if (sample.gesture === "Thumb_Up") {
-        gestureBadge = " • 👍 Fermata";
-        gestureColor = "#ffd56b";
-      } else if (sample.gesture === "ILoveYou") {
-        gestureBadge = " • 🤟 Love";
-        gestureColor = "#ff70a6";
-      } else if (sample.gesture === "Victory") {
-        gestureBadge = " • ✌️ Peace";
-        gestureColor = "#6be7ff";
-      } else if (sample.gesture === "Closed_Fist") {
-        gestureBadge = " • ✊ Fist";
-      } else if (sample.gesture === "Open_Palm") {
-        gestureBadge = " • 🖐 Palm";
-      }
-
-      const labelText = `${isLeft ? "Left" : "Right"} (${Math.round(sample.confidence * 100)}%)${gestureBadge}`;
-      const textWidth = ctx.measureText(labelText).width;
-      ctx.fillRect(labelX - textWidth / 2 - 4, labelY - 11, textWidth + 8, 15);
-
-      ctx.fillStyle = gestureColor;
-      ctx.textAlign = "center";
-      ctx.fillText(labelText, labelX, labelY);
-      ctx.restore();
     });
 
     // 5. Render active beat flash ripples
