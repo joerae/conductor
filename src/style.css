@@ -556,14 +556,6 @@ html, body {
   100% { box-shadow: 0 0 22px rgba(255, 90, 20, 0.85); }
 }
 
-.dynamic-ladder-hint {
-  margin-top: 6px;
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  opacity: 0.85;
-  text-align: center;
-}
-
 /* ── Prompt area ────────────────────────────────────────────────────────────── */
 #prompt-area {
   display: flex;
@@ -1467,9 +1459,12 @@ body.debug-mode-active .section-debug-hud {
   font-weight: 600;
 }
 
-/* ── Vertical BPM Speedometer Gauge (To the Right of Camera) ───────── */
+/* ── Vertical BPM Speedometer Gauge (Beside Camera, Full Video Height) ───────── */
 .bpm-vertical-gauge {
   width: 140px;
+  height: 616px;
+  max-height: calc(100vh - 200px);
+  min-height: 520px;
   margin: 0;
   background: rgba(14, 18, 28, 0.88);
   backdrop-filter: blur(16px);
@@ -1496,7 +1491,7 @@ body.debug-mode-active .section-debug-hud {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   width: 100%;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding-bottom: 8px;
@@ -1504,58 +1499,36 @@ body.debug-mode-active .section-debug-hud {
 
 .bpm-gauge-title {
   font-family: var(--font-ui);
-  font-size: 0.70rem;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   color: var(--text-muted);
   text-transform: uppercase;
 }
 
-.bpm-gauge-legends {
+.bpm-current-val-wrap {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
   gap: 4px;
-  font-size: 0.75rem;
-  width: 100%;
+  margin-top: 2px;
 }
 
-.bpm-legend-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  color: var(--text-secondary);
-  font-size: 0.72rem;
-}
-
-.bpm-legend-item strong {
+.bpm-current-val {
   font-family: 'JetBrains Mono', monospace;
-  font-weight: 700;
-}
-
-.bpm-legend-item.legend-indicated strong {
+  font-size: 1.35rem;
+  font-weight: 800;
   color: #ffd56b;
+  text-shadow: 0 0 14px rgba(255, 213, 107, 0.6);
+  letter-spacing: -0.02em;
+  line-height: 1;
 }
 
-.bpm-legend-item.legend-orchestra strong {
-  color: #6be7ff;
-}
-
-.bpm-legend-item .dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
-.bpm-legend-item .dot.gold {
-  background: #ffd56b;
-  box-shadow: 0 0 6px #ffd56b;
-}
-
-.bpm-legend-item .dot.cyan {
-  background: #6be7ff;
-  box-shadow: 0 0 6px #6be7ff;
+.bpm-current-unit {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
 }
 
 .bpm-gauge-track-wrap {
@@ -1566,18 +1539,17 @@ body.debug-mode-active .section-debug-hud {
   gap: 12px;
   flex: 1;
   width: 100%;
-  min-height: 280px;
-  margin: 10px 0;
+  min-height: 400px;
+  margin: 12px 0;
   position: relative;
 }
 
 .bpm-gauge-track {
   position: relative;
-  width: 22px;
+  width: 26px;
   height: 100%;
-  min-height: 280px;
   background: linear-gradient(0deg, #102a45 0%, #17423c 25%, #4a401c 55%, #592e16 80%, #61131a 100%);
-  border-radius: 8px;
+  border-radius: 9px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   overflow: visible;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
@@ -1629,7 +1601,7 @@ body.debug-mode-active .section-debug-hud {
 
 .bpm-needle {
   position: absolute;
-  left: -7px;
+  left: -8px;
   transform: translateY(50%);
   display: flex;
   flex-direction: row;
@@ -1639,51 +1611,43 @@ body.debug-mode-active .section-debug-hud {
   transition: bottom 0.08s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.bpm-needle .needle-pip {
-  width: 36px;
-  height: 10px;
-  border-radius: 4px;
-  border: 2px solid #ffffff;
-  box-sizing: border-box;
-}
-
-.bpm-needle.orchestra-needle {
-  z-index: 8;
-}
-
-.bpm-needle.orchestra-needle .needle-pip {
-  background: #6be7ff;
-  border-color: #ffffff;
-  box-shadow: 0 0 12px #6be7ff, 0 0 24px rgba(107, 231, 255, 0.6);
-}
-
+/* Translucent Frosted Gold Pill indicator for the conductor (YOU) */
 .bpm-needle.indicated-needle {
   z-index: 12;
 }
 
 .bpm-needle.indicated-needle .needle-pip {
-  background: #ffd56b;
-  border-color: #ffffff;
-  box-shadow: 0 0 14px #ffd56b, 0 0 28px rgba(255, 213, 107, 0.8);
-  height: 12px;
+  width: 42px;
+  height: 14px;
+  border-radius: 7px;
+  background: rgba(255, 213, 107, 0.38);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 16px rgba(255, 213, 107, 0.65), 0 0 32px rgba(255, 213, 107, 0.3), inset 0 0 8px rgba(255, 255, 255, 0.4);
+  box-sizing: border-box;
 }
 
-.bpm-needle .needle-label {
-  position: absolute;
-  left: 40px;
-  font-size: 8px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
+/* Orchestra Speed Needle (Hidden by default, shown via D debug toggle) */
+.bpm-needle.orchestra-needle {
+  z-index: 8;
+  display: none;
 }
 
-.bpm-needle.orchestra-needle .needle-label {
-  color: #6be7ff;
+.bpm-vertical-gauge.show-orchestra-speed .bpm-needle.orchestra-needle {
+  display: flex;
 }
 
-.bpm-needle.indicated-needle .needle-label {
-  color: #ffd56b;
+.bpm-needle.orchestra-needle .needle-pip {
+  width: 42px;
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(107, 231, 255, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 12px #6be7ff, 0 0 24px rgba(107, 231, 255, 0.5);
+  box-sizing: border-box;
 }
 
 .bpm-gauge-ticks {

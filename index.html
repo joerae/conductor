@@ -89,9 +89,6 @@
                 </div>
               </div>
             </div>
-            <div class="dynamic-ladder-hint">
-              <span>← → Dyn • Click / Scroll to adjust • \ Accent (&gt;)</span>
-            </div>
           </div>
 
           <!-- Orchestra silhouette with instrument sections -->
@@ -182,12 +179,12 @@
         </div>
 
         <!-- Vertical Tempo Speedometer (To the Right of the picture) -->
-        <aside id="bpm-gauge-container" class="bpm-gauge-container bpm-vertical-gauge" title="Tempo Speedometer: Shows your actively indicated conducting BPM vs the orchestra piece playback speed">
+        <aside id="bpm-gauge-container" class="bpm-gauge-container bpm-vertical-gauge" title="Tempo Speedometer: Shows your actively indicated conducting BPM">
           <div class="bpm-gauge-header">
             <span class="bpm-gauge-title">TEMPO</span>
-            <div class="bpm-gauge-legends">
-              <span class="bpm-legend-item legend-indicated"><span class="dot gold"></span> You: <strong id="val-indicated-bpm">—</strong></span>
-              <span class="bpm-legend-item legend-orchestra"><span class="dot cyan"></span> Piece: <strong id="val-orchestra-bpm">—</strong></span>
+            <div class="bpm-current-val-wrap">
+              <span id="val-indicated-bpm" class="bpm-current-val">—</span>
+              <span class="bpm-current-unit">BPM</span>
             </div>
           </div>
           <div class="bpm-gauge-track-wrap">
@@ -201,15 +198,13 @@
                 <span class="bpm-zone" style="bottom: 22%; height: 22%;">Andante</span>
                 <span class="bpm-zone" style="bottom: 0%; height: 22%;">Largo</span>
               </div>
-              <!-- Orchestra Playback Needle (Cyan Beacon) -->
+              <!-- Orchestra Playback Needle (Cyan Beacon — Debug D Toggle) -->
               <div id="bpm-marker-orchestra" class="bpm-needle orchestra-needle" style="bottom: 50%;">
                 <div class="needle-pip"></div>
-                <div class="needle-label">Piece</div>
               </div>
-              <!-- Conductor Indicated Needle (Gold Arrow) -->
+              <!-- Conductor Indicated Needle (Translucent Gold Frosted Glass Pill) -->
               <div id="bpm-marker-indicated" class="bpm-needle indicated-needle" style="bottom: 50%;">
                 <div class="needle-pip"></div>
-                <div class="needle-label">You</div>
               </div>
             </div>
             <div class="bpm-gauge-ticks">
@@ -272,7 +267,7 @@
 
       <!-- Footer controls -->
       <footer id="stage-footer">
-        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.9.4</button>
+        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.9.5</button>
         <span class="footer-divider">•</span>
         <span id="debug-hint" class="debug-hint">Press D for debug overlay & A/B DSP</span>
       </footer>

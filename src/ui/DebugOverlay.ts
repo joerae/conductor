@@ -200,6 +200,13 @@ export class DebugOverlay {
       }
     });
 
+    // Wire up Orchestra Speed Needle on Stage toggle
+    const orchNeedleCb = this.container.querySelector<HTMLInputElement>("#dbg-show-orchestra-needle-cb");
+    orchNeedleCb?.addEventListener("change", () => {
+      const gauge = document.getElementById("bpm-gauge-container");
+      gauge?.classList.toggle("show-orchestra-speed", orchNeedleCb.checked);
+    });
+
     // Pause button in header
     const pauseBtn = document.getElementById("dbg-pause-btn");
     pauseBtn?.addEventListener("click", () => {
@@ -788,6 +795,10 @@ export class DebugOverlay {
         <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Play an instant orchestral crash cymbal cue the exact millisecond a beat is detected from the camera or keyboard">
           <input type="checkbox" id="dbg-beat-sound-cb" style="accent-color:#ffd56b; margin-right:6px;">
           <span><strong>🥁 Make Sound on Beat</strong> (Instant Cymbal Cue)</span>
+        </label>
+        <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Show a secondary cyan beacon needle on the stage speedometer tracking actual audio clock playback speed">
+          <input type="checkbox" id="dbg-show-orchestra-needle-cb" style="accent-color:#ffd56b; margin-right:6px;">
+          <span><strong>📊 Show Orchestra Speed Needle</strong> (Cyan Clock Beacon)</span>
         </label>
       </div>
 

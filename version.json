@@ -1,9 +1,20 @@
 {
-  "version": "0.9.4",
+  "version": "0.9.5",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.9.5",
+      "date": "2026-09-01",
+      "summary": "Full-Height Video-Aligned Tempo Speedometer, Single Translucent Conductor Needle, Debug Orchestra Toggle & Streamlined Dynamics Ribbon",
+      "details": [
+        "Full Video-Height Tempo Speedometer: Expanded the vertical tempo gauge to span the full height of the webcam feed (616px), giving the 40-220 BPM track an expansive, luxury cockpit aesthetic",
+        "Single Translucent Conductor (YOU) Needle: Replaced dual overlapping indicators with a unified, frosted-glass translucent gold pill that glides cleanly along the vertical gauge without text clutter",
+        "Debug Orchestra Speed Toggle: Orchestra playback speed beacon is now toggleable in the D (Debug) diagnostic HUD, keeping the performance stage uncluttered",
+        "Streamlined Dynamics Ribbon: Removed outdated helper text from the dynamic ribbon for a cleaner, modern stage interface"
+      ]
+    },
     {
       "version": "0.9.4",
       "date": "2026-09-01",
