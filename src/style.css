@@ -1379,28 +1379,31 @@ body.debug-mode-active .section-debug-hud {
 .camera-media-wrap {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 3;
   background: #06090e;
   overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.camera-video,
+.camera-video {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
 .camera-canvas {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  pointer-events: none;
 }
 
 .camera-video.mirrored,
 .camera-canvas.mirrored {
   transform: scaleX(-1);
-}
-
-.camera-canvas {
-  pointer-events: none;
 }
 
 .camera-placeholder {

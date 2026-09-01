@@ -401,49 +401,38 @@ export class CameraPreviewOverlay {
         const tip = pointingHand.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP] || pointingHand.conductingPoint;
         const fx = tip.x * width;
         const fy = tip.y * height;
-
-        ctx.save();
         const pulse = (Math.sin(now / 120) + 1) / 2; // 0..1 pulse
 
-        // 1. Full-Stage Angled Laser Ray (Pierces out of camera box to targeted orchestra section)
+        // 1. Full-Stage Angled Laser Ray (Pierces straight out of camera box to targeted orchestra section)
         const stageOverlay = document.getElementById("stage-spotlight-ray-overlay") as SVGSVGElement | null;
-        const centerCol = document.getElementById("stage-center-column");
 
-        if (stageOverlay && centerCol && (focusTelemetry.state === "grabbed" || focusTelemetry.state === "hovering") && this.canvasEl) {
-          const centerRect = centerCol.getBoundingClientRect();
+        if (stageOverlay && (focusTelemetry.state === "grabbed" || focusTelemetry.state === "hovering") && this.canvasEl) {
           const canvasRect = this.canvasEl.getBoundingClientRect();
+          const svgRect = stageOverlay.getBoundingClientRect();
           const isMirrored = this.mirror;
 
-          // Fingertip start position in stage-center-column space (accounting for mirror)
+          // Fingertip start position in stage-spotlight-ray-overlay coordinate space
           const screenNormX = isMirrored ? (1.0 - tip.x) : tip.x;
-          const stageStartX = (canvasRect.left - centerRect.left) + screenNormX * canvasRect.width;
-          const stageStartY = (canvasRect.top - centerRect.top) + tip.y * canvasRect.height;
+          const stageStartX = (canvasRect.left - svgRect.left) + screenNormX * canvasRect.width;
+          const stageStartY = (canvasRect.top - svgRect.top) + tip.y * canvasRect.height;
 
-          // Pointing direction vector in screen space
+          // Pointing direction vector in screen pixels
           const pip = pointingHand.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] || pointingHand.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
           const pipNormX = pip ? (isMirrored ? (1.0 - pip.x) : pip.x) : screenNormX;
           const pipNormY = pip ? pip.y : (tip.y + 0.05);
-          const dirX = screenNormX - pipNormX;
-          const dirY = tip.y - pipNormY;
+          const dirX = (screenNormX - pipNormX) * canvasRect.width;
+          const dirY = (tip.y - pipNormY) * canvasRect.height;
           const len = Math.hypot(dirX, dirY) || 1;
           const unitX = dirX / len;
           const unitY = dirY / len;
 
-          // Target end position: freely project ray across the stage to orchestra row (Y = 60px)
+          // Pure straight ray projecting freely across the stage in the exact direction of pointing finger
           const targetRowY = 60;
-          const rayDist = unitY < -0.05 ? ((stageStartY - targetRowY) / -unitY) : 280;
-          let stageEndX = stageStartX + unitX * rayDist;
-          let stageEndY = Math.max(20, stageStartY + unitY * rayDist);
+          const rayDist = unitY < -0.05 ? ((stageStartY - targetRowY) / -unitY) : 340;
+          const stageEndX = stageStartX + unitX * rayDist;
+          const stageEndY = Math.max(15, stageStartY + unitY * rayDist);
 
           const activeSecId = focusTelemetry.grabbedSectionId || focusTelemetry.hoveredSectionId;
-          if (activeSecId) {
-            const secEl = document.getElementById(`section-${activeSecId}`);
-            if (secEl) {
-              const secRect = secEl.getBoundingClientRect();
-              stageEndX = (secRect.left - centerRect.left) + secRect.width / 2;
-              stageEndY = (secRect.top - centerRect.top) + secRect.height * 0.55;
-            }
-          }
 
           const outerRay = stageOverlay.querySelector("#spotlight-stage-outer-ray") as SVGLineElement | null;
           const mainRay = stageOverlay.querySelector("#spotlight-stage-ray") as SVGLineElement | null;
@@ -492,6 +481,7 @@ export class CameraPreviewOverlay {
         }
 
         // 2. Fingertip targeting reticle ring & glowing aura
+        ctx.save();
         ctx.beginPath();
         ctx.arc(fx, fy, 14 + pulse * 4, 0, Math.PI * 2);
         ctx.fillStyle = focusTelemetry.state === "grabbed"
@@ -522,7 +512,6 @@ export class CameraPreviewOverlay {
         ctx.arc(fx, fy, 4.5, 0, Math.PI * 2);
         ctx.fillStyle = "#ffffff";
         ctx.fill();
-
         ctx.restore();
       }
     } else {

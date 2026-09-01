@@ -1,9 +1,27 @@
 {
-  "version": "0.20.0",
+  "version": "0.22.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.22.0",
+      "date": "2026-09-02",
+      "summary": "Native Webcam Aspect Ratio & Direct SVG-Space Coordinate Alignment",
+      "details": [
+        "Native Webcam Aspect Ratio: Removed all hardcoded aspect-ratio locks so the video and overlay canvas naturally adopt the camera's exact native resolution (4:3, 16:9, etc.) without distortion",
+        "Direct SVG-Space Coordinate Calculation: Measured laser ray origin directly against the stage SVG overlay bounding rect with aspect-scaled directional vectors, guaranteeing exact alignment with the on-screen fingertip dot"
+      ]
+    },
+    {
+      "version": "0.21.0",
+      "date": "2026-09-02",
+      "summary": "1-to-1 Pixel-Perfect Fingertip Laser Origin & Pure Straight Beam (No Snapping)",
+      "details": [
+        "1-to-1 Pixel-Perfect Fingertip Origin: Switched camera media wrap to dynamic aspect-ratio matching (16:9) with object-fit: fill, aligning the laser ray start point with sub-pixel precision directly at the conductor's index fingertip",
+        "Pure Straight Laser Beam: Removed magnetic snapping to section centers — the laser ray now stays 100% straight and moves freely with your finger angle, triggering the spotlight and impact spark only when the beam actively intersects an instrument section"
+      ]
+    },
     {
       "version": "0.20.0",
       "date": "2026-09-02",
