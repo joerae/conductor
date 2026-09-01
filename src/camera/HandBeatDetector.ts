@@ -1,14 +1,20 @@
 /**
  * HandBeatDetector.ts
  *
- * Permissive, bidirectional ictus and apex beat detector operating independently on each hand.
+ * Permissive ictus beat detector operating independently on each hand.
  *
- * Detects musical beats at BOTH physical inflection turnarounds:
- *   1. Bottom Turnaround (Downbeat / Trough): Transition from downward descent to upward ascent.
- *   2. Top Turnaround (Upbeat / Apex): Transition from upward ascent to downward descent.
- *
- * A continuous bouncing gesture (down-up-down-up) produces two beats per cycle
- * (one at the lowest point, one at the apex), mirroring natural conducting and baton physics.
+ * Detection Rules:
+ *   1. Bottom Turnarounds Only: Detects beats strictly at the physical trough
+ *      (transition from downward descent to upward ascent). Apex / upbeat turnarounds
+ *      are ignored to minimize false positives.
+ *   2. Recovery Requirement: After a beat is detected, the hand enters a RECOVERING
+ *      state and must travel upward by at least `recoveryThreshold` before it becomes
+ *      eligible to arm another downward ictus. Small resting wobbles and expressive gestures
+ *      near the bottom cannot trigger repeated false beats.
+ *   3. Preserved Trough Timestamp: The exact timestamp when the hand reached the trough
+ *      extrema is preserved as the candidate beat timestamp.
+ *   4. Multi-Hand Permissiveness: Tracks each hand independently so either hand or
+ *      alternating hands can conduct seamlessly.
  */
 
 import type { MotionSample } from "./HandMotionFilter";
@@ -27,15 +33,17 @@ export interface CandidateBeat {
 }
 
 export interface BeatDetectorConfig {
-  /** Minimum downward/upward velocity to arm a stroke (default ~0.20). */
+  /** Minimum downward velocity to arm a stroke (default ~0.20). */
   minStrokeVelocity: number;
   /** Minimum stroke displacement distance to qualify as a beat (default ~0.030). */
   minStrokeAmplitude: number;
   /** Minimum reversal distance to confirm turnaround (default ~0.012). */
   turnaroundThreshold: number;
+  /** Minimum upward recovery displacement required before re-arming a new stroke (default ~0.035). */
+  recoveryThreshold: number;
   /** Per-hand refractory period in ms between beats (default ~100ms, allows 300+ BPM). */
   refractoryMs: number;
-  /** Maximum duration of a half-stroke before timing out in ms (default ~900ms). */
+  /** Maximum duration of a stroke phase before timing out in ms (default ~900ms). */
   maxStrokeDurationMs: number;
 }
 
@@ -43,11 +51,12 @@ export const DEFAULT_DETECTOR_CONFIG: BeatDetectorConfig = {
   minStrokeVelocity: 0.20,
   minStrokeAmplitude: 0.030,
   turnaroundThreshold: 0.012,
+  recoveryThreshold: 0.035,
   refractoryMs: 100,
   maxStrokeDurationMs: 900,
 };
 
-export type MotionDirection = "DOWN" | "UP" | "IDLE";
+export type MotionDirection = "DOWN" | "RECOVERING" | "UP" | "IDLE";
 
 export interface HandTrackerDebug {
   handIndex: number;
@@ -67,8 +76,8 @@ interface HandKinematicsTracker {
   peakTimeMs: number;
   troughY: number;
   troughTimeMs: number;
+  recoveryStartY: number;
   peakDownwardVy: number;
-  peakUpwardVy: number;
   lastBeatType?: BeatInflectionType;
   lastBeatTimeMs: number;
   lastY: number;
@@ -84,7 +93,7 @@ export class HandBeatDetector {
   }
 
   /**
-   * Processes a motion sample for a given hand and returns a candidate beat if an ictus or apex is detected.
+   * Processes a motion sample for a given hand and returns a candidate beat if a bottom turnaround is detected.
    */
   processSample(sample: MotionSample, handIndex: number): CandidateBeat | null {
     let tracker = this.trackers.get(handIndex);
@@ -96,8 +105,8 @@ export class HandBeatDetector {
         peakTimeMs: sample.timestampMs,
         troughY: sample.y,
         troughTimeMs: sample.timestampMs,
+        recoveryStartY: sample.y,
         peakDownwardVy: 0,
-        peakUpwardVy: 0,
         lastBeatTimeMs: 0,
         lastY: sample.y,
         lastVy: sample.vy,
@@ -124,13 +133,10 @@ export class HandBeatDetector {
       if (Math.abs(vy) > tracker.peakDownwardVy) {
         tracker.peakDownwardVy = Math.abs(vy);
       }
-    } else if (tracker.direction === "UP") {
+    } else if (tracker.direction === "UP" || tracker.direction === "RECOVERING") {
       if (y > tracker.peakY) {
         tracker.peakY = y;
         tracker.peakTimeMs = now;
-      }
-      if (vy > tracker.peakUpwardVy) {
-        tracker.peakUpwardVy = vy;
       }
     } else {
       // IDLE
@@ -158,7 +164,7 @@ export class HandBeatDetector {
 
           const candidate: CandidateBeat = {
             handIndex,
-            timestampMs: tracker.troughTimeMs || now,
+            timestampMs: tracker.troughTimeMs || now, // Exact trough timestamp preserved
             confidence: Math.round(confidence * 100) / 100,
             amplitude: Math.round(strokeAmplitude * 1000) / 1000,
             peakVelocity: Math.round(tracker.peakDownwardVy * 100) / 100,
@@ -167,13 +173,13 @@ export class HandBeatDetector {
             y: tracker.troughY,
           };
 
-          // Switch state to UP for next phase
-          tracker.direction = "UP";
+          // Enter RECOVERING state: must move upward by recoveryThreshold before arming next stroke
+          tracker.direction = "RECOVERING";
+          tracker.recoveryStartY = tracker.troughY;
           tracker.lastBeatType = "trough";
           tracker.lastBeatTimeMs = now;
           tracker.peakY = y;
           tracker.peakTimeMs = now;
-          tracker.peakUpwardVy = 0;
           tracker.strokeStartTimeMs = now;
           return candidate;
         } else {
@@ -192,72 +198,55 @@ export class HandBeatDetector {
       return null;
     }
 
-    // 2. Moving UPWARD
+    // 2. RECOVERING (Post-beat upward rebound requirement)
+    if (tracker.direction === "RECOVERING") {
+      const upwardTravel = y - tracker.recoveryStartY;
+      if (upwardTravel >= this.config.recoveryThreshold) {
+        // Hand has recovered upward sufficiently; now eligible for next downward stroke
+        tracker.direction = "UP";
+        tracker.peakY = Math.max(tracker.peakY, y);
+        tracker.strokeStartTimeMs = now;
+      } else if (now - tracker.strokeStartTimeMs > this.config.maxStrokeDurationMs) {
+        tracker.direction = "IDLE";
+      }
+      return null;
+    }
+
+    // 3. Moving UPWARD (or holding at top)
     if (tracker.direction === "UP") {
-      // Check for Top Turnaround (Upbeat / Apex):
-      // The hand stopped ascending and moved downward by turnaroundThreshold OR velocity has crossed negative
-      const downwardDrop = tracker.peakY - y;
-      const isReversingDownward = downwardDrop >= this.config.turnaroundThreshold || (vy < -0.08 && downwardDrop >= 0.006);
-
-      if (isReversingDownward && !inRefractory) {
-        const strokeAmplitude = tracker.peakY - tracker.troughY;
-
-        if (strokeAmplitude >= this.config.minStrokeAmplitude) {
-          // Valid Top Apex Beat!
-          const ampRatio = Math.min(1.0, strokeAmplitude / (this.config.minStrokeAmplitude * 2.0));
-          const velRatio = Math.min(1.0, tracker.peakUpwardVy / (this.config.minStrokeVelocity * 2.0));
-          const confidence = Math.max(0.65, Math.min(1.0, 0.40 + 0.35 * ampRatio + 0.25 * velRatio));
-
-          const candidate: CandidateBeat = {
-            handIndex,
-            timestampMs: tracker.peakTimeMs || now,
-            confidence: Math.round(confidence * 100) / 100,
-            amplitude: Math.round(strokeAmplitude * 1000) / 1000,
-            peakVelocity: Math.round(tracker.peakUpwardVy * 100) / 100,
-            direction: "apex",
-            x: sample.x,
-            y: tracker.peakY,
-          };
-
-          // Switch state to DOWN for next phase
-          tracker.direction = "DOWN";
-          tracker.lastBeatType = "apex";
-          tracker.lastBeatTimeMs = now;
-          tracker.troughY = y;
-          tracker.troughTimeMs = now;
-          tracker.peakDownwardVy = 0;
-          tracker.strokeStartTimeMs = now;
-          return candidate;
-        } else {
-          // Insufficient amplitude -> switch to DOWN without beat
-          tracker.direction = "DOWN";
-          tracker.troughY = y;
-          tracker.strokeStartTimeMs = now;
-        }
+      if (y > tracker.peakY) {
+        tracker.peakY = y;
+        tracker.peakTimeMs = now;
       }
 
-      // Timeout check
-      if (now - tracker.strokeStartTimeMs > this.config.maxStrokeDurationMs) {
+      // Arm new downward stroke when hand descends from top with sufficient velocity
+      if (vy < -this.config.minStrokeVelocity && (tracker.peakY - y) >= 0.008) {
+        tracker.direction = "DOWN";
+        tracker.strokeStartTimeMs = now;
+        tracker.troughY = y;
+        tracker.troughTimeMs = now;
+        tracker.peakDownwardVy = Math.abs(vy);
+      } else if (now - tracker.strokeStartTimeMs > this.config.maxStrokeDurationMs) {
         tracker.direction = "IDLE";
       }
 
       return null;
     }
 
-    // 3. IDLE: Arm initial DOWN or UP motion
+    // 4. IDLE: Arm initial DOWN or UP motion
     if (tracker.direction === "IDLE") {
       if (vy < -this.config.minStrokeVelocity) {
         tracker.direction = "DOWN";
         tracker.strokeStartTimeMs = now;
         tracker.peakY = y;
         tracker.troughY = y;
+        tracker.troughTimeMs = now;
         tracker.peakDownwardVy = Math.abs(vy);
       } else if (vy > this.config.minStrokeVelocity) {
         tracker.direction = "UP";
         tracker.strokeStartTimeMs = now;
         tracker.troughY = y;
         tracker.peakY = y;
-        tracker.peakUpwardVy = vy;
       }
     }
 

@@ -1,10 +1,13 @@
 /**
  * ConductorClock.ts
  *
- * PLL-inspired beat follower with three operating modes:
+ * Beat follower and predicted pulse tracker with four operating modes:
  *   - Mode A (Balanced): Blends tempo with inertia over ~3-4 beats, absorbing finger jitter.
  *   - Mode B (Instant / On a Dime): Super-responsive to deliberate tempo cuts and accelerandos.
  *   - Mode C (Autoplay): Tap Space twice to set pulse, plays continuously at tempo without stopping.
+ *   - Mode D (Inertial / Predicted Conducting): Designed for sparse conducting pulses (e.g. 2 score
+ *     beats per conducted pulse), seamlessly maintaining tempo through missed beats / gesture gaps,
+ *     distinguishing phase error vs tempo change, and smoothly re-anchoring when conducting resumes.
  */
 
 import type { BeatObservation, ClockState, TapRejectionReason } from "./clockTypes";
@@ -12,7 +15,7 @@ import type { BeatObservation, ClockState, TapRejectionReason } from "./clockTyp
 // ─── Tuning constants ────────────────────────────────────────────────────────
 
 /**
- * Blend factor for tempo updates. Higher = follows deliberate changes faster
+ * Blend factor for tempo updates in Mode A. Higher = follows deliberate changes faster
  * but is more sensitive to jitter. 0.35 gives a smooth, natural response.
  */
 const TEMPO_GAIN = 0.35;
@@ -22,16 +25,16 @@ const TEMPO_GAIN = 0.35;
  */
 const PHASE_GAIN = 0.40;
 
-/** Minimum accepted BPM. */
-const BPM_MIN = 30;
+/** Minimum accepted BPM for conducted pulses (allows slow half-note conducting down to 40 score BPM). */
+const BPM_MIN = 20;
 
 /** Maximum accepted BPM. */
 const BPM_MAX = 280;
 
-/** Guard against accidental keyboard bounce. */
+/** Guard against accidental keyboard bounce or sensor noise. */
 const DOUBLE_TAP_GUARD_MS = 80;
 
-/** Stop after this many silent beat periods in human conducting modes. */
+/** Stop after this many silent beat periods in human conducting modes A and B. */
 const STOP_AFTER_PERIODS = 3.0;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -128,25 +131,108 @@ export class ConductorClock {
       return;
     }
 
-    let intervalMs = nowMs - this.lastAcceptedTapMs;
+    const elapsedMs = nowMs - this.lastAcceptedTapMs;
 
-    // ── Mode D (Inertial): handle re-entry after free-wheeling multiple beats
-    if (this.mode === "inertial" && this.acceptedBeatCount >= 2 && intervalMs > this.periodMs * 1.5) {
-      const beatsElapsed = Math.max(1, Math.round(intervalMs / this.periodMs));
-      intervalMs = intervalMs / beatsElapsed;
-    }
-
-    // ── Reject: double-tap (keyboard bounce)
-    if (intervalMs < DOUBLE_TAP_GUARD_MS) {
+    // ── Reject: double-tap (keyboard bounce or sensor bounce)
+    if (elapsedMs < DOUBLE_TAP_GUARD_MS) {
       this.emit({ type: "rejected", reason: "double_tap", timestampMs: nowMs });
       return;
     }
 
-    // ── Reject: outside plausible BPM range
+    // ── Mode D (Inertial / Predicted Sparse Conducting Pulses) ────────────────
+    if (this.mode === "inertial") {
+      if (this.acceptedBeatCount === 1) {
+        // Second tap: establish initial conducting pulse period
+        const impliedBpm = 60000 / elapsedMs;
+        if (impliedBpm < BPM_MIN || impliedBpm > BPM_MAX) {
+          if (impliedBpm < BPM_MIN) {
+            this.lastAcceptedTapMs = nowMs;
+            this.acceptedBeatCount = 1;
+            this.confidence = 0.1;
+          }
+          this.emit({ type: "rejected", reason: "out_of_range", timestampMs: nowMs });
+          return;
+        }
+
+        this.periodMs = elapsedMs;
+        this.prevIntervalMs = elapsedMs;
+        this.phaseErrorMs = 0;
+        this.phaseCorrectionSec = 0;
+        this.lastAcceptedTapMs = nowMs;
+        this.acceptedBeatCount = 2;
+        this.confidence = 0.6;
+        this.inertialFreeWheelCount = 0;
+
+        const periodSec = this.periodMs / 1000;
+        this.nextBeatAudioTime = audioNow + periodSec;
+        this.emit({ type: "beat", state: this.getState(), beatNumber: 2 });
+        this.startInertialLoop();
+        return;
+      }
+
+      // Mode D running: associate observation with most plausible predicted pulse
+      const pulsesElapsed = Math.max(1, Math.round(elapsedMs / this.periodMs));
+      const impliedIntervalMs = elapsedMs / pulsesElapsed;
+      const impliedBpm = 60000 / impliedIntervalMs;
+
+      if (impliedBpm < BPM_MIN || impliedBpm > BPM_MAX) {
+        if (impliedBpm < BPM_MIN) {
+          this.lastAcceptedTapMs = nowMs;
+          this.acceptedBeatCount = 1;
+          this.confidence = 0.1;
+          this.cancelInertialLoop();
+        }
+        this.emit({ type: "rejected", reason: "out_of_range", timestampMs: nowMs });
+        return;
+      }
+
+      // Predicted timestamp for the N-th pulse
+      const predictedTimeMs = this.lastAcceptedTapMs + pulsesElapsed * this.periodMs;
+      let phaseErrorMs = nowMs - predictedTimeMs;
+      const maxPhaseError = this.periodMs * 0.5;
+      phaseErrorMs = Math.max(-maxPhaseError, Math.min(maxPhaseError, phaseErrorMs));
+
+      const isGap = pulsesElapsed >= 2;
+
+      if (isGap) {
+        // Re-entry after a gap (conductor was shaping dynamics / pausing beats):
+        // Correct phase towards observed beat, anchor pulse timeline, keep tempo stable.
+        const phaseCorrectionMs = phaseErrorMs * 0.40;
+        this.phaseCorrectionSec = phaseCorrectionMs / 1000;
+        // Subtle drift absorption if implied interval is very close
+        if (Math.abs(impliedIntervalMs - this.periodMs) / this.periodMs < 0.12) {
+          this.periodMs = this.periodMs * 0.92 + impliedIntervalMs * 0.08;
+        }
+      } else {
+        // Consecutive beat (pulsesElapsed === 1)
+        const phaseCorrectionMs = phaseErrorMs * 0.35;
+        this.phaseCorrectionSec = phaseCorrectionMs / 1000;
+
+        // Smooth high-inertia tempo update
+        this.periodMs = this.periodMs * 0.75 + elapsedMs * 0.25;
+      }
+
+      this.phaseErrorMs = phaseErrorMs;
+      this.lastAcceptedTapMs = nowMs;
+      this.acceptedBeatCount += pulsesElapsed;
+      this.inertialFreeWheelCount = 0;
+      this.confidence = Math.min(1.0, this.confidence + 0.15);
+
+      const periodSec = this.periodMs / 1000;
+      this.nextBeatAudioTime = audioNow + periodSec + this.phaseCorrectionSec;
+
+      this.emit({ type: "beat", state: this.getState(), beatNumber: this.acceptedBeatCount });
+      this.startInertialLoop();
+      return;
+    }
+
+    // ── Modes A, B, C Handling ────────────────────────────────────────────────
+    let intervalMs = elapsedMs;
+
+    // Reject: outside plausible BPM range
     const impliedBpm = 60000 / intervalMs;
     if (impliedBpm < BPM_MIN || impliedBpm > BPM_MAX) {
       if (impliedBpm < BPM_MIN) {
-        // Conductor paused or took a long gap: treat this tap as a fresh preparatory tap (Tap 1)
         this.lastAcceptedTapMs = nowMs;
         this.acceptedBeatCount = 1;
         this.confidence = 0.1;
@@ -157,11 +243,9 @@ export class ConductorClock {
       return;
     }
 
-    // ── Accept ──────────────────────────────────────────────────────────────
-
     this.cancelStopTimer();
 
-    // Compute phase error: compare current audio time to previously predicted next beat
+    // Compute phase error
     let phaseErrorMs = 0;
     if (this.nextBeatAudioTime > 0 && this.acceptedBeatCount >= 2) {
       phaseErrorMs = (audioNow - this.nextBeatAudioTime) * 1000;
@@ -170,13 +254,10 @@ export class ConductorClock {
     }
 
     if (this.mode === "autoplay") {
-      // ── Mode C: Autoplay
-      // Tap sets tempo immediately and restarts autoplay pulse loop at the new speed
       this.periodMs = intervalMs;
       this.prevIntervalMs = intervalMs;
       this.phaseCorrectionSec = 0;
     } else if (this.mode === "instant") {
-      // ── Mode B: Instant / On a Dime
       if (this.acceptedBeatCount === 1) {
         this.periodMs = intervalMs;
         this.prevIntervalMs = intervalMs;
@@ -186,21 +267,8 @@ export class ConductorClock {
       }
       const phaseCorrectionMs = phaseErrorMs * 0.85;
       this.phaseCorrectionSec = phaseCorrectionMs / 1000;
-    } else if (this.mode === "inertial") {
-      // ── Mode D: Inertial Cruise / Steer & Release
-      this.inertialFreeWheelCount = 0;
-      if (this.acceptedBeatCount === 1) {
-        this.periodMs = intervalMs;
-        this.prevIntervalMs = intervalMs;
-      } else {
-        // Smooth blending with high inertia (follows deliberate guidance without jitter)
-        this.periodMs = this.periodMs * 0.72 + intervalMs * 0.28;
-      }
-      // Gentle phase correction to avoid jarring tempo jumps
-      const phaseCorrectionMs = phaseErrorMs * 0.25;
-      this.phaseCorrectionSec = phaseCorrectionMs / 1000;
     } else {
-      // ── Mode A: Balanced PLL
+      // Mode A: Balanced PLL
       if (this.acceptedBeatCount === 1) {
         this.periodMs = intervalMs;
         this.prevIntervalMs = intervalMs;
@@ -216,7 +284,6 @@ export class ConductorClock {
     this.acceptedBeatCount++;
     this.confidence = Math.min(1.0, this.confidence + 0.15);
 
-    // Predict next beat in AudioContext time
     const periodSec = this.periodMs / 1000;
     this.nextBeatAudioTime = audioNow + periodSec + this.phaseCorrectionSec;
 
@@ -224,8 +291,6 @@ export class ConductorClock {
 
     if (this.mode === "autoplay") {
       this.startAutoplayLoop();
-    } else if (this.mode === "inertial") {
-      this.startInertialLoop();
     } else {
       this.scheduleStopTimer();
     }
@@ -277,6 +342,7 @@ export class ConductorClock {
     this.nextBeatAudioTime = -1;
     this.acceptedBeatCount = 0;
     this.phaseErrorMs = 0;
+    this.phaseCorrectionSec = 0;
     this.confidence = 0;
     this.inertialFreeWheelCount = 0;
   }
@@ -324,8 +390,8 @@ export class ConductorClock {
   }
 
   /**
-   * In Mode D (Inertial / Cruise Control), carries the tempo forward through missed beats
-   * for up to 16 bars without halting, allowing steer & release conducting.
+   * In Mode D (Inertial / Predicted Conducting), carries the tempo forward through missed beats
+   * without halting, allowing steer & release conducting.
    */
   private startInertialLoop(): void {
     this.cancelInertialLoop();
@@ -336,8 +402,8 @@ export class ConductorClock {
         if (this.mode !== "inertial" || this.acceptedBeatCount < 2) return;
 
         this.inertialFreeWheelCount++;
-        // If conductor has not conducted for 16 bars, gently halt
-        if (this.inertialFreeWheelCount > 16) {
+        // If conductor has not conducted for 64 pulses (~60-120 seconds), gently halt
+        if (this.inertialFreeWheelCount > 64) {
           this.reset();
           this.emit({ type: "stopped" });
           return;
@@ -347,7 +413,7 @@ export class ConductorClock {
         const periodSec = this.periodMs / 1000;
         this.nextBeatAudioTime = audioNow + periodSec;
         this.acceptedBeatCount++;
-        this.confidence = Math.max(0.40, this.confidence - 0.03);
+        this.confidence = Math.max(0.40, this.confidence - 0.015);
 
         this.emit({
           type: "beat",

@@ -188,7 +188,8 @@ export class ExperienceController {
         ),
       ]);
       this.transport.setEvents(this.midiScore.getEvents(), this.midiScore.getMetadata().totalBeats);
-      this.transport.setBeatsPerTap(piece.beatsPerTap || 1);
+      const beatsPerTap = this.clock.getTempoMode() === "inertial" ? 2 : (piece.beatsPerTap || 1);
+      this.transport.setBeatsPerTap(beatsPerTap);
 
       // Wire active input provider → clock
       this.keyboardInput.onBeat(obs => this.handleBeatObservation(obs));
@@ -451,7 +452,8 @@ export class ExperienceController {
 
     // Start or resume from pausedBeat
     const startBeat = this.pausedBeat;
-    this.transport.start(startBeat, nextBeatAudioTime, periodSec, piece.beatsPerTap || 1);
+    const beatsPerTap = this.clock.getTempoMode() === "inertial" ? 2 : (piece.beatsPerTap || 1);
+    this.transport.start(startBeat, nextBeatAudioTime, periodSec, beatsPerTap);
     this.scheduler.start();
     this.setState("playing");
 
@@ -519,6 +521,9 @@ export class ExperienceController {
   setTempoMode(mode: TempoMode): void {
     this.clock.setTempoMode(mode);
     this.debug.updateTempoMode(mode);
+    const piece = this.getCurrentPiece();
+    const beatsPerTap = mode === "inertial" ? 2 : (piece?.beatsPerTap || 1);
+    this.transport.setBeatsPerTap(beatsPerTap);
   }
 
   getTempoMode(): TempoMode {

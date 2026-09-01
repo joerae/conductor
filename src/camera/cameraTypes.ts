@@ -80,7 +80,7 @@ export interface CameraTelemetry {
   dynamics?: DynamicsObservation;
   beatDebug?: Array<{
     handIndex: number;
-    direction: "DOWN" | "UP" | "IDLE";
+    direction: "DOWN" | "RECOVERING" | "UP" | "IDLE";
     currentY: number;
     currentVy: number;
     peakY: number;
