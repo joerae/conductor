@@ -617,6 +617,70 @@ export class AudioEngine {
   }
 
   /**
+   * Immediately synthesizes a crisp orchestral crash / cymbal cue
+   * with zero scheduler latency, for auditory beat feedback and debugging.
+   */
+  playImmediateBeatCymbal(volume: number = 0.55): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+
+    try {
+      // 1. White noise generator for metallic wash
+      const bufferSize = Math.floor(ctx.sampleRate * 0.32);
+      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+
+      const whiteNoise = ctx.createBufferSource();
+      whiteNoise.buffer = noiseBuffer;
+
+      // 2. High-pass filter for crisp metallic brightness (5200 Hz)
+      const hpFilter = ctx.createBiquadFilter();
+      hpFilter.type = "highpass";
+      hpFilter.frequency.setValueAtTime(5200, now);
+
+      // 3. Band-pass filter for cymbal body (7200 Hz, Q=2.5)
+      const bpFilter = ctx.createBiquadFilter();
+      bpFilter.type = "bandpass";
+      bpFilter.frequency.setValueAtTime(7200, now);
+      bpFilter.Q.setValueAtTime(2.5, now);
+
+      // 4. Sharp envelope: 1ms instantaneous attack, 240ms exponential decay
+      const gainNode = ctx.createGain();
+      gainNode.gain.setValueAtTime(volume * 0.85, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+
+      whiteNoise.connect(hpFilter);
+      hpFilter.connect(bpFilter);
+      bpFilter.connect(gainNode);
+      gainNode.connect(this.masterGain || ctx.destination);
+
+      // 5. Add metallic overtone pings (detuned square waves)
+      const freqs = [387, 541, 789, 1120];
+      freqs.forEach(freq => {
+        const osc = ctx.createOscillator();
+        osc.type = "square";
+        osc.frequency.setValueAtTime(freq, now);
+        const oscGain = ctx.createGain();
+        oscGain.gain.setValueAtTime(volume * 0.12, now);
+        oscGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.10);
+        osc.connect(oscGain);
+        oscGain.connect(hpFilter);
+        osc.start(now);
+        osc.stop(now + 0.12);
+      });
+
+      whiteNoise.start(now);
+      whiteNoise.stop(now + 0.26);
+    } catch {
+      // AudioContext may not yet be running
+    }
+  }
+
+  /**
    * Cancel all currently active audio voices immediately (e.g. on pause, stop, restart).
    */
   stopAllNotes(): void {

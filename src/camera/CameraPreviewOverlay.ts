@@ -33,17 +33,18 @@ export class CameraPreviewOverlay {
   private isCollapsed = false;
   private mirror: boolean;
   private onClose?: () => void;
-  private activeBeatFlashes: Array<{ x: number; y: number; startTime: number }> = [];
+  private activeBeatFlashes: Array<{ x: number; y: number; startTime: number; direction: "trough" | "apex" }> = [];
 
   constructor(options?: CameraPreviewOverlayOptions) {
     this.mirror = options?.mirror ?? true;
     this.onClose = options?.onClose;
   }
 
-  triggerBeatFlash(x: number, y: number): void {
-    this.activeBeatFlashes.push({ x, y, startTime: performance.now() });
+  triggerBeatFlash(x: number, y: number, direction: "trough" | "apex" = "trough"): void {
+    this.activeBeatFlashes.push({ x, y, startTime: performance.now(), direction });
     if (this.containerEl) {
-      this.containerEl.style.boxShadow = "0 16px 48px rgba(0, 0, 0, 0.85), 0 0 42px rgba(255, 213, 107, 0.65)";
+      const glowColor = direction === "apex" ? "rgba(107, 231, 255, 0.7)" : "rgba(255, 213, 107, 0.7)";
+      this.containerEl.style.boxShadow = `0 16px 48px rgba(0, 0, 0, 0.85), 0 0 42px ${glowColor}`;
       setTimeout(() => {
         if (this.containerEl) {
           this.containerEl.style.boxShadow = "";
@@ -276,19 +277,25 @@ export class CameraPreviewOverlay {
       const px = flash.x * width;
       const py = (1 - flash.y) * height; // Convert from conductor Y to canvas Y
 
+      const isApex = flash.direction === "apex";
+      const strokeColor = isApex
+        ? `rgba(107, 231, 255, ${rippleAlpha * 0.95})`
+        : `rgba(255, 213, 107, ${rippleAlpha * 0.95})`;
+      const glowColor = isApex ? "#6be7ff" : "#ffd56b";
+
       ctx.save();
       ctx.beginPath();
       ctx.arc(px, py, rippleRadius, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(255, 213, 107, ${rippleAlpha * 0.9})`;
+      ctx.strokeStyle = strokeColor;
       ctx.lineWidth = 3.5 * (1 - progress);
-      ctx.shadowColor = "#ffd56b";
+      ctx.shadowColor = glowColor;
       ctx.shadowBlur = 16 * (1 - progress);
       ctx.stroke();
 
       // Inner burst ring
       ctx.beginPath();
       ctx.arc(px, py, rippleRadius * 0.5, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(255, 255, 255, ${rippleAlpha * 0.8})`;
+      ctx.strokeStyle = `rgba(255, 255, 255, ${rippleAlpha * 0.85})`;
       ctx.lineWidth = 2 * (1 - progress);
       ctx.stroke();
       ctx.restore();

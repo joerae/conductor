@@ -1320,4 +1320,198 @@ body.debug-mode-active .section-debug-hud {
   font-weight: 600;
 }
 
+/* ── Horizontal BPM Speedometer Gauge ────────────────────────────────────────── */
+
+.bpm-gauge-container {
+  width: 100%;
+  max-width: 620px;
+  margin: 8px auto 12px;
+  background: rgba(14, 18, 28, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 213, 107, 0.18);
+  border-radius: 12px;
+  padding: 10px 16px 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bpm-gauge-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bpm-gauge-title {
+  font-family: var(--font-ui);
+  font-size: 0.70rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.bpm-gauge-legends {
+  display: flex;
+  gap: 14px;
+  font-size: 0.80rem;
+}
+
+.bpm-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+}
+
+.bpm-legend-item strong {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+}
+
+.bpm-legend-item.legend-indicated strong {
+  color: #ffd56b;
+}
+
+.bpm-legend-item.legend-orchestra strong {
+  color: #6be7ff;
+}
+
+.bpm-legend-item .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.bpm-legend-item .dot.gold {
+  background: #ffd56b;
+  box-shadow: 0 0 8px #ffd56b;
+}
+
+.bpm-legend-item .dot.cyan {
+  background: #6be7ff;
+  box-shadow: 0 0 8px #6be7ff;
+}
+
+.bpm-gauge-track-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bpm-gauge-track {
+  position: relative;
+  height: 22px;
+  background: linear-gradient(90deg, #102a45 0%, #17423c 25%, #4a401c 55%, #592e16 80%, #61131a 100%);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  overflow: visible;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+  margin-top: 10px;
+}
+
+.bpm-zone-bands {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  pointer-events: none;
+}
+
+.bpm-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.35);
+  border-right: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.bpm-zone:last-child {
+  border-right: none;
+}
+
+.bpm-needle {
+  position: absolute;
+  top: -6px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  z-index: 10;
+  transition: left 0.08s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.bpm-needle .needle-pip {
+  width: 10px;
+  height: 34px;
+  border-radius: 4px;
+  border: 2px solid #ffffff;
+  box-sizing: border-box;
+}
+
+.bpm-needle.orchestra-needle {
+  z-index: 8;
+}
+
+.bpm-needle.orchestra-needle .needle-pip {
+  background: #6be7ff;
+  border-color: #ffffff;
+  box-shadow: 0 0 12px #6be7ff, 0 0 24px rgba(107, 231, 255, 0.6);
+}
+
+.bpm-needle.indicated-needle {
+  z-index: 12;
+}
+
+.bpm-needle.indicated-needle .needle-pip {
+  background: #ffd56b;
+  border-color: #ffffff;
+  box-shadow: 0 0 14px #ffd56b, 0 0 28px rgba(255, 213, 107, 0.8);
+  width: 12px;
+}
+
+.bpm-needle .needle-label {
+  position: absolute;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.bpm-needle.orchestra-needle .needle-label {
+  color: #6be7ff;
+  bottom: -15px;
+}
+
+.bpm-needle.indicated-needle .needle-label {
+  color: #ffd56b;
+  top: -15px;
+}
+
+.bpm-gauge-ticks {
+  position: relative;
+  height: 14px;
+  margin-top: 14px;
+}
+
+.bpm-tick {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 8.5px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-muted);
+}
+
 

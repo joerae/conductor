@@ -100,7 +100,7 @@ export class ExperienceController {
     this.uiCallbacks = callbacks;
     this.audioEngine = new AudioEngine();
 
-    // Wire debug overlay with A/B DSP bypass control, pause toggle, macro ratio slider, and camera dynamics mode
+    // Wire debug overlay with A/B DSP bypass control, pause toggle, macro ratio slider, camera dynamics mode, and beat sound cue
     this.debug = new DebugOverlay(
       (flag: keyof DSPBypassFlags, enabled: boolean) => {
         this.audioEngine.setDSPBypassFlags({ [flag]: enabled });
@@ -115,6 +115,9 @@ export class ExperienceController {
       },
       (mode: "spread" | "height") => {
         this.setCameraDynamicsMode(mode);
+      },
+      (enabled: boolean) => {
+        this.setBeatSoundEnabled(enabled);
       }
     );
 
@@ -216,6 +219,10 @@ export class ExperienceController {
           if (this.inputSource === "camera") {
             this.setDynamicLevel(dyn.level);
           }
+        });
+        // Wire camera telemetry into debug overlay
+        this.cameraInput.onTelemetry(t => {
+          this.debug.updateCameraTelemetry(t);
         });
         // Wire camera beat observations into clock (Phases C1 & C2)
         this.cameraInput.onBeat(obs => this.handleBeatObservation(obs));
@@ -376,6 +383,22 @@ export class ExperienceController {
 
   // ── Beat observation handler ─────────────────────────────────────────────
 
+  private beatSoundEnabled = true;
+  private lastBeatObservationMs = -1;
+  private indicatedBpm = 0;
+
+  setBeatSoundEnabled(enabled: boolean): void {
+    this.beatSoundEnabled = enabled;
+  }
+
+  isBeatSoundEnabled(): boolean {
+    return this.beatSoundEnabled;
+  }
+
+  getIndicatedBpm(): number {
+    return this.indicatedBpm > 0 ? this.indicatedBpm : this.clock.getState().bpm;
+  }
+
   private async handleBeatObservation(obs: {
     timestampMs: number;
     source: "keyboard" | "camera";
@@ -383,6 +406,24 @@ export class ExperienceController {
   }): Promise<void> {
     // Resume AudioContext on first tap if suspended (requires user gesture)
     await this.audioEngine.resume();
+
+    // Compute indicated instantaneous BPM with light smoothing
+    const now = obs.timestampMs;
+    if (this.lastBeatObservationMs > 0) {
+      const dtMs = now - this.lastBeatObservationMs;
+      if (dtMs >= 100 && dtMs <= 2000) {
+        const instantBpm = 60000 / dtMs;
+        this.indicatedBpm = this.indicatedBpm > 0
+          ? this.indicatedBpm * 0.55 + instantBpm * 0.45
+          : instantBpm;
+      }
+    }
+    this.lastBeatObservationMs = now;
+
+    // If beat sound debug cue is active, play cymbal immediately with zero latency
+    if (this.beatSoundEnabled) {
+      this.audioEngine.playImmediateBeatCymbal();
+    }
 
     this.prepTapCount++;
 

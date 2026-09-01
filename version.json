@@ -1,9 +1,22 @@
 {
-  "version": "0.5.0",
+  "version": "0.6.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.6.0",
+      "date": "2026-09-01",
+      "summary": "Bidirectional Beat Detection (Bottom Trough & Top Apex), Default Instant Cymbal Cue, Camera Kinematics Log & Dual-Marker Horizontal BPM Speedometer",
+      "details": [
+        "Bidirectional Kinematic Beat Detection: Triggers crisp beats at BOTH bottom trough turnarounds (downbeat) AND top apex turnarounds (upbeat), enabling continuous 2-beats-per-cycle conducting like a real baton",
+        "Directional Color Ripples: Camera preview renders gold halo bursts for downbeats (bottom trough) and cyan halo bursts for upbeats (top apex)",
+        "Default Instant Cymbal Cue: Initialized 'Make Sound on Beat' to active on startup with instant zero-latency synthesized percussion cue",
+        "Real-Time Camera Kinematics & Beat Event Log: Live telemetry of hand elevation (Y), velocity (Vy), FSM motion state, and a rolling 6-beat history log in Debug Overlay (D key)",
+        "Horizontal BPM Speedometer Gauge: Rich glassmorphism gauge showing Conductor Indicated BPM (gold needle) vs Orchestra Playback BPM (cyan beacon) across musical tempo zones (Largo, Andante, Moderato, Allegro, Presto)",
+        "Zero-Lag Dispatch: Immediate synchronous candidate fusion and beat delivery to ConductorClock and AudioEngine"
+      ]
+    },
     {
       "version": "0.5.0",
       "date": "2026-09-01",

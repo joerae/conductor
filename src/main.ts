@@ -212,6 +212,7 @@ const controller = new ExperienceController({
   onBeat: () => {
     flashBeat();
     swingBaton();
+    updateBpmGaugeUI();
   },
   onDynamicChange: (level: DynamicLevel) => {
     updateDynamicLadderUI(level);
@@ -337,6 +338,41 @@ modeBtnA?.addEventListener("click", () => setMode("balanced"));
 modeBtnB?.addEventListener("click", () => setMode("instant"));
 modeBtnC?.addEventListener("click", () => setMode("autoplay"));
 modeBtnD?.addEventListener("click", () => setMode("inertial"));
+
+// ── Horizontal BPM Speedometer Gauge ──────────────────────────────────────────
+
+const markerOrchestra = document.getElementById("bpm-marker-orchestra") as HTMLElement;
+const markerIndicated = document.getElementById("bpm-marker-indicated") as HTMLElement;
+const valOrchestraBpm = document.getElementById("val-orchestra-bpm") as HTMLElement;
+const valIndicatedBpm = document.getElementById("val-indicated-bpm") as HTMLElement;
+
+function bpmToPercent(bpm: number): number {
+  const minBpm = 40;
+  const maxBpm = 220;
+  const clamped = Math.max(minBpm, Math.min(maxBpm, bpm));
+  return ((clamped - minBpm) / (maxBpm - minBpm)) * 100;
+}
+
+function updateBpmGaugeUI(): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const clockState = (controller as any).clock?.getState?.();
+  const orchestraBpm = clockState?.bpm || 0;
+  const indicatedBpm = controller.getIndicatedBpm() || orchestraBpm || 0;
+
+  if (orchestraBpm > 0) {
+    if (valOrchestraBpm) valOrchestraBpm.textContent = `${orchestraBpm.toFixed(0)} BPM`;
+    if (markerOrchestra) markerOrchestra.style.left = `${bpmToPercent(orchestraBpm)}%`;
+  } else {
+    if (valOrchestraBpm) valOrchestraBpm.textContent = `— BPM`;
+  }
+
+  if (indicatedBpm > 0) {
+    if (valIndicatedBpm) valIndicatedBpm.textContent = `${indicatedBpm.toFixed(0)} BPM`;
+    if (markerIndicated) markerIndicated.style.left = `${bpmToPercent(indicatedBpm)}%`;
+  } else {
+    if (valIndicatedBpm) valIndicatedBpm.textContent = `— BPM`;
+  }
+}
 
 // ── Orchestral Dynamics & Vertical Dynamic Ladder ───────────────────────────
 
@@ -573,6 +609,13 @@ loadRepertoireCatalog().then(() => {
   controller.load().then(() => {
     loadingEl.style.display = "none";
     stageEl.style.display = "flex";
+    
+    // Continuous smooth update loop for BPM gauge
+    function gaugeRenderLoop(): void {
+      updateBpmGaugeUI();
+      requestAnimationFrame(gaugeRenderLoop);
+    }
+    gaugeRenderLoop();
   }).catch(err => {
     loadingEl.innerHTML = `<p class="error">Failed to load: ${err.message}</p>`;
   });

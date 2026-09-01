@@ -82,8 +82,20 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     if (options?.onSamples) this.onSamples(options.onSamples);
     if (options?.onDynamics) this.onDynamics(options.onDynamics);
 
+    // Track last beat for telemetry
+    let lastBeatDetail: CameraTelemetry["lastBeat"] = undefined;
+
     // Wire Fused Beats to clock listeners & preview visual flash
     this.beatFusion.onFusedBeat((beat, details) => {
+      if (details) {
+        lastBeatDetail = {
+          timeMs: beat.timestampMs,
+          direction: details.direction || "trough",
+          handIndex: details.handIndex ?? 0,
+          amplitude: details.amplitude ?? 0,
+        };
+      }
+
       this.callbacks.forEach(cb => {
         try {
           cb(beat);
@@ -93,7 +105,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
       });
 
       if (details && this.previewOverlay) {
-        this.previewOverlay.triggerBeatFlash(details.x, details.y);
+        this.previewOverlay.triggerBeatFlash(details.x, details.y, details.direction || "trough");
       }
     });
 
@@ -116,6 +128,8 @@ export class CameraBeatInputProvider implements BeatInputProvider {
       const fullTelemetry: CameraTelemetry = {
         ...telemetry,
         dynamics: dynamicsObs,
+        beatDebug: this.beatDetector.getDebugSnapshot(),
+        lastBeat: lastBeatDetail,
       };
 
       this.currentTelemetry = fullTelemetry;

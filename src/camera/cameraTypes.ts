@@ -78,6 +78,22 @@ export interface CameraTelemetry {
   handsDetected: number;
   handDetails: HandTelemetryDetail[];
   dynamics?: DynamicsObservation;
+  beatDebug?: Array<{
+    handIndex: number;
+    direction: "DOWN" | "UP" | "IDLE";
+    currentY: number;
+    currentVy: number;
+    peakY: number;
+    troughY: number;
+    lastBeatType?: "trough" | "apex";
+    lastBeatTimeMs: number;
+  }>;
+  lastBeat?: {
+    timeMs: number;
+    direction: "trough" | "apex";
+    handIndex: number;
+    amplitude: number;
+  };
   errorMessage?: string;
 }
 

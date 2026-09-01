@@ -202,6 +202,46 @@
         </div>
       </div>
 
+      <!-- Horizontal BPM Speedometer Gauge -->
+      <div id="bpm-gauge-container" class="bpm-gauge-container" title="Tempo Speedometer: Shows your actively indicated conducting BPM vs the orchestra piece playback speed">
+        <div class="bpm-gauge-header">
+          <span class="bpm-gauge-title">TEMPO SPEEDOMETER</span>
+          <div class="bpm-gauge-legends">
+            <span class="bpm-legend-item legend-indicated"><span class="dot gold"></span> You: <strong id="val-indicated-bpm">— BPM</strong></span>
+            <span class="bpm-legend-item legend-orchestra"><span class="dot cyan"></span> Orchestra: <strong id="val-orchestra-bpm">— BPM</strong></span>
+          </div>
+        </div>
+        <div class="bpm-gauge-track-wrap">
+          <div class="bpm-gauge-track">
+            <div class="bpm-zone-bands">
+              <span class="bpm-zone" style="left: 0%; width: 22%;">Largo</span>
+              <span class="bpm-zone" style="left: 22%; width: 22%;">Andante</span>
+              <span class="bpm-zone" style="left: 44%; width: 22%;">Moderato</span>
+              <span class="bpm-zone" style="left: 66%; width: 18%;">Allegro</span>
+              <span class="bpm-zone" style="left: 84%; width: 16%;">Presto</span>
+            </div>
+            <!-- Orchestra Playback Needle (Cyan Beacon) -->
+            <div id="bpm-marker-orchestra" class="bpm-needle orchestra-needle" style="left: 50%;">
+              <div class="needle-pip"></div>
+              <div class="needle-label">Piece</div>
+            </div>
+            <!-- Conductor Indicated Needle (Gold Arrow) -->
+            <div id="bpm-marker-indicated" class="bpm-needle indicated-needle" style="left: 50%;">
+              <div class="needle-pip"></div>
+              <div class="needle-label">You</div>
+            </div>
+          </div>
+          <div class="bpm-gauge-ticks">
+            <span class="bpm-tick" style="left: 0%;">40</span>
+            <span class="bpm-tick" style="left: 22%;">75</span>
+            <span class="bpm-tick" style="left: 44%;">108</span>
+            <span class="bpm-tick" style="left: 66%;">140</span>
+            <span class="bpm-tick" style="left: 84%;">180</span>
+            <span class="bpm-tick" style="left: 100%;">220</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Prompt -->
       <div id="prompt-area">
         <p id="prompt">Tap SPACE twice to set the pulse.</p>

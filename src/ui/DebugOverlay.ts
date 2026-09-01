@@ -47,6 +47,7 @@ export class DebugOverlay {
   private onTogglePause?: () => void;
   private onMacroRatioChange?: (ratio: number) => void;
   private onCameraDynamicsModeChange?: (mode: "spread" | "height") => void;
+  private onBeatSoundToggle?: (enabled: boolean) => void;
 
   // Cached DOM elements for live text updates without innerHTML thrashing
   private elements: Record<string, HTMLElement> = {};
@@ -89,12 +90,14 @@ export class DebugOverlay {
     onDSPToggle?: (flag: keyof DSPBypassFlags, enabled: boolean) => void,
     onTogglePause?: () => void,
     onMacroRatioChange?: (ratio: number) => void,
-    onCameraDynamicsModeChange?: (mode: "spread" | "height") => void
+    onCameraDynamicsModeChange?: (mode: "spread" | "height") => void,
+    onBeatSoundToggle?: (enabled: boolean) => void
   ) {
     this.onDSPToggle = onDSPToggle;
     this.onTogglePause = onTogglePause;
     this.onMacroRatioChange = onMacroRatioChange;
     this.onCameraDynamicsModeChange = onCameraDynamicsModeChange;
+    this.onBeatSoundToggle = onBeatSoundToggle;
     this.container = this.createContainer();
     document.body.appendChild(this.container);
 
@@ -127,6 +130,10 @@ export class DebugOverlay {
       "decomp-final",
       "decomp-formula",
       "macro-ratio-val",
+      "cam-h0",
+      "cam-h1",
+      "cam-last-beat",
+      "cam-beat-log",
     ];
 
     keys.forEach((key) => {
@@ -153,6 +160,14 @@ export class DebugOverlay {
           this.onCameraDynamicsModeChange(radio.value as "spread" | "height");
         }
       });
+    });
+
+    // Wire up Audible Beat Cue (Instant Cymbal) toggle
+    const beatSoundCb = this.container.querySelector<HTMLInputElement>("#dbg-beat-sound-cb");
+    beatSoundCb?.addEventListener("change", () => {
+      if (this.onBeatSoundToggle) {
+        this.onBeatSoundToggle(beatSoundCb.checked);
+      }
     });
 
     // Pause button in header
@@ -249,6 +264,46 @@ export class DebugOverlay {
     if (slider && Math.abs(parseFloat(slider.value) - dynamics.macroRatio) > 0.01) {
       slider.value = String(dynamics.macroRatio);
       this.updateMacroLabel(dynamics.macroRatio);
+    }
+  }
+
+  private beatLogLines: string[] = [];
+  private lastLoggedBeatTime: number = 0;
+
+  updateCameraTelemetry(telemetry: import("../camera/cameraTypes").CameraTelemetry): void {
+    if (!this.elements["cam-h0"]) return;
+
+    if (telemetry.beatDebug && telemetry.beatDebug.length > 0) {
+      telemetry.beatDebug.forEach(h => {
+        const el = h.handIndex === 0 ? this.elements["cam-h0"] : this.elements["cam-h1"];
+        if (el) {
+          const arrow = h.direction === "DOWN" ? "⬇️ DOWN" : h.direction === "UP" ? "⬆️ UP" : "⏹ IDLE";
+          const vyColor = h.currentVy < 0 ? "#ff8888" : h.currentVy > 0 ? "#88ff88" : "#888";
+          el.innerHTML = `<strong>${arrow}</strong> | Y: ${h.currentY.toFixed(2)} | Vy: <span style="color:${vyColor}">${h.currentVy >= 0 ? "+" : ""}${h.currentVy.toFixed(2)}</span> | Pk: ${h.peakY.toFixed(2)} Tr: ${h.troughY.toFixed(2)}`;
+        }
+      });
+    }
+
+    if (telemetry.lastBeat && this.elements["cam-last-beat"]) {
+      const b = telemetry.lastBeat;
+      const typeLabel = b.direction === "apex" ? "⬆️ TOP APEX" : "⬇️ BOTTOM TROUGH";
+      const typeColor = b.direction === "apex" ? "#6be7ff" : "#ffd56b";
+      this.elements["cam-last-beat"].innerHTML = `<strong style="color:${typeColor}">${typeLabel}</strong> (H${b.handIndex}, ΔY: ${b.amplitude.toFixed(2)})`;
+    }
+
+    // Append to rolling log if new beat
+    if (telemetry.lastBeat && (!this.lastLoggedBeatTime || telemetry.lastBeat.timeMs > this.lastLoggedBeatTime)) {
+      this.lastLoggedBeatTime = telemetry.lastBeat.timeMs;
+      const b = telemetry.lastBeat;
+      const logEl = this.elements["cam-beat-log"];
+      if (logEl) {
+        const icon = b.direction === "apex" ? "⬆️ Apex" : "⬇️ Trough";
+        const timeSec = (b.timeMs / 1000).toFixed(2);
+        const line = `[${timeSec}s] Hand ${b.handIndex} ${icon} (ΔY: ${b.amplitude.toFixed(2)})`;
+        this.beatLogLines.unshift(line);
+        if (this.beatLogLines.length > 6) this.beatLogLines.pop();
+        logEl.innerHTML = this.beatLogLines.map(l => `<div>${l}</div>`).join("");
+      }
     }
   }
 
@@ -528,6 +583,58 @@ export class DebugOverlay {
           <input type="radio" name="dbg-camera-dyn-mode" value="height" style="accent-color:#ffd56b; margin-right:6px;">
           <span><strong>Vertical Hand Height</strong> (Raising / Lowering)</span>
         </label>
+      </div>
+
+      <!-- Camera & Beat Detection Auditory Tools -->
+      <div class="debug-section-header" style="margin-top: 10px;" title="Immediate auditory feedback when beats are triggered">BEAT AUDITORY DIAGNOSTICS</div>
+      <div style="
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 213, 107, 0.2);
+        margin-top: 4px;
+      ">
+        <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Play an instant orchestral crash cymbal cue the exact millisecond a beat is detected from the camera or keyboard">
+          <input type="checkbox" id="dbg-beat-sound-cb" checked style="accent-color:#ffd56b; margin-right:6px;">
+          <span><strong>🥁 Make Sound on Beat</strong> (Instant Cymbal Cue)</span>
+        </label>
+      </div>
+
+      <!-- Camera Kinematics & Beat Event Diagnostics -->
+      <div class="debug-section-header" style="margin-top: 10px;" title="Real-time motion tracking and ictus turnaround detection data from the webcam">CAMERA KINEMATICS & BEAT LOG</div>
+      <table class="debug-table">
+        <tr title="Hand 0 motion state, vertical position Y (0=low, 1=high), velocity Vy (units/sec), and turnaround extremas">
+          <td>Hand 0 (Right/Lead)</td>
+          <td id="dbg-cam-h0" style="color:#ffd56b; font-size:10px;">Waiting for camera…</td>
+        </tr>
+        <tr title="Hand 1 motion state, vertical position Y (0=low, 1=high), velocity Vy (units/sec), and turnaround extremas">
+          <td>Hand 1 (Left)</td>
+          <td id="dbg-cam-h1" style="color:#6be7ff; font-size:10px;">—</td>
+        </tr>
+        <tr title="Most recent detected beat event with timestamp, inflection type, and gesture amplitude">
+          <td>Last Beat Detected</td>
+          <td id="dbg-cam-last-beat">—</td>
+        </tr>
+      </table>
+
+      <!-- Rolling Beat Event Log -->
+      <div style="margin-top:6px;">
+        <div style="font-size:10px; color:#888; margin-bottom:3px;">Recent Beat Inflections Log:</div>
+        <div id="dbg-cam-beat-log" style="
+          background: rgba(0,0,0,0.5);
+          border: 1px solid rgba(255,213,107,0.2);
+          border-radius: 4px;
+          padding: 5px 7px;
+          font-size: 9.5px;
+          max-height: 80px;
+          overflow-y: auto;
+          font-family: monospace;
+          color: #ddd;
+          line-height: 1.4;
+        ">No beats detected yet. Move hand in front of camera.</div>
       </div>
 
       <!-- Clock & Transport Telemetry -->
