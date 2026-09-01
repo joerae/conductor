@@ -32,11 +32,13 @@ function createMockSample(options: {
   conductorY?: number;
 }): HandSample {
   const landmarks: HandLandmark[] = new Array(21).fill(null).map(() => ({ x: 0.5, y: 0.8, z: 0 }));
-  landmarks[HAND_LANDMARK_INDICES.WRIST] = { x: 0.5, y: 0.8, z: 0 };
-  landmarks[HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP] = { x: 0.5, y: 0.6, z: 0 }; // scale = 0.20
-
   const indexTip = options.indexTip ?? { x: 0.5, y: 0.3 };
-  const thumbTip = options.thumbTip ?? { x: 0.45, y: 0.45 }; // default open
+  const thumbTip = options.thumbTip ?? { x: indexTip.x - 0.05, y: indexTip.y + 0.15 }; // default open
+
+  landmarks[HAND_LANDMARK_INDICES.WRIST] = { x: indexTip.x, y: Math.min(1.0, indexTip.y + 0.50), z: 0 };
+  landmarks[HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP] = { x: indexTip.x, y: indexTip.y + 0.30, z: 0 };
+  landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP] = { x: indexTip.x, y: indexTip.y + 0.30, z: 0 };
+  landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] = { x: indexTip.x, y: indexTip.y + 0.15, z: 0 };
 
   landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP] = { ...indexTip, z: 0 };
   landmarks[HAND_LANDMARK_INDICES.THUMB_TIP] = { ...thumbTip, z: 0 };

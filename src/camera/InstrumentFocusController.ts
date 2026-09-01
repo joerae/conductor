@@ -147,12 +147,50 @@ export class InstrumentFocusController {
       return this.getTelemetry();
     }
 
+    // Helper to verify strictly vertical "Finger Up" orientation when entering focus mode
+    const isStrictlyVerticalPointingUp = (sample: HandSample): boolean => {
+      const tip = sample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP];
+      const pip = sample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP];
+      const mcp = sample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
+      const wrist = sample.landmarks[HAND_LANDMARK_INDICES.WRIST];
+      const middleMcp = sample.landmarks[HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP];
+
+      if (!tip || !pip || !mcp || !wrist || !middleMcp) return true;
+
+      // 1. Index finger itself must point strictly vertical upwards (<22 deg from vertical)
+      const fingerDy = pip.y - tip.y; // Positive if tip is above pip in image space
+      const fingerDx = Math.abs(tip.x - pip.x);
+      if (fingerDy < 0.030 || fingerDx > fingerDy * 0.38) {
+        return false;
+      }
+
+      // 2. Entire hand / palm axis (wrist -> middle knuckle) must be held vertically upright
+      const palmDy = wrist.y - middleMcp.y; // Positive if knuckles are above wrist
+      const palmDx = Math.abs(middleMcp.x - wrist.x);
+      if (palmDy < 0.035 || palmDx > palmDy * 0.42) {
+        return false;
+      }
+
+      return true;
+    };
+
     // 1. Find candidate pointing hand
     let pointingSample: HandSample | null = null;
-    for (const s of samples) {
-      if (s.gesture === "Pointing_Up") {
-        pointingSample = s;
-        break;
+    if (this.isActive) {
+      // Once spotlight mode is active, allow sweeping across any angle
+      for (const s of samples) {
+        if (s.gesture === "Pointing_Up") {
+          pointingSample = s;
+          break;
+        }
+      }
+    } else {
+      // Entering spotlight mode requires intentional strictly vertical "Finger Up" gesture
+      for (const s of samples) {
+        if (s.gesture === "Pointing_Up" && isStrictlyVerticalPointingUp(s)) {
+          pointingSample = s;
+          break;
+        }
       }
     }
 
@@ -162,7 +200,7 @@ export class InstrumentFocusController {
         if (this.pointingStartTime === 0) {
           this.pointingStartTime = now;
         } else if (now - this.pointingStartTime >= this.ENTER_HOLD_MS) {
-          // Stable pointing held -> enter Spotlight Focus Mode
+          // Stable strictly vertical pointing held -> enter Spotlight Focus Mode
           this.isActive = true;
           this.state = "hovering";
           this.lastActiveInteractionTime = now;
@@ -241,7 +279,8 @@ export class InstrumentFocusController {
   }
 
   /**
-   * Casts a ray from the pointing fingertip in the direction of the finger and detects section intersection.
+   * Casts a ray from the pointing fingertip in the direction of the finger and detects section intersection
+   * along the bottom baseline of the egg-shaped instrument containers.
    */
   private findClosestSection(
     screenX: number,
@@ -255,6 +294,52 @@ export class InstrumentFocusController {
     // Calculate pointing ray direction from PIP/MCP to TIP
     const pip = sample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] || sample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
 
+    // If DOM is available, test collision directly along the bottom baseline of the instrument containers
+    if (typeof document !== "undefined") {
+      const canvasEl = document.getElementById("camera-canvas");
+      if (canvasEl) {
+        const canvasRect = canvasEl.getBoundingClientRect();
+        const tipScreenX = canvasRect.left + screenX * canvasRect.width;
+        const tipScreenY = canvasRect.top + screenY * canvasRect.height;
+
+        let pipScreenX = tipScreenX;
+        let pipScreenY = tipScreenY + 20;
+        if (pip) {
+          const pipNormX = mirror ? (1.0 - pip.x) : pip.x;
+          pipScreenX = canvasRect.left + pipNormX * canvasRect.width;
+          pipScreenY = canvasRect.top + pip.y * canvasRect.height;
+        }
+
+        const dirX = tipScreenX - pipScreenX;
+        const dirY = tipScreenY - pipScreenY;
+
+        if (dirY < -2) {
+          const firstSecEl = document.getElementById(`section-${sections[0].id}`) || document.querySelector(".instrument-section");
+          if (firstSecEl) {
+            const firstRect = firstSecEl.getBoundingClientRect();
+            // Baseline along the bottom of the egg containers
+            const targetBaselineY = firstRect.top + firstRect.height * 0.78;
+
+            const t = (tipScreenY - targetBaselineY) / (-dirY);
+            const hitScreenX = tipScreenX + dirX * t;
+
+            for (const sec of sections) {
+              const secEl = document.getElementById(`section-${sec.id}`);
+              if (secEl) {
+                const secRect = secEl.getBoundingClientRect();
+                const pad = secRect.width * 0.12;
+                if (hitScreenX >= secRect.left - pad && hitScreenX <= secRect.right + pad) {
+                  return sec.id;
+                }
+              }
+            }
+            return null;
+          }
+        }
+      }
+    }
+
+    // Fallback for headless environments or unit tests
     let projectedX = screenX;
     if (pip) {
       const pipX = mirror ? (1.0 - pip.x) : pip.x;
@@ -263,7 +348,6 @@ export class InstrumentFocusController {
       const dirY = screenY - pipY;
       const len = Math.hypot(dirX, dirY);
       if (len > 0.001 && dirY < -0.01) {
-        // Project ray to the orchestra row (Y = 0.0)
         const t = screenY / (-dirY);
         projectedX = screenX + dirX * t;
       }

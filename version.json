@@ -1,9 +1,27 @@
 {
-  "version": "0.22.0",
+  "version": "0.24.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.24.0",
+      "date": "2026-09-02",
+      "summary": "Strict Vertical Entry Gate & Wide Active Spotlight Sweep",
+      "details": [
+        "Strict Vertical Entry Gate: Requiring an intentional, strictly vertical 'Finger Straight Up' gesture (<20° tilt) to trigger Spotlight Focus Mode, preventing false triggers during diagonal conducting and volume shaping",
+        "Wide Active Spotlight Sweep: Once Spotlight Mode is active, conductors can freely angle and sweep their finger across wide angles (up to 55°+) to effortlessly reach any instrument section across the stage"
+      ]
+    },
+    {
+      "version": "0.23.0",
+      "date": "2026-09-02",
+      "summary": "Egg Baseline Targeting: Ergonomic Cross-Stage Reach & Lower Collision Plane",
+      "details": [
+        "Lower Collision Baseline: Shifted the ray intersection plane from the high mid-body down to the bottom baseline of the instrument egg containers (along the section labels), making cross-stage diagonal pointing effortless",
+        "Direct DOM Ray Intersection: Unified collision detection with actual DOM section bounding boxes along the bottom baseline, eliminating parallax and accurately selecting neighboring instruments like Violas and Cellos"
+      ]
+    },
     {
       "version": "0.22.0",
       "date": "2026-09-02",

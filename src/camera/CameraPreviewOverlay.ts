@@ -426,11 +426,17 @@ export class CameraPreviewOverlay {
           const unitX = dirX / len;
           const unitY = dirY / len;
 
-          // Pure straight ray projecting freely across the stage in the exact direction of pointing finger
-          const targetRowY = 60;
-          const rayDist = unitY < -0.05 ? ((stageStartY - targetRowY) / -unitY) : 340;
+          // Pure straight ray projecting freely across the stage directly to the bottom baseline of the instrument eggs
+          let targetBaselineY = 100;
+          const firstSecEl = document.getElementById("section-0") || document.querySelector(".instrument-section");
+          if (firstSecEl) {
+            const firstRect = firstSecEl.getBoundingClientRect();
+            targetBaselineY = (firstRect.top - svgRect.top) + firstRect.height * 0.78;
+          }
+
+          const rayDist = unitY < -0.02 ? ((stageStartY - targetBaselineY) / -unitY) : 320;
           const stageEndX = stageStartX + unitX * rayDist;
-          const stageEndY = Math.max(15, stageStartY + unitY * rayDist);
+          const stageEndY = stageStartY + unitY * rayDist;
 
           const activeSecId = focusTelemetry.grabbedSectionId || focusTelemetry.hoveredSectionId;
 
