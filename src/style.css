@@ -372,36 +372,7 @@ html, body {
   box-shadow: 0 8px 28px rgba(201, 168, 76, 0.18);
 }
 
-/* Position Dynamic Ladder immediately to the right of the Camera Preview in Camera Mode */
-#stage.camera-mode-active .dynamic-ladder-container {
-  position: fixed;
-  top: 20px;
-  left: 676px;
-  z-index: 95;
-  background: rgba(10, 14, 22, 0.94);
-  border: 1px solid rgba(255, 213, 107, 0.4);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85), 0 0 28px rgba(255, 213, 107, 0.20);
-  animation: cameraLadderSlide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-}
 
-@keyframes cameraLadderSlide {
-  from {
-    opacity: 0;
-    transform: translateX(-12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@media (max-width: 1240px) {
-  #stage.camera-mode-active .dynamic-ladder-container {
-    left: auto;
-    right: 20px;
-    top: 20px;
-  }
-}
 
 .dynamic-ladder-header {
   display: flex;
@@ -1102,20 +1073,93 @@ body.debug-mode-active .section-debug-hud {
   margin-bottom: 0;
 }
 
-/* ── Floating Conductor Camera Preview Overlay ───────────────────────────── */
+/* ── Layout Redesign: Hero Camera Center, BPM Gauge Below, Dynamics Right ── */
+.stage-performance-area {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 20px;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.stage-center-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  width: 100%;
+  max-width: 740px;
+  gap: 12px;
+}
+
+.camera-hero-slot {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.camera-hero-slot .camera-preview-overlay {
+  position: relative;
+  top: 0;
+  left: 0;
+  width: 100%;
+  max-width: 720px;
+  margin: 0;
+  z-index: 20;
+}
+
+/* Continuous Analogue Dynamics Track next to discrete ladder buttons */
+.dynamic-ladder-wrap {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+  position: relative;
+}
+
+.dynamic-analogue-track {
+  position: relative;
+  width: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  overflow: visible;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.dynamic-analogue-marker {
+  position: absolute;
+  left: -4px;
+  transform: translateY(50%);
+  display: flex;
+  align-items: center;
+  z-index: 10;
+  transition: bottom 0.08s cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+
+.dynamic-analogue-marker .analogue-pip {
+  font-size: 11px;
+  color: #ffd56b;
+  text-shadow: 0 0 8px #ffd56b, 0 0 16px rgba(255, 213, 107, 0.8);
+  font-weight: bold;
+}
+
+/* ── Conductor Camera Preview Overlay ───────────────────────────── */
 .camera-preview-overlay {
-  position: fixed;
-  top: 20px;
-  left: 20px;
-  width: 640px;
-  max-width: min(640px, 48vw);
+  position: relative;
+  width: 100%;
+  max-width: 720px;
   background: rgba(10, 14, 22, 0.92);
   border: 1px solid rgba(255, 213, 107, 0.35);
   border-radius: 14px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85), 0 0 28px rgba(255, 213, 107, 0.15);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  z-index: 90;
+  z-index: 20;
   overflow: hidden;
   user-select: none;
   font-family: var(--font-ui);

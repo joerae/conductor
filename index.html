@@ -25,137 +25,6 @@
       <!-- Beat flash overlay -->
       <div id="beat-flash"></div>
 
-      <!-- Stage Center Area: Orchestra Silhouette + Vertical Dynamic Ladder -->
-      <div class="stage-performance-area">
-        <!-- Orchestra silhouette with instrument sections -->
-        <div id="orchestra-silhouette" aria-hidden="true">
-          <svg viewBox="0 0 840 230" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
-            <defs>
-              <filter id="glow-gold" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-              <radialGradient id="egg-glow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="#ffd56b" stop-opacity="1" />
-                <stop offset="60%" stop-color="#c9a84c" stop-opacity="0.8" />
-                <stop offset="100%" stop-color="#2a2e3a" stop-opacity="0.2" />
-              </radialGradient>
-            </defs>
-
-            <!-- Section 1: Violin I (Left) -->
-            <g id="section-0" class="instrument-section" data-track="0" data-track-name="Violin I">
-              <g class="section-debug-hud">
-                <rect x="75" y="32" width="160" height="52" rx="6" class="debug-vel-pill" />
-                <text x="155" y="49" text-anchor="middle" class="debug-vel-main">v: —</text>
-                <text x="155" y="63" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
-                <text x="155" y="75" text-anchor="middle" class="debug-vel-history">History: —</text>
-              </g>
-              <ellipse cx="108" cy="155" rx="22" ry="32" class="musician violin1 egg-0" />
-              <ellipse cx="155" cy="146" rx="25" ry="36" class="musician violin1 egg-1" />
-              <ellipse cx="202" cy="155" rx="22" ry="32" class="musician violin1 egg-2" />
-              <text x="155" y="202" text-anchor="middle" class="section-label">Violin I</text>
-            </g>
-
-            <!-- Section 2: Violin II (Center-Left) -->
-            <g id="section-1" class="instrument-section" data-track="1" data-track-name="Violin II">
-              <g class="section-debug-hud">
-                <rect x="235" y="32" width="160" height="52" rx="6" class="debug-vel-pill" />
-                <text x="315" y="49" text-anchor="middle" class="debug-vel-main">v: —</text>
-                <text x="315" y="63" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
-                <text x="315" y="75" text-anchor="middle" class="debug-vel-history">History: —</text>
-              </g>
-              <ellipse cx="268" cy="148" rx="22" ry="32" class="musician violin2 egg-0" />
-              <ellipse cx="315" cy="140" rx="25" ry="36" class="musician violin2 egg-1" />
-              <ellipse cx="362" cy="148" rx="22" ry="32" class="musician violin2 egg-2" />
-              <text x="315" y="202" text-anchor="middle" class="section-label">Violin II</text>
-            </g>
-
-            <!-- Conductor podium & Baton (Center) -->
-            <g id="conductor-group" class="conductor-group">
-              <rect x="410" y="65" width="60" height="10" rx="5" class="podium" />
-              <ellipse cx="440" cy="50" rx="19" ry="24" class="conductor" />
-              <line id="baton-line" x1="450" y1="42" x2="495" y2="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="baton" />
-            </g>
-
-            <!-- Section 3: Viola (Center-Right) -->
-            <g id="section-2" class="instrument-section" data-track="2" data-track-name="Viola">
-              <g class="section-debug-hud">
-                <rect x="445" y="32" width="160" height="52" rx="6" class="debug-vel-pill" />
-                <text x="525" y="49" text-anchor="middle" class="debug-vel-main">v: —</text>
-                <text x="525" y="63" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
-                <text x="525" y="75" text-anchor="middle" class="debug-vel-history">History: —</text>
-              </g>
-              <ellipse cx="478" cy="148" rx="22" ry="32" class="musician viola egg-0" />
-              <ellipse cx="525" cy="140" rx="25" ry="36" class="musician viola egg-1" />
-              <ellipse cx="572" cy="148" rx="22" ry="32" class="musician viola egg-2" />
-              <text x="525" y="202" text-anchor="middle" class="section-label">Viola</text>
-            </g>
-
-            <!-- Section 4: Violoncello & Bass (Right) -->
-            <g id="section-3" class="instrument-section" data-track="3" data-track-name="Violoncello">
-              <g class="section-debug-hud">
-                <rect x="605" y="32" width="160" height="52" rx="6" class="debug-vel-pill" />
-                <text x="685" y="49" text-anchor="middle" class="debug-vel-main">v: —</text>
-                <text x="685" y="63" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
-                <text x="685" y="75" text-anchor="middle" class="debug-vel-history">History: —</text>
-              </g>
-              <ellipse cx="638" cy="155" rx="22" ry="32" class="musician cello egg-0" />
-              <ellipse cx="685" cy="146" rx="25" ry="36" class="musician cello egg-1" />
-              <ellipse cx="732" cy="155" rx="22" ry="32" class="musician cello egg-2" />
-              <text x="685" y="202" text-anchor="middle" class="section-label">Cello / Bass</text>
-            </g>
-
-            <!-- Stage floor -->
-            <rect x="20" y="210" width="800" height="4" rx="2" class="stage-floor" />
-          </svg>
-        </div>
-
-        <!-- Vertical Orchestral Dynamic Ladder -->
-        <aside id="dynamic-ladder-container" class="dynamic-ladder-container" title="Orchestral Dynamics: Use ↑/↓ arrows, mouse wheel, or click to shape dynamic expression">
-          <div class="dynamic-ladder-header">
-            <span class="dynamic-icon">𝄢</span>
-            <span class="dynamic-title">Dynamics</span>
-          </div>
-          <div class="dynamic-ladder" id="dynamic-ladder" role="group" aria-label="Orchestral dynamic levels">
-            <button class="dynamic-step" data-dynamic="fff" title="Fortississimo (Overburn ⚡)">
-              <span class="dynamic-symbol">fff</span>
-              <span class="dynamic-sparkle">⚡</span>
-              <span class="accent-badge-icon">&gt;</span>
-            </button>
-            <button class="dynamic-step" data-dynamic="ff" title="Fortissimo (Very Loud)">
-              <span class="dynamic-symbol">ff</span>
-              <span class="accent-badge-icon">&gt;</span>
-            </button>
-            <button class="dynamic-step" data-dynamic="f" title="Forte (Loud)">
-              <span class="dynamic-symbol">f</span>
-              <span class="accent-badge-icon">&gt;</span>
-            </button>
-            <button class="dynamic-step active" data-dynamic="mf" title="Mezzo-forte (Default)">
-              <span class="dynamic-symbol">mf</span>
-              <span class="accent-badge-icon">&gt;</span>
-            </button>
-            <button class="dynamic-step" data-dynamic="mp" title="Mezzo-piano (Moderately soft)">
-              <span class="dynamic-symbol">mp</span>
-              <span class="accent-badge-icon">&gt;</span>
-            </button>
-            <button class="dynamic-step" data-dynamic="p" title="Piano (Soft)">
-              <span class="dynamic-symbol">p</span>
-              <span class="accent-badge-icon">&gt;</span>
-            </button>
-            <button class="dynamic-step" data-dynamic="pp" title="Pianissimo (Very soft)">
-              <span class="dynamic-symbol">pp</span>
-              <span class="accent-badge-icon">&gt;</span>
-            </button>
-          </div>
-          <div class="dynamic-ladder-hint">
-            <span>↑↓ Dyn • → Accent (&gt;)</span>
-          </div>
-        </aside>
-      </div>
-
       <!-- Piece info & Repertoire button -->
       <div id="piece-info">
         <div class="piece-title-row">
@@ -164,7 +33,194 @@
             🎵 Repertoire
           </button>
         </div>
-        <p id="piece-subtitle">W.A. Mozart</p>
+        <p id="piece-subtitle">W.A. Mozart — I. Allegro • In 4 (1 tap = 1 beat)</p>
+      </div>
+
+      <!-- Stage Performance Area: Hero Camera View + BPM Gauge + Orchestra + Dynamics Ladder -->
+      <div class="stage-performance-area" id="stage-main-area">
+        <!-- Center Column: Hero Picture + BPM Speedometer + Musician Silhouette -->
+        <div id="stage-center-column" class="stage-center-column">
+          <!-- Hero Camera Container (Big Picture of Person in Middle of Screen) -->
+          <div id="camera-hero-slot" class="camera-hero-slot"></div>
+
+          <!-- Horizontal BPM Speedometer Gauge (Below the Picture) -->
+          <div id="bpm-gauge-container" class="bpm-gauge-container" title="Tempo Speedometer: Shows your actively indicated conducting BPM vs the orchestra piece playback speed">
+            <div class="bpm-gauge-header">
+              <span class="bpm-gauge-title">TEMPO SPEEDOMETER</span>
+              <div class="bpm-gauge-legends">
+                <span class="bpm-legend-item legend-indicated"><span class="dot gold"></span> You: <strong id="val-indicated-bpm">— BPM</strong></span>
+                <span class="bpm-legend-item legend-orchestra"><span class="dot cyan"></span> Orchestra: <strong id="val-orchestra-bpm">— BPM</strong></span>
+              </div>
+            </div>
+            <div class="bpm-gauge-track-wrap">
+              <div class="bpm-gauge-track">
+                <!-- Green target zone band (±20 BPM around intended piece BPM) — shown in Mode E -->
+                <div id="bpm-green-zone" class="bpm-green-zone" style="display:none;"></div>
+                <div class="bpm-zone-bands">
+                  <span class="bpm-zone" style="left: 0%; width: 22%;">Largo</span>
+                  <span class="bpm-zone" style="left: 22%; width: 22%;">Andante</span>
+                  <span class="bpm-zone" style="left: 44%; width: 22%;">Moderato</span>
+                  <span class="bpm-zone" style="left: 66%; width: 18%;">Allegro</span>
+                  <span class="bpm-zone" style="left: 84%; width: 16%;">Presto</span>
+                </div>
+                <!-- Orchestra Playback Needle (Cyan Beacon) -->
+                <div id="bpm-marker-orchestra" class="bpm-needle orchestra-needle" style="left: 50%;">
+                  <div class="needle-pip"></div>
+                  <div class="needle-label">Piece</div>
+                </div>
+                <!-- Conductor Indicated Needle (Gold Arrow) -->
+                <div id="bpm-marker-indicated" class="bpm-needle indicated-needle" style="left: 50%;">
+                  <div class="needle-pip"></div>
+                  <div class="needle-label">You</div>
+                </div>
+              </div>
+              <div class="bpm-gauge-ticks">
+                <span class="bpm-tick" style="left: 0%;">40</span>
+                <span class="bpm-tick" style="left: 22%;">75</span>
+                <span class="bpm-tick" style="left: 44%;">108</span>
+                <span class="bpm-tick" style="left: 66%;">140</span>
+                <span class="bpm-tick" style="left: 84%;">180</span>
+                <span class="bpm-tick" style="left: 100%;">220</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Orchestra silhouette with instrument sections -->
+          <div id="orchestra-silhouette" aria-hidden="true">
+            <svg viewBox="0 0 840 230" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <filter id="glow-gold" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+                <radialGradient id="egg-glow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#ffd56b" stop-opacity="1" />
+                  <stop offset="60%" stop-color="#c9a84c" stop-opacity="0.8" />
+                  <stop offset="100%" stop-color="#2a2e3a" stop-opacity="0.2" />
+                </radialGradient>
+              </defs>
+
+              <!-- Section 1: Violin I (Left) -->
+              <g id="section-0" class="instrument-section" data-track="0" data-track-name="Violin I">
+                <g class="section-debug-hud">
+                  <rect x="75" y="32" width="160" height="52" rx="6" class="debug-vel-pill" />
+                  <text x="155" y="49" text-anchor="middle" class="debug-vel-main">v: —</text>
+                  <text x="155" y="63" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
+                  <text x="155" y="75" text-anchor="middle" class="debug-vel-history">History: —</text>
+                </g>
+                <ellipse cx="108" cy="155" rx="22" ry="32" class="musician violin1 egg-0" />
+                <ellipse cx="155" cy="146" rx="25" ry="36" class="musician violin1 egg-1" />
+                <ellipse cx="202" cy="155" rx="22" ry="32" class="musician violin1 egg-2" />
+                <text x="155" y="202" text-anchor="middle" class="section-label">Violin I</text>
+              </g>
+
+              <!-- Section 2: Violin II (Center-Left) -->
+              <g id="section-1" class="instrument-section" data-track="1" data-track-name="Violin II">
+                <g class="section-debug-hud">
+                  <rect x="235" y="32" width="160" height="52" rx="6" class="debug-vel-pill" />
+                  <text x="315" y="49" text-anchor="middle" class="debug-vel-main">v: —</text>
+                  <text x="315" y="63" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
+                  <text x="315" y="75" text-anchor="middle" class="debug-vel-history">History: —</text>
+                </g>
+                <ellipse cx="268" cy="148" rx="22" ry="32" class="musician violin2 egg-0" />
+                <ellipse cx="315" cy="140" rx="25" ry="36" class="musician violin2 egg-1" />
+                <ellipse cx="362" cy="148" rx="22" ry="32" class="musician violin2 egg-2" />
+                <text x="315" y="202" text-anchor="middle" class="section-label">Violin II</text>
+              </g>
+
+              <!-- Conductor podium & Baton (Center) -->
+              <g id="conductor-group" class="conductor-group">
+                <rect x="410" y="65" width="60" height="10" rx="5" class="podium" />
+                <ellipse cx="440" cy="50" rx="19" ry="24" class="conductor" />
+                <line id="baton-line" x1="450" y1="42" x2="495" y2="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="baton" />
+              </g>
+
+              <!-- Section 3: Viola (Center-Right) -->
+              <g id="section-2" class="instrument-section" data-track="2" data-track-name="Viola">
+                <g class="section-debug-hud">
+                  <rect x="445" y="32" width="160" height="52" rx="6" class="debug-vel-pill" />
+                  <text x="525" y="49" text-anchor="middle" class="debug-vel-main">v: —</text>
+                  <text x="525" y="63" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
+                  <text x="525" y="75" text-anchor="middle" class="debug-vel-history">History: —</text>
+                </g>
+                <ellipse cx="478" cy="148" rx="22" ry="32" class="musician viola egg-0" />
+                <ellipse cx="525" cy="140" rx="25" ry="36" class="musician viola egg-1" />
+                <ellipse cx="572" cy="148" rx="22" ry="32" class="musician viola egg-2" />
+                <text x="525" y="202" text-anchor="middle" class="section-label">Viola</text>
+              </g>
+
+              <!-- Section 4: Violoncello & Bass (Right) -->
+              <g id="section-3" class="instrument-section" data-track="3" data-track-name="Violoncello">
+                <g class="section-debug-hud">
+                  <rect x="605" y="32" width="160" height="52" rx="6" class="debug-vel-pill" />
+                  <text x="685" y="49" text-anchor="middle" class="debug-vel-main">v: —</text>
+                  <text x="685" y="63" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
+                  <text x="685" y="75" text-anchor="middle" class="debug-vel-history">History: —</text>
+                </g>
+                <ellipse cx="638" cy="155" rx="22" ry="32" class="musician cello egg-0" />
+                <ellipse cx="685" cy="146" rx="25" ry="36" class="musician cello egg-1" />
+                <ellipse cx="732" cy="155" rx="22" ry="32" class="musician cello egg-2" />
+                <text x="685" y="202" text-anchor="middle" class="section-label">Cello / Bass</text>
+              </g>
+
+              <!-- Stage floor -->
+              <rect x="20" y="210" width="800" height="4" rx="2" class="stage-floor" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Vertical Orchestral Dynamic Ladder (To the Right of the picture) -->
+        <aside id="dynamic-ladder-container" class="dynamic-ladder-container" title="Orchestral Dynamics: Use ↑/↓ arrows, mouse wheel, or click to shape dynamic expression">
+          <div class="dynamic-ladder-header">
+            <span class="dynamic-icon">𝄢</span>
+            <span class="dynamic-title">Dynamics</span>
+          </div>
+          <div class="dynamic-ladder-wrap">
+            <div class="dynamic-ladder" id="dynamic-ladder" role="group" aria-label="Orchestral dynamic levels">
+              <button class="dynamic-step" data-dynamic="fff" title="Fortississimo (Overburn ⚡)">
+                <span class="dynamic-symbol">fff</span>
+                <span class="dynamic-sparkle">⚡</span>
+                <span class="accent-badge-icon">&gt;</span>
+              </button>
+              <button class="dynamic-step" data-dynamic="ff" title="Fortissimo (Very Loud)">
+                <span class="dynamic-symbol">ff</span>
+                <span class="accent-badge-icon">&gt;</span>
+              </button>
+              <button class="dynamic-step" data-dynamic="f" title="Forte (Loud)">
+                <span class="dynamic-symbol">f</span>
+                <span class="accent-badge-icon">&gt;</span>
+              </button>
+              <button class="dynamic-step active" data-dynamic="mf" title="Mezzo-forte (Default)">
+                <span class="dynamic-symbol">mf</span>
+                <span class="accent-badge-icon">&gt;</span>
+              </button>
+              <button class="dynamic-step" data-dynamic="mp" title="Mezzo-piano (Moderately soft)">
+                <span class="dynamic-symbol">mp</span>
+                <span class="accent-badge-icon">&gt;</span>
+              </button>
+              <button class="dynamic-step" data-dynamic="p" title="Piano (Soft)">
+                <span class="dynamic-symbol">p</span>
+                <span class="accent-badge-icon">&gt;</span>
+              </button>
+              <button class="dynamic-step" data-dynamic="pp" title="Pianissimo (Very soft)">
+                <span class="dynamic-symbol">pp</span>
+                <span class="accent-badge-icon">&gt;</span>
+              </button>
+            </div>
+            <!-- Continuous Analogue Dynamics Track & Marker Indicator -->
+            <div id="dynamic-analogue-track" class="dynamic-analogue-track" title="Continuous Interpolated Dynamic Level (Analogue hand separation)">
+              <div id="dynamic-analogue-marker" class="dynamic-analogue-marker" style="bottom: 50%;">
+                <div class="analogue-pip">◀</div>
+              </div>
+            </div>
+          </div>
+          <div class="dynamic-ladder-hint">
+            <span>↑↓ Dyn • → Accent (&gt;)</span>
+          </div>
+        </aside>
       </div>
 
       <!-- Control Bars: Input Source & Tempo Mode Switcher -->
@@ -172,10 +228,10 @@
         <div id="input-source-selector" class="mode-selector-container">
           <span class="mode-label">Input:</span>
           <div class="mode-pill-group">
-            <button id="input-btn-keyboard" class="mode-pill active" data-input-source="keyboard" title="Keyboard mode: Tap SPACE bar to conduct">
+            <button id="input-btn-keyboard" class="mode-pill" data-input-source="keyboard" title="Keyboard mode: Tap SPACE bar to conduct">
               ⌨️ Space Bar
             </button>
-            <button id="input-btn-camera" class="mode-pill" data-input-source="camera" title="Camera mode: Conduct with hand gestures in front of webcam">
+            <button id="input-btn-camera" class="mode-pill active" data-input-source="camera" title="Camera mode: Conduct with hand gestures in front of webcam">
               📷 Camera
             </button>
           </div>
@@ -202,48 +258,6 @@
             </button>
           </div>
           <span class="mode-shortcut-hint">Press <strong>T</strong> to cycle (or <strong>1–5</strong>)</span>
-        </div>
-      </div>
-
-      <!-- Horizontal BPM Speedometer Gauge -->
-      <div id="bpm-gauge-container" class="bpm-gauge-container" title="Tempo Speedometer: Shows your actively indicated conducting BPM vs the orchestra piece playback speed">
-        <div class="bpm-gauge-header">
-          <span class="bpm-gauge-title">TEMPO SPEEDOMETER</span>
-          <div class="bpm-gauge-legends">
-            <span class="bpm-legend-item legend-indicated"><span class="dot gold"></span> You: <strong id="val-indicated-bpm">— BPM</strong></span>
-            <span class="bpm-legend-item legend-orchestra"><span class="dot cyan"></span> Orchestra: <strong id="val-orchestra-bpm">— BPM</strong></span>
-          </div>
-        </div>
-        <div class="bpm-gauge-track-wrap">
-          <div class="bpm-gauge-track">
-            <!-- Green target zone band (±20 BPM around intended piece BPM) — shown in Mode E -->
-            <div id="bpm-green-zone" class="bpm-green-zone" style="display:none;"></div>
-            <div class="bpm-zone-bands">
-              <span class="bpm-zone" style="left: 0%; width: 22%;">Largo</span>
-              <span class="bpm-zone" style="left: 22%; width: 22%;">Andante</span>
-              <span class="bpm-zone" style="left: 44%; width: 22%;">Moderato</span>
-              <span class="bpm-zone" style="left: 66%; width: 18%;">Allegro</span>
-              <span class="bpm-zone" style="left: 84%; width: 16%;">Presto</span>
-            </div>
-            <!-- Orchestra Playback Needle (Cyan Beacon) -->
-            <div id="bpm-marker-orchestra" class="bpm-needle orchestra-needle" style="left: 50%;">
-              <div class="needle-pip"></div>
-              <div class="needle-label">Piece</div>
-            </div>
-            <!-- Conductor Indicated Needle (Gold Arrow) -->
-            <div id="bpm-marker-indicated" class="bpm-needle indicated-needle" style="left: 50%;">
-              <div class="needle-pip"></div>
-              <div class="needle-label">You</div>
-            </div>
-          </div>
-          <div class="bpm-gauge-ticks">
-            <span class="bpm-tick" style="left: 0%;">40</span>
-            <span class="bpm-tick" style="left: 22%;">75</span>
-            <span class="bpm-tick" style="left: 44%;">108</span>
-            <span class="bpm-tick" style="left: 66%;">140</span>
-            <span class="bpm-tick" style="left: 84%;">180</span>
-            <span class="bpm-tick" style="left: 100%;">220</span>
-          </div>
         </div>
       </div>
 

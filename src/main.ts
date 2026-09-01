@@ -666,13 +666,27 @@ loadRepertoireCatalog().then(() => {
     loadingEl.style.display = "none";
     stageEl.style.display = "flex";
     
-    // Continuous smooth update loop for BPM gauge
+    // Continuous smooth update loop for BPM gauge & Analogue Dynamics Marker
     function gaugeRenderLoop(): void {
       updateBpmGaugeUI();
+      updateAnalogueDynamicUI();
       requestAnimationFrame(gaugeRenderLoop);
     }
     gaugeRenderLoop();
+
+    // Start in Camera Mode by default
+    setInputSource("camera");
   }).catch(err => {
     loadingEl.innerHTML = `<p class="error">Failed to load: ${err.message}</p>`;
   });
 });
+
+function updateAnalogueDynamicUI(): void {
+  const analogueMarker = document.getElementById("dynamic-analogue-marker") as HTMLElement | null;
+  if (analogueMarker) {
+    const continuousVal = (controller as any).audioEngine?.getContinuousDynamic?.() ?? 0.5;
+    // Map continuousVal [0, 1] to vertical percentage [6%, 94%] so marker glides smoothly along track
+    const pct = Math.max(6, Math.min(94, continuousVal * 88 + 6));
+    analogueMarker.style.bottom = `${pct}%`;
+  }
+}

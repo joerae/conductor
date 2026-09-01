@@ -201,7 +201,8 @@ export class CameraBeatInputProvider implements BeatInputProvider {
 
     try {
       if (this.previewOverlay) {
-        this.previewOverlay.mount();
+        const heroSlot = typeof document !== "undefined" ? document.getElementById("camera-hero-slot") : null;
+        this.previewOverlay.mount(heroSlot ?? undefined);
         this.previewOverlay.setVisible(true);
       }
 

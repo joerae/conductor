@@ -60,7 +60,7 @@ export type UICallbacks = {
 export class ExperienceController {
   private state: ExperienceState = "uninitialized";
   private currentPieceId: string = DEFAULT_PIECE_ID;
-  private inputSource: InputSource = "keyboard";
+  private inputSource: InputSource = "camera";
 
   // Subsystems
   private readonly audioEngine: AudioEngine;
@@ -262,52 +262,68 @@ export class ExperienceController {
                 if (hist.length > this.HAND_Y_HISTORY_LEN) hist.shift();
               }
 
-              // Determine effective tempo-control Y using steady-hand logic:
+              // Determine effective tempo-control Y using steady-hand filtering:
               // If one hand is "beating" (high Y variance) and one is "steady",
-              // use ONLY the steady hand's Y for accelerando to prevent the beating
-              // motion from modulating tempo.
+              // use ONLY the steady hand's smoothed mean Y for tempo to prevent beating
+              // motion from modulating speed.
               let effectiveY: number;
               if (samples.length === 2) {
-                const variances = samples.map(s => {
+                const stats = samples.map(s => {
                   const hist = this.handYHistory.get(s.handIndex) ?? [s.conductorPoint.y];
                   const mean = hist.reduce((a, b) => a + b, 0) / hist.length;
-                  const v = hist.reduce((a, b) => a + (b - mean) ** 2, 0) / hist.length;
-                  return { y: s.conductorPoint.y, variance: v };
+                  const variance = hist.reduce((a, b) => a + (b - mean) ** 2, 0) / hist.length;
+                  return { y: s.conductorPoint.y, mean, variance };
                 });
-                const BEAT_VARIANCE_THRESHOLD = 0.0035; // ~0.06 std-dev in normalised coords
-                const [h0, h1] = variances;
-                const h0Beating = h0.variance > BEAT_VARIANCE_THRESHOLD;
-                const h1Beating = h1.variance > BEAT_VARIANCE_THRESHOLD;
+
+                const [h0, h1] = stats;
+                // Hand is beating if its Y variance is notably higher than the other (> 2.0x ratio & > 0.0006 abs variance)
+                const h0Beating = h0.variance > 0.0006 && h0.variance > 2.0 * h1.variance;
+                const h1Beating = h1.variance > 0.0006 && h1.variance > 2.0 * h0.variance;
+
                 if (h0Beating && !h1Beating) {
-                  // Hand 0 is beating, hand 1 is steady — use hand 1 for tempo
-                  effectiveY = h1.y;
+                  // Hand 0 is beating, hand 1 is steady — use hand 1's smooth mean position
+                  effectiveY = h1.mean;
                 } else if (h1Beating && !h0Beating) {
-                  // Hand 1 is beating, hand 0 is steady — use hand 0 for tempo
-                  effectiveY = h0.y;
+                  // Hand 1 is beating, hand 0 is steady — use hand 0's smooth mean position
+                  effectiveY = h0.mean;
                 } else {
-                  // Both steady or both beating — use average
-                  effectiveY = (h0.y + h1.y) / 2;
+                  // Both steady or both beating — use average of smooth means
+                  effectiveY = (h0.mean + h1.mean) / 2;
                 }
               } else {
-                effectiveY = samples[0].conductorPoint.y;
+                const hist = this.handYHistory.get(samples[0].handIndex) ?? [samples[0].conductorPoint.y];
+                effectiveY = hist.reduce((a, b) => a + b, 0) / hist.length;
               }
 
-              // Mode E: Auto-start when any hand appears
+              // Mode E: Auto-start as soon as user moves or raises hands from resting position
               if (this.state === "ready" || this.state === "paused") {
-                this.startPlayback();
+                const isMovingOrRaised = samples.some(s => {
+                  const hist = this.handYHistory.get(s.handIndex);
+                  if (!hist || hist.length < 2) return s.conductorPoint.y >= 0.20;
+                  const dy = Math.abs(s.conductorPoint.y - hist[0]);
+                  return s.conductorPoint.y >= 0.22 || dy > 0.02;
+                });
+
+                if (isMovingOrRaised) {
+                  this.startPlayback();
+                }
               } else if (this.state === "playing") {
                 // Continuous Height Modulation for Accelerando / Rallentando:
-                // Neutral height ~0.50 -> 1.0x intended piece BPM
-                // Raised up to 0.85 -> 1.65x intended piece BPM
-                // Lowered down to y=0.10 -> 0.35x intended piece BPM (Largo territory while still visible)
+                // Hands comfortably in front of body ~0.40 -> 1.0x intended piece BPM (Dead center of Green Zone)
+                // Raising hands up to 0.85 -> 1.65x intended piece BPM
+                // Lowering hands down to 0.10 -> 0.35x intended piece BPM (Largo)
                 let heightMultiplier = 1.0;
-                if (effectiveY >= 0.50) {
-                  const norm = Math.min(1.0, (effectiveY - 0.50) / 0.35);
+                const NEUTRAL_Y = 0.40;
+                const DEADBAND = 0.03; // [0.37, 0.43] holds exact middle of green zone
+
+                if (effectiveY > NEUTRAL_Y + DEADBAND) {
+                  const norm = Math.min(1.0, (effectiveY - (NEUTRAL_Y + DEADBAND)) / (0.85 - (NEUTRAL_Y + DEADBAND)));
                   heightMultiplier = 1.0 + 0.65 * norm;
-                } else {
-                  // Expanded low-end: full rallentando (0.35x) reached at y=0.10
-                  const norm = Math.min(1.0, (0.50 - effectiveY) / 0.40);
+                } else if (effectiveY < NEUTRAL_Y - DEADBAND) {
+                  const norm = Math.min(1.0, ((NEUTRAL_Y - DEADBAND) - effectiveY) / ((NEUTRAL_Y - DEADBAND) - 0.10));
                   heightMultiplier = 1.0 - 0.65 * norm;
+                } else {
+                  heightMultiplier = 1.0;
                 }
 
                 const targetBpm = Math.max(40, Math.min(240, this.basePieceBpm * heightMultiplier));
@@ -588,12 +604,15 @@ export class ExperienceController {
     const clockState = this.clock.getState();
     const periodSec = clockState.periodMs / 1000;
     const nextBeatAudioTime = this.clock.predictNextBeatAudioTime();
+    const audioNow = this.audioEngine.getAudioTime();
     const piece = this.getCurrentPiece();
 
-    // Apply lead-in offset: shift first score event forward by N silent beats.
-    // This gives the orchestra an anticipation beat before note 0 (e.g. Beethoven 5 pickup).
-    const leadInBeats = piece.leadInBeats ?? 0;
-    const startAudioTime = nextBeatAudioTime + leadInBeats * periodSec;
+    // In Mode E (Gestural): Start IMMEDIATELY on hand gesture, zero lead-in delay
+    const isGestural = this.clock.getTempoMode() === "gestural";
+    const leadInBeats = isGestural ? 0 : (piece.leadInBeats ?? 0);
+    const startAudioTime = isGestural
+      ? Math.max(audioNow + 0.03, nextBeatAudioTime)
+      : nextBeatAudioTime + leadInBeats * periodSec;
 
     // Start or resume from pausedBeat
     const startBeat = this.pausedBeat;

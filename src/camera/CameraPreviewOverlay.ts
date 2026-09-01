@@ -54,61 +54,63 @@ export class CameraPreviewOverlay {
   }
 
   mount(parentElement: HTMLElement = document.body): void {
-    if (this.isMounted && this.containerEl) return;
-
-    const container = document.createElement("div");
-    container.id = "camera-preview-overlay";
-    container.className = "camera-preview-overlay";
-    container.innerHTML = `
-      <div class="camera-preview-header">
-        <div class="camera-title-group">
-          <span class="camera-icon">📷</span>
-          <span class="camera-title">Conductor Camera</span>
-          <span id="camera-status-badge" class="camera-status-badge badge-loading">Initializing…</span>
-        </div>
-        <div class="camera-header-actions">
-          <button id="camera-collapse-btn" class="camera-btn-icon" title="Minimize/Expand preview" aria-label="Minimize preview">−</button>
-          <button id="camera-close-btn" class="camera-btn-icon" title="Turn off camera" aria-label="Close camera">✕</button>
-        </div>
-      </div>
-      <div class="camera-preview-body" id="camera-preview-body">
-        <div class="camera-media-wrap">
-          <video id="camera-video" class="camera-video ${this.mirror ? "mirrored" : ""}" autoplay playsinline muted></video>
-          <canvas id="camera-canvas" class="camera-canvas ${this.mirror ? "mirrored" : ""}"></canvas>
-          <div id="camera-placeholder" class="camera-placeholder">
-            <div class="camera-spinner"></div>
-            <p id="camera-placeholder-text">Activating camera…</p>
+    if (!this.containerEl) {
+      const container = document.createElement("div");
+      container.id = "camera-preview-overlay";
+      container.className = "camera-preview-overlay";
+      container.innerHTML = `
+        <div class="camera-preview-header">
+          <div class="camera-title-group">
+            <span class="camera-icon">📷</span>
+            <span class="camera-title">Conductor Camera</span>
+            <span id="camera-status-badge" class="camera-status-badge badge-loading">Initializing…</span>
+          </div>
+          <div class="camera-header-actions">
+            <button id="camera-collapse-btn" class="camera-btn-icon" title="Minimize/Expand preview" aria-label="Minimize preview">−</button>
+            <button id="camera-close-btn" class="camera-btn-icon" title="Turn off camera" aria-label="Close camera">✕</button>
           </div>
         </div>
-        <div class="camera-telemetry-hud" id="camera-telemetry-hud">
-          <div class="telemetry-item"><span class="label">FPS:</span> <span id="tel-fps" class="val">—</span></div>
-          <div class="telemetry-item"><span class="label">Inference:</span> <span id="tel-inf" class="val">—</span></div>
-          <div class="telemetry-item"><span class="label">Hands:</span> <span id="tel-hands" class="val">0</span></div>
-          <div class="telemetry-item"><span class="label">Dynamics:</span> <span id="tel-dyn" class="val">mf</span></div>
+        <div class="camera-preview-body" id="camera-preview-body">
+          <div class="camera-media-wrap">
+            <video id="camera-video" class="camera-video ${this.mirror ? "mirrored" : ""}" autoplay playsinline muted></video>
+            <canvas id="camera-canvas" class="camera-canvas ${this.mirror ? "mirrored" : ""}"></canvas>
+            <div id="camera-placeholder" class="camera-placeholder">
+              <div class="camera-spinner"></div>
+              <p id="camera-placeholder-text">Activating camera…</p>
+            </div>
+          </div>
+          <div class="camera-telemetry-hud" id="camera-telemetry-hud">
+            <div class="telemetry-item"><span class="label">FPS:</span> <span id="tel-fps" class="val">—</span></div>
+            <div class="telemetry-item"><span class="label">Inference:</span> <span id="tel-inf" class="val">—</span></div>
+            <div class="telemetry-item"><span class="label">Hands:</span> <span id="tel-hands" class="val">0</span></div>
+            <div class="telemetry-item"><span class="label">Dynamics:</span> <span id="tel-dyn" class="val">mf</span></div>
+          </div>
         </div>
-      </div>
-    `;
+      `;
 
-    parentElement.appendChild(container);
-    this.containerEl = container;
-    this.videoEl = container.querySelector("#camera-video");
-    this.canvasEl = container.querySelector("#camera-canvas");
-    this.statusBadgeEl = container.querySelector("#camera-status-badge");
-    this.telemetryEl = container.querySelector("#camera-telemetry-hud");
+      this.containerEl = container;
+      this.videoEl = container.querySelector("#camera-video");
+      this.canvasEl = container.querySelector("#camera-canvas");
+      this.statusBadgeEl = container.querySelector("#camera-status-badge");
+      this.telemetryEl = container.querySelector("#camera-telemetry-hud");
 
-    if (this.canvasEl) {
-      this.ctx = this.canvasEl.getContext("2d");
+      if (this.canvasEl) {
+        this.ctx = this.canvasEl.getContext("2d");
+      }
+
+      // Wire collapse & close buttons
+      const collapseBtn = container.querySelector("#camera-collapse-btn");
+      collapseBtn?.addEventListener("click", () => this.toggleCollapse());
+
+      const closeBtn = container.querySelector("#camera-close-btn");
+      closeBtn?.addEventListener("click", () => {
+        this.onClose?.();
+      });
     }
 
-    // Wire collapse & close buttons
-    const collapseBtn = container.querySelector("#camera-collapse-btn");
-    collapseBtn?.addEventListener("click", () => this.toggleCollapse());
-
-    const closeBtn = container.querySelector("#camera-close-btn");
-    closeBtn?.addEventListener("click", () => {
-      this.onClose?.();
-    });
-
+    if (this.containerEl.parentElement !== parentElement) {
+      parentElement.appendChild(this.containerEl);
+    }
     this.isMounted = true;
   }
 
@@ -340,5 +342,9 @@ export class CameraPreviewOverlay {
     if (this.containerEl) {
       this.containerEl.style.display = visible ? "block" : "none";
     }
+  }
+
+  isMountedState(): boolean {
+    return this.isMounted;
   }
 }
