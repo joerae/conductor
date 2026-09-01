@@ -1,44 +1,30 @@
 /**
  * ExperienceController.ts
  *
- * Owns the top-level state machine for the Conductor experience.
- *
- * States:
- *   loading    → Assets (MIDI + samples) are being fetched/decoded.
- *   ready      → Loaded. Showing "Tap SPACE twice to set the pulse."
- *   preparing  → First tap received. Waiting for second tap to establish period.
- *   playing    → Clock is running. Score is playing. Tempo is following the conductor.
- *   coasting   → Input has stopped. Orchestra plays from momentum.
- *   paused     → Too many missed beats. Orchestra holds.
- *
- * Wires together:
- *   KeyboardBeatInput → ConductorClock → ScoreTransport → Scheduler → AudioEngine
- *   Dynamic level state machine + overburn timer → AudioEngine DSP
- *   All modules → DebugOverlay
+ * Coordinates user interaction, clock, transport, and audio scheduling.
+ * Provides the top-level API consumed by the UI layer (main.ts).
  */
 
+import { AudioEngine } from "../audio/AudioEngine";
+import type { DSPBypassFlags, DynamicsTelemetry, DynamicLevel } from "../audio/dynamicsTypes";
+import { getStepDynamicLevel } from "../audio/dynamicsTypes";
 import { ConductorClock } from "../clock/ConductorClock";
 import type { ClockEvent, TempoMode } from "../clock/ConductorClock";
 import { KeyboardBeatInput } from "../input/KeyboardBeatInput";
 import { CameraBeatInputProvider } from "../camera/CameraBeatInputProvider";
-import { AudioEngine } from "../audio/AudioEngine";
 import { MidiScore } from "../score/MidiScore";
 import { ScoreTransport } from "../score/ScoreTransport";
 import { Scheduler } from "../scheduler/Scheduler";
-import { DebugOverlay } from "../ui/DebugOverlay";
-import { getStepDynamicLevel } from "../audio/dynamicsTypes";
-import type {
-  DynamicLevel,
-  DSPBypassFlags,
-  DynamicsTelemetry,
-  VelocityDecomposition,
-} from "../audio/dynamicsTypes";
-
 import type { NotePlaybackEvent } from "../scheduler/Scheduler";
-import { REPERTOIRE, getPieceById, DEFAULT_PIECE_ID } from "../score/repertoire";
+import { DebugOverlay } from "../ui/DebugOverlay";
+import { DEFAULT_PIECE_ID, getPieceById, REPERTOIRE } from "../score/repertoire";
 import type { PieceDefinition } from "../score/repertoire";
+import type { VelocityDecomposition } from "../audio/dynamicsTypes";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 export type ExperienceState =
+  | "uninitialized"
   | "loading"
   | "ready"
   | "preparing"
@@ -59,31 +45,34 @@ export type NoteVisualEvent = {
   delayMs: number;
 };
 
-interface UICallbacks {
+export type UICallbacks = {
   onStateChange: (state: ExperienceState) => void;
   onBeat: () => void;
   onNoteVisual?: (event: NoteVisualEvent) => void;
   onDynamicChange?: (level: DynamicLevel) => void;
-  onAccentArmed?: (armed: boolean) => void;
   onAccentFlash?: () => void;
+  onAccentArmed?: (armed: boolean) => void;
   onInputSourceChange?: (source: InputSource) => void;
-}
+};
+
+// ─── ExperienceController ───────────────────────────────────────────────────
 
 export class ExperienceController {
-  private state: ExperienceState = "loading";
+  private state: ExperienceState = "uninitialized";
   private currentPieceId: string = DEFAULT_PIECE_ID;
-
-  private audioEngine: AudioEngine;
-  private clock: ConductorClock;
   private inputSource: InputSource = "keyboard";
-  private keyboardInput: KeyboardBeatInput;
-  private cameraInput: CameraBeatInputProvider | null = null;
-  private midiScore: MidiScore;
-  private transport: ScoreTransport;
-  private scheduler: Scheduler;
-  private debug: DebugOverlay;
 
-  private uiCallbacks: UICallbacks;
+  // Subsystems
+  private readonly audioEngine: AudioEngine;
+  private readonly clock: ConductorClock;
+  private readonly keyboardInput: KeyboardBeatInput;
+  private cameraInput: CameraBeatInputProvider | null = null;
+  private readonly midiScore: MidiScore;
+  private readonly transport: ScoreTransport;
+  private readonly scheduler: Scheduler;
+  private readonly debug: DebugOverlay;
+
+  private readonly uiCallbacks: UICallbacks;
   private prepTapCount: number = 0;
   private pausedBeat: number = 0;
 
@@ -96,11 +85,26 @@ export class ExperienceController {
   // Overburn decay timer (for ff/fff dynamic)
   private overburnTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Hands-down inactivity tracking (pauses within 2 beats in Mode E, 6 beats in Mode D)
+  private isHandsDown: boolean = false;
+  private handsDownPulseCount: number = 0;
+
+  // Mode E: Gestural Conducting (Intended BPM base + continuous height accelerando)
+  private basePieceBpm: number = 140;
+  private currentGesturalBpm: number = 140;
+  private lastGesturalUpdateMs: number = 0;
+
   constructor(callbacks: UICallbacks) {
     this.uiCallbacks = callbacks;
     this.audioEngine = new AudioEngine();
 
-    // Wire debug overlay with A/B DSP bypass control, pause toggle, macro ratio slider, camera dynamics mode, and beat sound cue
+    // Clock uses AudioEngine's time function for audio scheduling
+    this.clock = new ConductorClock({
+      getAudioTime: () => this.audioEngine.getAudioTime(),
+      initialMode: "gestural", // Default to Mode E: Gestural Conducting
+    });
+
+    // Wire debug overlay with A/B DSP bypass control, pause toggle, macro ratio slider, camera dynamics mode, beat sound cue, and jitter deadband
     this.debug = new DebugOverlay(
       (flag: keyof DSPBypassFlags, enabled: boolean) => {
         this.audioEngine.setDSPBypassFlags({ [flag]: enabled });
@@ -118,13 +122,11 @@ export class ExperienceController {
       },
       (enabled: boolean) => {
         this.setBeatSoundEnabled(enabled);
+      },
+      (deadbandRatio: number) => {
+        this.clock.setTempoDeadband(deadbandRatio);
       }
     );
-
-    // Clock uses AudioEngine's time function for audio scheduling
-    this.clock = new ConductorClock({
-      getAudioTime: () => this.audioEngine.getAudioTime(),
-    });
 
     this.keyboardInput = new KeyboardBeatInput();
     this.midiScore = new MidiScore();
@@ -150,7 +152,7 @@ export class ExperienceController {
     const delayMs = Math.max(0, (event.audioTime - now) * 1000);
     const decomp = this.audioEngine.decomposeNoteVelocity(event.velocity);
 
-    this.debug.updateLastNoteDecomp(decomp, event.trackId);
+    this.debug.updateLastNoteDecomp(decomp, String(event.trackId));
 
     this.uiCallbacks.onNoteVisual({
       type: event.type,
@@ -191,6 +193,12 @@ export class ExperienceController {
       const beatsPerTap = this.clock.getTempoMode() === "inertial" ? 2 : (piece.beatsPerTap || 1);
       this.transport.setBeatsPerTap(beatsPerTap);
 
+      // Save baseline piece BPM for gestural tempo modulation
+      const meta = this.midiScore.getMetadata();
+      this.basePieceBpm = meta?.embeddedBpm || piece.defaultBpm || 140;
+      this.currentGesturalBpm = this.basePieceBpm;
+      this.clock.setPeriodMs(60000 / this.basePieceBpm);
+
       // Wire active input provider → clock
       this.keyboardInput.onBeat(obs => this.handleBeatObservation(obs));
       this.keyboardInput.start();
@@ -225,15 +233,66 @@ export class ExperienceController {
         this.cameraInput.onTelemetry(t => {
           this.debug.updateCameraTelemetry(t);
         });
-        // Wire camera beat observations into clock (Phases C1 & C2)
+        // Wire camera beat observations into clock
         this.cameraInput.onBeat(obs => this.handleBeatObservation(obs));
+        // Wire sample tracking for hands-down detection & Mode E continuous height tempo
+        this.cameraInput.onSamples(samples => {
+          if (samples.length === 0) {
+            this.isHandsDown = true;
+          } else {
+            const avgY = samples.reduce((acc, s) => acc + s.conductorPoint.y, 0) / samples.length;
+            const allRestingLow = avgY < 0.22;
+            this.isHandsDown = allRestingLow;
+
+            if (this.clock.getTempoMode() === "gestural") {
+              // Mode E: Continuous Gestural Conducting
+              if (!allRestingLow && (this.state === "ready" || this.state === "paused") && avgY >= 0.25) {
+                // Auto-start when hands are raised
+                this.startPlayback();
+              } else if (this.state === "playing" && !allRestingLow) {
+                // Continuous Height Modulation for Accelerando / Rallentando:
+                // Neutral height is 0.50 -> 1.0x intended piece BPM
+                // Raising hands up to 0.85 -> 1.65x intended piece BPM
+                // Lowering hands down to 0.25 -> 0.60x intended piece BPM
+                let heightMultiplier = 1.0;
+                if (avgY >= 0.50) {
+                  const norm = Math.min(1.0, (avgY - 0.50) / 0.35);
+                  heightMultiplier = 1.0 + 0.65 * norm;
+                } else {
+                  const norm = Math.min(1.0, (0.50 - avgY) / 0.25);
+                  heightMultiplier = 1.0 - 0.40 * norm;
+                }
+
+                const targetBpm = Math.max(40, Math.min(240, this.basePieceBpm * heightMultiplier));
+                const now = performance.now();
+                if (this.lastGesturalUpdateMs === 0) this.lastGesturalUpdateMs = now;
+                const dt = Math.max(0.005, (now - this.lastGesturalUpdateMs) / 1000);
+                this.lastGesturalUpdateMs = now;
+
+                // Smooth slew interpolation (~350ms time constant)
+                const alpha = 1 - Math.exp(-dt / 0.35);
+                this.currentGesturalBpm += alpha * (targetBpm - this.currentGesturalBpm);
+
+                this.clock.setBpm(this.currentGesturalBpm);
+                this.indicatedBpm = Math.round(this.currentGesturalBpm);
+
+                // Update transport period in real-time
+                this.transport.updatePeriod(
+                  this.audioEngine.getAudioTime(),
+                  60 / this.currentGesturalBpm,
+                  0
+                );
+              }
+            }
+          }
+        });
       }
       this.inputSource = "camera";
-      this.setTempoMode("inertial");
+      this.setTempoMode("gestural");
       await this.cameraInput.start();
     } else {
       this.inputSource = "keyboard";
-      if (this.clock.getTempoMode() === "inertial") {
+      if (this.clock.getTempoMode() === "inertial" || this.clock.getTempoMode() === "gestural") {
         this.setTempoMode("balanced");
       }
       if (this.cameraInput) {
@@ -408,6 +467,17 @@ export class ExperienceController {
     // Resume AudioContext on first tap if suspended (requires user gesture)
     await this.audioEngine.resume();
 
+    // In Mode E, beating hands triggers instant cymbal cue and visual pulse, but height governs tempo
+    if (this.clock.getTempoMode() === "gestural") {
+      if (this.beatSoundEnabled) {
+        this.audioEngine.playImmediateBeatCymbal();
+      }
+      this.debug.updateTapAccepted();
+      this.uiCallbacks.onBeat();
+      this.clock.acceptObservation(obs);
+      return;
+    }
+
     // Compute indicated instantaneous BPM with light smoothing
     const now = obs.timestampMs;
     if (this.lastBeatObservationMs > 0) {
@@ -445,6 +515,11 @@ export class ExperienceController {
   // ── Playback ─────────────────────────────────────────────────────────────
 
   private startPlayback(): void {
+    if (this.clock.getTempoMode() === "gestural") {
+      this.clock.setPeriodMs(60000 / this.currentGesturalBpm);
+      this.clock.startRunningAtCurrentPeriod();
+    }
+
     const clockState = this.clock.getState();
     const periodSec = clockState.periodMs / 1000;
     const nextBeatAudioTime = this.clock.predictNextBeatAudioTime();
@@ -474,6 +549,26 @@ export class ExperienceController {
     switch (event.type) {
       case "beat": {
         const s = event.state;
+
+        // Check hands-down inactivity in camera mode:
+        // In Mode E: pause within 2 beats of dropping hands
+        // In Mode D: pause after 6 beats of dropping hands
+        if (this.inputSource === "camera" && this.state === "playing") {
+          if (this.isHandsDown) {
+            this.handsDownPulseCount++;
+            const maxSilentBeats = this.clock.getTempoMode() === "gestural" ? 2 : 6;
+            if (this.handsDownPulseCount >= maxSilentBeats) {
+              this.handsDownPulseCount = 0;
+              this.pausePlayback();
+              return;
+            }
+          } else {
+            this.handsDownPulseCount = 0;
+          }
+        } else {
+          this.handsDownPulseCount = 0;
+        }
+
         // Update transport period & phase on every accepted tap while playing
         if (this.state === "playing") {
           this.transport.updatePeriod(
@@ -495,16 +590,24 @@ export class ExperienceController {
         this.debug.updateTapRejected(event.reason);
         break;
       case "stopped":
-        // Orchestra pauses: record current beat position to resume seamlessly on next taps
-        this.pausedBeat = this.transport.getCursorBeat();
-        this.scheduler.stop();
-        this.scheduler.reset();
-        this.transport.stop();
-        this.audioEngine.stopAllNotes();
-        this.prepTapCount = 0;
-        this.setState("paused");
+        this.pausePlayback();
         break;
     }
+  }
+
+  /**
+   * Pauses the orchestra smoothly at the current beat position, awaiting further conducting input.
+   */
+  pausePlayback(): void {
+    this.pausedBeat = this.transport.getCursorBeat();
+    this.clock.reset();
+    this.scheduler.stop();
+    this.scheduler.reset();
+    this.transport.stop();
+    this.audioEngine.stopAllNotes();
+    this.prepTapCount = 0;
+    this.handsDownPulseCount = 0;
+    this.setState("paused");
   }
 
   // ── State ────────────────────────────────────────────────────────────────

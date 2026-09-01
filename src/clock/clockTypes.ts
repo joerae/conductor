@@ -33,13 +33,24 @@ export type ClockState = {
   phaseErrorMs: number;
   /** Phase correction applied to alignment, in seconds. */
   phaseCorrectionSec?: number;
-  /**
-   * Confidence in the current estimate [0, 1].
-   * Falls after missed beats, rises with consistent tapping.
-   */
+  /** Confidence in the current estimate [0, 1]. */
   confidence: number;
   /** How many beats have been accepted since the clock started. */
   acceptedBeatCount: number;
+
+  // Jitter & Stability Telemetry
+  /** Current jitter deadband ratio (e.g. 0.055 for 5.5%). */
+  tempoDeadband?: number;
+  /** Milliseconds difference between latest observed interval and established period. */
+  lastJitterMs?: number;
+  /** Percentage deviation of latest observed interval from established period. */
+  lastJitterPercent?: number;
+  /** Rolling average absolute jitter over recent beats in milliseconds. */
+  averageJitterMs?: number;
+  /** Rolling average absolute jitter as a percentage of established period. */
+  averageJitterPercent?: number;
+  /** High-level stability status of current conducting input. */
+  jitterStatus?: "steady" | "accelerando" | "rallentando" | "coasting" | "calibrating";
 };
 
 /**

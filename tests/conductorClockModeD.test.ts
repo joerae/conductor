@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { ConductorClock } from "../src/clock/ConductorClock";
 
-describe("ConductorClock Mode D (Sparse Predicted Conducting Pulses)", () => {
-  it("locks tempo on first two taps and begins inertial cruise", () => {
+describe("ConductorClock Mode D (Coasting & Consistent Tempo Steering)", () => {
+  it("locks tempo on first two taps and begins coasting", () => {
     let audioTime = 0.0;
     const clock = new ConductorClock({
       getAudioTime: () => audioTime,
@@ -25,7 +25,7 @@ describe("ConductorClock Mode D (Sparse Predicted Conducting Pulses)", () => {
     expect(events.length).toBe(1);
   });
 
-  it("maintains predicted timeline and free-wheels through missed beats without slowing down", () => {
+  it("coasts continuously at established tempo when no observations arrive", () => {
     vi.useFakeTimers();
     let audioTime = 0.0;
     const clock = new ConductorClock({
@@ -38,64 +38,70 @@ describe("ConductorClock Mode D (Sparse Predicted Conducting Pulses)", () => {
       if (ev.type === "beat") beatEvents.push(ev);
     });
 
-    // Establish tempo with 2 beats at 1000ms interval (60 pulses/min)
+    // Establish 1000ms period
     clock.acceptObservation({ source: "camera", timestampMs: 1000, confidence: 1.0 });
     audioTime = 1.0;
     clock.acceptObservation({ source: "camera", timestampMs: 2000, confidence: 1.0 });
 
     expect(beatEvents.length).toBe(1);
 
-    // Advance time by 4 pulse intervals (4000ms) without any user input
-    for (let i = 0; i < 4; i++) {
+    // Advance 6 pulses (6000ms) without any conducting input
+    for (let i = 0; i < 6; i++) {
       audioTime += 1.0;
       vi.advanceTimersByTime(1000);
     }
 
-    // Inertial loop should have produced 4 automated flywheel beats at 1000ms interval
-    expect(beatEvents.length).toBe(5);
+    // Coasts steadily at 1000ms
+    expect(beatEvents.length).toBe(7);
     expect(clock.isRunning()).toBe(true);
     expect(clock.getState().periodMs).toBe(1000);
-    expect(clock.getState().bpm).toBeCloseTo(60, 1);
 
     vi.useRealTimers();
   });
 
-  it("associates observation after a multi-second gap with the most plausible predicted pulse without crashing tempo", () => {
-    vi.useFakeTimers();
+  it("keeps tempo rock-solid with zero micro-adjustments during steady conducting within deadband", () => {
     let audioTime = 0.0;
     const clock = new ConductorClock({
       getAudioTime: () => audioTime,
       initialMode: "inertial",
     });
 
-    // Establish 1000ms pulse (60 BPM)
+    // Establish 1000ms period
     clock.acceptObservation({ source: "camera", timestampMs: 1000, confidence: 1.0 });
     audioTime = 1.0;
     clock.acceptObservation({ source: "camera", timestampMs: 2000, confidence: 1.0 });
     expect(clock.getState().periodMs).toBe(1000);
 
-    // Free-wheel for 3 pulses (3000ms elapsed)
-    audioTime += 3.0;
-    vi.advanceTimersByTime(3000);
+    // Conductor beats steadily with natural human jitter (+/- 2-4%):
+    // 985ms, 1015ms, 990ms, 1020ms, 980ms
+    const jitteredIntervals = [985, 1015, 990, 1020, 980];
+    let currentT = 2000;
 
-    // New observation arrives at t=5040ms (~3 pulses later, 40ms late relative to 5000ms)
-    // Mode D should recognize that ~3 pulses elapsed, rather than calculating tempo as 60000 / 3040 = 19.7 BPM!
-    audioTime += 0.04;
-    clock.acceptObservation({ source: "camera", timestampMs: 5040, confidence: 1.0 });
+    for (const dt of jitteredIntervals) {
+      currentT += dt;
+      audioTime += dt / 1000;
+      clock.acceptObservation({ source: "camera", timestampMs: currentT, confidence: 1.0 });
 
-    const state = clock.getState();
-    // Tempo must remain stable near 1000ms (BPM ~60), NOT crashed to ~20 BPM!
-    expect(state.periodMs).toBeGreaterThan(950);
-    expect(state.periodMs).toBeLessThan(1050);
-    expect(state.bpm).toBeCloseTo(60, 0);
+      // Tempo must stay strictly rock-solid at 1000ms without micro-adjusting
+      const state = clock.getState();
+      expect(state.periodMs).toBe(1000);
+      expect(state.bpm).toBe(60);
+      // Small phase error within deadband produces 0 phase warping
+      expect(state.phaseCorrectionSec).toBe(0);
+      // Jitter telemetry populated
+      expect(state.jitterStatus).toBe("steady");
+      expect(state.tempoDeadband).toBe(clock.getTempoDeadband());
+      expect(Math.abs(state.lastJitterMs!)).toBeLessThanOrEqual(25);
+      expect(state.averageJitterMs).toBeGreaterThan(0);
+    }
 
-    // Phase error is ~40ms
-    expect(state.phaseErrorMs).toBeCloseTo(40, 1);
-
-    vi.useRealTimers();
+    // Changing deadband dynamically via setTempoDeadband()
+    clock.setTempoDeadband(0.10);
+    expect(clock.getTempoDeadband()).toBe(0.10);
+    expect(clock.getState().tempoDeadband).toBe(0.10);
   });
 
-  it("distinguishes phase error on single re-entry tap vs tempo change across sustained consecutive taps", () => {
+  it("handles gaps without inferring skipped beats or changing established tempo", () => {
     vi.useFakeTimers();
     let audioTime = 0.0;
     const clock = new ConductorClock({
@@ -104,57 +110,26 @@ describe("ConductorClock Mode D (Sparse Predicted Conducting Pulses)", () => {
     });
 
     // Establish 1000ms period (60 BPM)
-    clock.acceptObservation({ source: "keyboard", timestampMs: 1000, confidence: 1.0 });
+    clock.acceptObservation({ source: "camera", timestampMs: 1000, confidence: 1.0 });
     audioTime = 1.0;
-    clock.acceptObservation({ source: "keyboard", timestampMs: 2000, confidence: 1.0 });
+    clock.acceptObservation({ source: "camera", timestampMs: 2000, confidence: 1.0 });
 
-    // Step 1: Gap of 2 pulses (2000ms) -> single tap arrives at t=4060ms (60ms late)
-    audioTime += 2.06;
-    vi.advanceTimersByTime(2060);
-    clock.acceptObservation({ source: "keyboard", timestampMs: 4060, confidence: 1.0 });
+    // Gap: conductor shapes dynamics for 4.5 seconds
+    audioTime += 4.5;
+    vi.advanceTimersByTime(4500);
 
-    // Single tap after gap should mostly correct phase, keeping periodMs stable (~1000ms)
-    expect(clock.getState().periodMs).toBeGreaterThan(980);
-    expect(clock.getState().periodMs).toBeLessThan(1020);
+    // Beat 1 of resume at t=6530 (4.53s gap): gently re-anchors phase, does NOT change tempo!
+    audioTime += 0.03;
+    clock.acceptObservation({ source: "camera", timestampMs: 6530, confidence: 1.0 });
 
-    // Step 2: Conductor now begins an intentional accelerando with sustained consecutive faster taps at 800ms
-    // Tap 1 of accelerando at t=4860 (800ms after 4060)
-    audioTime += 0.8;
-    vi.advanceTimersByTime(800);
-    clock.acceptObservation({ source: "keyboard", timestampMs: 4860, confidence: 1.0 });
-
-    const periodAfterFirstFast = clock.getState().periodMs;
-    expect(periodAfterFirstFast).toBeLessThan(980); // Smoothly pulling down
-
-    // Tap 2 of accelerando at t=5660 (800ms after 4860)
-    audioTime += 0.8;
-    vi.advanceTimersByTime(800);
-    clock.acceptObservation({ source: "keyboard", timestampMs: 5660, confidence: 1.0 });
-
-    const periodAfterSecondFast = clock.getState().periodMs;
-    expect(periodAfterSecondFast).toBeLessThan(periodAfterFirstFast);
-
-    // Tap 3 of accelerando at t=6460 (800ms after 5660)
-    audioTime += 0.8;
-    vi.advanceTimersByTime(800);
-    clock.acceptObservation({ source: "keyboard", timestampMs: 6460, confidence: 1.0 });
-
-    const periodAfterThirdFast = clock.getState().periodMs;
-    expect(periodAfterThirdFast).toBeLessThan(periodAfterSecondFast);
-
-    // Tap 4 of accelerando at t=7260 (800ms after 6460)
-    audioTime += 0.8;
-    vi.advanceTimersByTime(800);
-    clock.acceptObservation({ source: "keyboard", timestampMs: 7260, confidence: 1.0 });
-
-    // Tempo has smoothly and continuously shifted toward 800ms (75 BPM)
-    expect(clock.getState().periodMs).toBeLessThan(870);
-    expect(clock.getState().bpm).toBeGreaterThan(69);
+    // Tempo must remain rock-solid at 1000ms (NOT altered by gap interval)
+    expect(clock.getState().periodMs).toBe(1000);
+    expect(clock.getState().bpm).toBeCloseTo(60, 0);
 
     vi.useRealTimers();
   });
 
-  it("handles the complete steer-and-release conducting workflow", () => {
+  it("requires mutually consistent observations to steer tempo, smoothly accelerating", () => {
     vi.useFakeTimers();
     let audioTime = 0.0;
     const clock = new ConductorClock({
@@ -162,36 +137,88 @@ describe("ConductorClock Mode D (Sparse Predicted Conducting Pulses)", () => {
       initialMode: "inertial",
     });
 
-    // 1. Establish tempo
+    // Establish 1000ms period
+    clock.acceptObservation({ source: "keyboard", timestampMs: 1000, confidence: 1.0 });
+    audioTime = 1.0;
+    clock.acceptObservation({ source: "keyboard", timestampMs: 2000, confidence: 1.0 });
+
+    // Single erratic / isolated tap at 550ms (inconsistent with 1000ms)
+    audioTime += 0.55;
+    vi.advanceTimersByTime(550);
+    clock.acceptObservation({ source: "keyboard", timestampMs: 2550, confidence: 1.0 });
+
+    // Orchestra ignores single odd tap and stays at 1000ms
+    expect(clock.getState().periodMs).toBe(1000);
+
+    // Now conductor delivers consistent accelerando at 750ms:
+    // Tap 1 of accelerando at 3300 (750ms after 2550)
+    audioTime += 0.75;
+    vi.advanceTimersByTime(750);
+    clock.acceptObservation({ source: "keyboard", timestampMs: 3300, confidence: 1.0 });
+
+    // Tap 2 of accelerando at 4050 (750ms after 3300) -> 2 consistent 750ms intervals!
+    audioTime += 0.75;
+    vi.advanceTimersByTime(750);
+    clock.acceptObservation({ source: "keyboard", timestampMs: 4050, confidence: 1.0 });
+
+    const periodAfter2Consistent = clock.getState().periodMs;
+    // Tempo transitions toward 750ms
+    expect(periodAfter2Consistent).toBeLessThan(950);
+
+    // Tap 3 of accelerando at 4800 (750ms after 4050) -> 3 consistent intervals: follows strongly!
+    audioTime += 0.75;
+    vi.advanceTimersByTime(750);
+    clock.acceptObservation({ source: "keyboard", timestampMs: 4800, confidence: 1.0 });
+
+    const periodAfter3Consistent = clock.getState().periodMs;
+    expect(periodAfter3Consistent).toBeLessThan(periodAfter2Consistent);
+    expect(periodAfter3Consistent).toBeLessThan(890);
+
+    // Tap 4 of accelerando at 5550 -> continues smoothly steering
+    audioTime += 0.75;
+    vi.advanceTimersByTime(750);
+    clock.acceptObservation({ source: "keyboard", timestampMs: 5550, confidence: 1.0 });
+
+    expect(clock.getState().periodMs).toBeLessThan(850);
+    expect(clock.getState().bpm).toBeGreaterThan(70);
+
+    vi.useRealTimers();
+  });
+
+  it("coasts through normal conducting gaps but pauses after 16 bars of complete inactivity", () => {
+    vi.useFakeTimers();
+    let audioTime = 0.0;
+    const clock = new ConductorClock({
+      getAudioTime: () => audioTime,
+      initialMode: "inertial",
+    });
+
+    let stopped = false;
+    clock.on(ev => {
+      if (ev.type === "stopped") stopped = true;
+    });
+
+    // Establish 1000ms tempo (in 4/4 with 2 beats/pulse, 1 bar = 2 pulses = 2000ms)
     clock.acceptObservation({ source: "camera", timestampMs: 1000, confidence: 1.0 });
     audioTime = 1.0;
     clock.acceptObservation({ source: "camera", timestampMs: 2000, confidence: 1.0 });
 
-    // 2. Conduct normally for a couple pulses
-    audioTime += 1.0;
-    vi.advanceTimersByTime(1000);
-    clock.acceptObservation({ source: "camera", timestampMs: 3000, confidence: 1.0 });
-
-    audioTime += 1.0;
-    vi.advanceTimersByTime(1000);
-    clock.acceptObservation({ source: "camera", timestampMs: 4000, confidence: 1.0 });
-
-    // 3. Stop marking beats for several pulses while using both hands to change dynamics
-    audioTime += 4.0;
-    vi.advanceTimersByTime(4000);
-
-    // 4. Orchestra continues at predicted tempo
+    // Free-wheel for 15 bars (30 pulses = 30 seconds)
+    for (let p = 0; p < 30; p++) {
+      audioTime += 1.0;
+      vi.advanceTimersByTime(1000);
+    }
+    // Still coasting normally during the 15 bars
     expect(clock.isRunning()).toBe(true);
-    expect(clock.getState().periodMs).toBeCloseTo(1000, 1);
+    expect(stopped).toBe(false);
 
-    // 5. Resume conducting at t=8050 (4 pulses later, 50ms late)
-    audioTime += 0.05;
-    clock.acceptObservation({ source: "camera", timestampMs: 8050, confidence: 1.0 });
+    // Advance past the 16th bar boundary (pulse 32)
+    audioTime += 2.0;
+    vi.advanceTimersByTime(2000);
 
-    // 6. Matches ictus to predicted pulse, smoothly re-anchors without wild tempo change
-    expect(clock.getState().periodMs).toBeGreaterThan(950);
-    expect(clock.getState().periodMs).toBeLessThan(1050);
-    expect(clock.getState().phaseErrorMs).toBeCloseTo(50, 1);
+    // After 16 bars without input, pauses the orchestra!
+    expect(stopped).toBe(true);
+    expect(clock.isRunning()).toBe(false);
 
     vi.useRealTimers();
   });

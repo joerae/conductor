@@ -53,7 +53,25 @@ function swingBaton(): void {
 // ── Dynamic prompt formatter ──────────────────────────────────────────────────
 
 function getPromptText(state: ExperienceState, pausedBeat: number, inputSource: InputSource = "keyboard"): string {
+  const tempoMode = controller.getTempoMode();
   if (inputSource === "camera") {
+    if (tempoMode === "gestural") {
+      switch (state) {
+        case "loading":
+          return "Preparing orchestra and loading hand tracking AI model…";
+        case "ready":
+          return "Camera active. Raise your hands to start playing at intended tempo!";
+        case "preparing":
+          return "Hands raised — starting orchestra…";
+        case "playing":
+          return "Orchestra playing! Raise/lower hands together for accelerando/rallentando. Drop hands to stop.";
+        case "paused":
+          return `Orchestra paused at beat ${pausedBeat.toFixed(1)}. Raise hands to resume.`;
+        case "completed":
+          return "Bravo! Masterpiece concluded. Raise hands to conduct again.";
+      }
+    }
+
     switch (state) {
       case "loading":
         return "Preparing orchestra and loading hand tracking AI model…";
@@ -88,6 +106,7 @@ function getPromptText(state: ExperienceState, pausedBeat: number, inputSource: 
     case "completed":
       return "Bravo! Masterpiece concluded. Tap SPACE twice to conduct again.";
   }
+  return "Tap SPACE to conduct.";
 }
 
 // ── Dynamic SVG Orchestra Stage Generator ─────────────────────────────────────
@@ -229,7 +248,7 @@ const controller = new ExperienceController({
   onNoteVisual: (event) => {
     setTimeout(() => {
       const section = channelToSectionMap.get(event.channel) ||
-                      trackNameToSectionMap.get(event.trackId.toUpperCase()) ||
+                      trackNameToSectionMap.get(String(event.trackId).toUpperCase()) ||
                       document.querySelector(".instrument-section");
       if (!section) return;
 
@@ -321,23 +340,28 @@ const modeBtnA = document.getElementById("mode-btn-a") as HTMLButtonElement;
 const modeBtnB = document.getElementById("mode-btn-b") as HTMLButtonElement;
 const modeBtnC = document.getElementById("mode-btn-c") as HTMLButtonElement;
 const modeBtnD = document.getElementById("mode-btn-d") as HTMLButtonElement;
+const modeBtnE = document.getElementById("mode-btn-e") as HTMLButtonElement;
 
 function updateModeButtons(mode: TempoMode): void {
   modeBtnA?.classList.toggle("active", mode === "balanced");
   modeBtnB?.classList.toggle("active", mode === "instant");
   modeBtnC?.classList.toggle("active", mode === "autoplay");
   modeBtnD?.classList.toggle("active", mode === "inertial");
+  modeBtnE?.classList.toggle("active", mode === "gestural");
 }
 
 function setMode(mode: TempoMode): void {
   controller.setTempoMode(mode);
   updateModeButtons(mode);
+  const pausedBeat = controller.getPausedBeat();
+  promptEl.textContent = getPromptText(controller.getState(), pausedBeat, controller.getInputSource());
 }
 
 modeBtnA?.addEventListener("click", () => setMode("balanced"));
 modeBtnB?.addEventListener("click", () => setMode("instant"));
 modeBtnC?.addEventListener("click", () => setMode("autoplay"));
 modeBtnD?.addEventListener("click", () => setMode("inertial"));
+modeBtnE?.addEventListener("click", () => setMode("gestural"));
 
 // ── Horizontal BPM Speedometer Gauge ──────────────────────────────────────────
 
@@ -429,7 +453,7 @@ window.addEventListener("wheel", (e) => {
   }
 }, { passive: false });
 
-// Keyboard shortcuts: C (toggle input source), T (toggle tempo mode), 1-4 (modes), P (pause), ↑/↓ (dynamics), → (accent burst)
+// Keyboard shortcuts: C (toggle input source), T (toggle tempo mode), 1-5 (modes), P (pause), ↑/↓ (dynamics), → (accent burst)
 window.addEventListener("keydown", (e) => {
   if (versionModal.style.display === "flex" || repertoireModal.style.display === "flex") return;
 
@@ -438,7 +462,7 @@ window.addEventListener("keydown", (e) => {
     setInputSource(current === "keyboard" ? "camera" : "keyboard");
   } else if (e.code === "KeyT" && !e.repeat) {
     const current = controller.getTempoMode();
-    const modes: TempoMode[] = ["balanced", "instant", "autoplay", "inertial"];
+    const modes: TempoMode[] = ["balanced", "instant", "autoplay", "inertial", "gestural"];
     const nextIdx = (modes.indexOf(current) + 1) % modes.length;
     setMode(modes[nextIdx]);
   } else if (e.code === "Digit1" && !e.repeat) {
@@ -449,6 +473,8 @@ window.addEventListener("keydown", (e) => {
     setMode("autoplay");
   } else if (e.code === "Digit4" && !e.repeat) {
     setMode("inertial");
+  } else if (e.code === "Digit5" && !e.repeat) {
+    setMode("gestural");
   } else if (e.code === "KeyP" && !e.repeat) {
     controller.togglePause();
   } else if (e.code === "ArrowRight" && !e.repeat) {

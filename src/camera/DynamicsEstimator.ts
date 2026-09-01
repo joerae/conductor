@@ -9,6 +9,8 @@
  *    - Hand height is completely ignored.
  *    - Pulling hands apart (wide span) = louder (f -> ff -> fff).
  *    - Bringing hands close together (contracted span) = softer (mp -> p -> pp).
+ *    - Tracks rate of change of hand separation with hysteresis to detect when
+ *      the conductor is actively shaping dynamics (enabling beat suppression).
  *
  * 2. "height":
  *    - Vertical Hand Height.
@@ -24,10 +26,18 @@ export type CameraDynamicsMode = "spread" | "height";
 export interface DynamicsEstimatorConfig {
   /** Dynamics sensing mode: "spread" (default) or "height". */
   mode: CameraDynamicsMode;
-  /** Time constant for exponential low-pass filtering in ms (~450ms). */
+  /** Time constant for exponential low-pass filtering in ms (~400ms). */
   timeConstantMs: number;
   /** Time to hold last dynamics before slowly decaying toward neutral (ms). */
   dropoutHoldMs: number;
+
+  // Rate of change & hysteresis parameters for dynamic gesture detection
+  /** Minimum span velocity to engage active dynamics changing state (units/sec). */
+  dynamicsEngageRate: number;
+  /** Maximum span velocity to release active dynamics changing state (units/sec). */
+  dynamicsReleaseRate: number;
+  /** Time in ms that span velocity must remain below release rate before disengaging. */
+  dynamicsSettleMs: number;
 
   // Parameters for "spread" mode
   minSpan: number;
@@ -45,6 +55,11 @@ export const DEFAULT_DYNAMICS_CONFIG: DynamicsEstimatorConfig = {
   timeConstantMs: 400,
   dropoutHoldMs: 1400,
 
+  // Gesture motion thresholds (conductor-space units/sec)
+  dynamicsEngageRate: 0.18,
+  dynamicsReleaseRate: 0.08,
+  dynamicsSettleMs: 150,
+
   // Spread Mode (Hand distance: ~0.15 close, ~0.34 natural resting shoulder width, ~0.60 wide)
   minSpan: 0.15,
   neutralSpan: 0.34,
@@ -61,6 +76,14 @@ export class DynamicsEstimator {
   private smoothedValue: number = 0.50;
   private lastTimestampMs: number = 0;
   private lastVisibleTimestampMs: number = 0;
+
+  // Separation rate-of-change tracking
+  private lastSpan: number = -1;
+  private lastSpanTimestampMs: number = 0;
+  private smoothedSpanVelocity: number = 0;
+  private isActivelyChangingState: boolean = false;
+  private belowReleaseSinceMs: number = 0;
+
   private currentObservation: DynamicsObservation;
   private callbacks: Set<(dyn: DynamicsObservation) => void> = new Set();
 
@@ -75,6 +98,7 @@ export class DynamicsEstimator {
       level: "mf",
       handCount: 0,
       confidence: 0,
+      isActivelyChanging: false,
     };
   }
 
@@ -84,6 +108,15 @@ export class DynamicsEstimator {
 
   getMode(): CameraDynamicsMode {
     return this.config.mode;
+  }
+
+  /** True when the conductor is actively expanding or contracting hands to change dynamics. */
+  isActivelyChanging(): boolean {
+    return this.isActivelyChangingState;
+  }
+
+  getSpanVelocity(): number {
+    return Math.round(this.smoothedSpanVelocity * 1000) / 1000;
   }
 
   onDynamics(callback: (dyn: DynamicsObservation) => void): () => void {
@@ -99,6 +132,12 @@ export class DynamicsEstimator {
     this.smoothedValue = 0.50;
     this.lastTimestampMs = 0;
     this.lastVisibleTimestampMs = 0;
+    this.lastSpan = -1;
+    this.lastSpanTimestampMs = 0;
+    this.smoothedSpanVelocity = 0;
+    this.isActivelyChangingState = false;
+    this.belowReleaseSinceMs = 0;
+
     const level = this.valueToDynamicLevel(this.smoothedValue);
 
     this.currentObservation = {
@@ -108,6 +147,7 @@ export class DynamicsEstimator {
       level,
       handCount: 0,
       confidence: 0,
+      isActivelyChanging: false,
     };
   }
 
@@ -128,10 +168,33 @@ export class DynamicsEstimator {
 
     if (this.config.mode === "spread") {
       // ── MODE 1: EXPANSION / CONTRACTION (SPREAD) ─────────────────────────
-      // Height does NOT matter at all in this mode!
       if (samples.length >= 2) {
-        // Pure horizontal span between conducting points for predictable conducting response
+        // Pure horizontal span between conducting points
         const span = Math.abs(samples[0].conductorPoint.x - samples[1].conductorPoint.x);
+
+        // Track rate of change of hand separation (span velocity)
+        if (this.lastSpan >= 0 && this.lastSpanTimestampMs > 0) {
+          const dt = Math.max(0.005, (timestampMs - this.lastSpanTimestampMs) / 1000);
+          const rawSpanVelocity = Math.abs(span - this.lastSpan) / dt;
+          const velAlpha = 1 - Math.exp(-dt / 0.05); // fast responsiveness (~50ms time constant)
+          this.smoothedSpanVelocity = this.smoothedSpanVelocity + velAlpha * (rawSpanVelocity - this.smoothedSpanVelocity);
+
+          // Hysteresis logic
+          if (this.smoothedSpanVelocity >= this.config.dynamicsEngageRate) {
+            this.isActivelyChangingState = true;
+            this.belowReleaseSinceMs = 0;
+          } else if (this.smoothedSpanVelocity < this.config.dynamicsReleaseRate) {
+            if (this.belowReleaseSinceMs === 0) {
+              this.belowReleaseSinceMs = timestampMs;
+            }
+            if (timestampMs - this.belowReleaseSinceMs >= this.config.dynamicsSettleMs) {
+              this.isActivelyChangingState = false;
+            }
+          }
+        }
+
+        this.lastSpan = span;
+        this.lastSpanTimestampMs = timestampMs;
 
         if (span <= this.config.neutralSpan) {
           // Contracting gesture: bringing hands closer together drops smoothly to pp
@@ -150,11 +213,21 @@ export class DynamicsEstimator {
         this.lastVisibleTimestampMs = timestampMs;
       } else if (samples.length === 1) {
         // 1 hand visible in spread mode: hold current dynamics
+        this.lastSpan = -1;
+        this.smoothedSpanVelocity = 0;
+        this.isActivelyChangingState = false;
+        this.belowReleaseSinceMs = 0;
+
         reportingY = samples[0].conductorPoint.y;
         confidence = samples[0].confidence * 0.7;
         this.lastVisibleTimestampMs = timestampMs;
       } else {
         // 0 hands visible: hold, then slowly drift back to neutral 0.50 (mf)
+        this.lastSpan = -1;
+        this.smoothedSpanVelocity = 0;
+        this.isActivelyChangingState = false;
+        this.belowReleaseSinceMs = 0;
+
         const timeSinceVisible = timestampMs - this.lastVisibleTimestampMs;
         if (this.lastVisibleTimestampMs > 0 && timeSinceVisible > this.config.dropoutHoldMs) {
           targetValue = 0.50;
@@ -163,7 +236,11 @@ export class DynamicsEstimator {
       }
     } else {
       // ── MODE 2: VERTICAL HAND HEIGHT ─────────────────────────────────────
-      // Spread / width does NOT matter at all in this mode!
+      this.lastSpan = -1;
+      this.smoothedSpanVelocity = 0;
+      this.isActivelyChangingState = false;
+      this.belowReleaseSinceMs = 0;
+
       if (samples.length === 1) {
         reportingY = samples[0].conductorPoint.y;
         targetValue = this.heightToNormalizedValue(reportingY);
@@ -175,7 +252,6 @@ export class DynamicsEstimator {
         confidence = Math.min(1.0, (samples[0].confidence + samples[1].confidence) / 1.6);
         this.lastVisibleTimestampMs = timestampMs;
       } else {
-        // 0 hands visible: hold, then slowly drift back to neutral
         const timeSinceVisible = timestampMs - this.lastVisibleTimestampMs;
         if (this.lastVisibleTimestampMs > 0 && timeSinceVisible > this.config.dropoutHoldMs) {
           targetValue = 0.50;
@@ -199,6 +275,7 @@ export class DynamicsEstimator {
       level,
       handCount,
       confidence: Math.round(confidence * 100) / 100,
+      isActivelyChanging: this.isActivelyChangingState,
     };
 
     this.callbacks.forEach(cb => {
@@ -221,7 +298,6 @@ export class DynamicsEstimator {
 
   /**
    * Maps normalized dynamics value [0, 1] to musical dynamic markings.
-   * Balanced symmetrical tier distribution with generous pp and fff accessibility.
    */
   private valueToDynamicLevel(value: number): DynamicLevel {
     if (value < 0.16) return "pp";

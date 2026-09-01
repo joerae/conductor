@@ -54,6 +54,8 @@ export interface DynamicsObservation {
   /** Number of hands currently contributing to dynamics (0, 1, or 2). */
   handCount: number;
   confidence: number;
+  /** Whether the conductor is actively expanding or contracting hands to change dynamics. */
+  isActivelyChanging?: boolean;
 }
 
 export type CameraState =

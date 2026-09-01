@@ -21,6 +21,7 @@ describe("DynamicsEstimator (Two Switchable Modes: Spread vs Height)", () => {
     const obs = estimator.getObservation();
     expect(obs.level).toBe("mf");
     expect(obs.value).toBeCloseTo(0.5, 1);
+    expect(estimator.isActivelyChanging()).toBe(false);
   });
 
   describe("Mode 1: Spread / Aperture (Default)", () => {
@@ -62,6 +63,56 @@ describe("DynamicsEstimator (Two Switchable Modes: Spread vs Height)", () => {
       expect(obs.handCount).toBe(2);
       expect(obs.value).toBeLessThanOrEqual(0.12);
       expect(obs.level).toBe("pp");
+    });
+
+    it("detects active dynamics shaping during rapid hand separation change and settles with hysteresis", () => {
+      const estimator = new DynamicsEstimator({
+        mode: "spread",
+        dynamicsEngageRate: 0.18,
+        dynamicsReleaseRate: 0.07,
+        dynamicsSettleMs: 200,
+      });
+
+      let t = 1000;
+      // Initial resting shoulder width: span = 0.30
+      let hands = [createMockSample(0.50, 0, 0.35), createMockSample(0.50, 1, 0.65)];
+      estimator.update(hands, t);
+
+      // Hands held stationary for 200ms
+      for (let i = 0; i < 5; i++) {
+        t += 40;
+        estimator.update(hands, t);
+      }
+      expect(estimator.isActivelyChanging()).toBe(false);
+
+      // Now actively pull hands apart rapidly from span 0.30 to 0.70 over 300ms (rate = 1.33 units/sec)
+      for (let i = 1; i <= 8; i++) {
+        t += 35;
+        const leftX = 0.35 - (0.20 * i / 8);
+        const rightX = 0.65 + (0.20 * i / 8);
+        hands = [createMockSample(0.50, 0, leftX), createMockSample(0.50, 1, rightX)];
+        const obs = estimator.update(hands, t);
+        if (i >= 3) {
+          expect(obs.isActivelyChanging).toBe(true);
+          expect(estimator.isActivelyChanging()).toBe(true);
+        }
+      }
+
+      // Hands stop moving and are held wide apart (span = 0.70)
+      // Advance by 100ms: within hysteresis settle hold (200ms), still active
+      for (let i = 0; i < 2; i++) {
+        t += 50;
+        estimator.update(hands, t);
+      }
+      expect(estimator.isActivelyChanging()).toBe(true);
+
+      // Advance by another 350ms (total hold = 450ms > 200ms settle): now settled!
+      for (let i = 0; i < 7; i++) {
+        t += 50;
+        estimator.update(hands, t);
+      }
+      // Once settled, active dynamics state disengages even while hands are held far apart
+      expect(estimator.isActivelyChanging()).toBe(false);
     });
   });
 
