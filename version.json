@@ -1,9 +1,20 @@
 {
-  "version": "0.7.0",
+  "version": "0.7.1",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.7.1",
+      "date": "2026-09-01",
+      "summary": "Fix Camera Auto-Start on Initial Load, Center Hero Camera Layout & Continuous Analogue Dynamics Scale",
+      "details": [
+        "Camera Auto-Start: Camera now initializes and starts tracking automatically on initial page load without requiring the user to toggle away and back",
+        "Centered Hero Camera Layout: Camera video feed and skeleton overlay mounted directly into center hero slot in main performance stage",
+        "Analogue Continuous Dynamics Marker: Vertical sliding marker track alongside discrete pp-fff ladder providing real-time analogue hand aperture feedback",
+        "Natural Hand Neutral Calibration: Neutral tempo center aligned to 40% height (hands resting comfortably in front of chest) matching natural webcam framing"
+      ]
+    },
     {
       "version": "0.7.0",
       "date": "2026-09-01",
