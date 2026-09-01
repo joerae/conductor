@@ -2,7 +2,7 @@
  * handGestureDetection.test.ts
  *
  * Unit tests for gesture-driven conducting:
- * - Geometric landmark classifier (Closed_Fist, Open_Palm, Victory)
+ * - Geometric landmark classifier (Thumb_Down, Thumb_Up, ILoveYou, Victory, Closed_Fist, Open_Palm)
  * - ScoreTransport Fermata (holding current note/chord without advancing)
  */
 
@@ -18,6 +18,7 @@ import type { ScoreEvent } from "../src/score/scoreTypes";
 /** Helper to generate 21 mock landmarks with custom finger configurations */
 function createMockHandLandmarks(config: {
   thumbExtended?: boolean;
+  thumbDirection?: "up" | "down" | "neutral";
   indexExtended?: boolean;
   middleExtended?: boolean;
   ringExtended?: boolean;
@@ -30,9 +31,19 @@ function createMockHandLandmarks(config: {
 
   // Thumb
   const thumbExt = config.thumbExtended ?? false;
+  const thumbDir = config.thumbDirection ?? "up";
   landmarks[HAND_LANDMARK_INDICES.THUMB_MCP] = { x: 0.45, y: 0.75, z: 0 };
   landmarks[HAND_LANDMARK_INDICES.THUMB_IP] = { x: 0.42, y: 0.70, z: 0 };
-  landmarks[HAND_LANDMARK_INDICES.THUMB_TIP] = thumbExt ? { x: 0.35, y: 0.60, z: 0 } : { x: 0.46, y: 0.74, z: 0 };
+
+  if (thumbExt) {
+    if (thumbDir === "down") {
+      landmarks[HAND_LANDMARK_INDICES.THUMB_TIP] = { x: 0.45, y: 0.92, z: 0 }; // Lower than MCP & wrist
+    } else {
+      landmarks[HAND_LANDMARK_INDICES.THUMB_TIP] = { x: 0.35, y: 0.60, z: 0 }; // Higher than MCP
+    }
+  } else {
+    landmarks[HAND_LANDMARK_INDICES.THUMB_TIP] = { x: 0.46, y: 0.74, z: 0 };
+  }
 
   // Index (tip: 8, pip: 6)
   const indexExt = config.indexExtended ?? false;
@@ -66,6 +77,47 @@ function createMockHandLandmarks(config: {
 }
 
 describe("Hand Gesture Detection", () => {
+  it("classifies Thumb_Down when 4 fingers are curled and thumb points down", () => {
+    const thumbDownLandmarks = createMockHandLandmarks({
+      thumbExtended: true,
+      thumbDirection: "down",
+      indexExtended: false,
+      middleExtended: false,
+      ringExtended: false,
+      pinkyExtended: false,
+    });
+
+    const gesture = classifyHandGestureFromLandmarks(thumbDownLandmarks);
+    expect(gesture).toBe("Thumb_Down");
+  });
+
+  it("classifies Thumb_Up when 4 fingers are curled and thumb points up", () => {
+    const thumbUpLandmarks = createMockHandLandmarks({
+      thumbExtended: true,
+      thumbDirection: "up",
+      indexExtended: false,
+      middleExtended: false,
+      ringExtended: false,
+      pinkyExtended: false,
+    });
+
+    const gesture = classifyHandGestureFromLandmarks(thumbUpLandmarks);
+    expect(gesture).toBe("Thumb_Up");
+  });
+
+  it("classifies ILoveYou (🤟) when thumb, index, and pinky are extended while middle and ring are curled", () => {
+    const loveLandmarks = createMockHandLandmarks({
+      thumbExtended: true,
+      indexExtended: true,
+      middleExtended: false,
+      ringExtended: false,
+      pinkyExtended: true,
+    });
+
+    const gesture = classifyHandGestureFromLandmarks(loveLandmarks);
+    expect(gesture).toBe("ILoveYou");
+  });
+
   it("classifies Closed_Fist when all fingers are curled in towards palm/wrist", () => {
     const fistLandmarks = createMockHandLandmarks({
       thumbExtended: false,

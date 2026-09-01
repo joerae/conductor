@@ -120,6 +120,7 @@ export class AudioEngine {
   private continuousDynamic: number = 0.5; // 0=pp, 1=fff
   private dspBypassFlags: DSPBypassFlags = { ...DEFAULT_DSP_BYPASS_FLAGS };
   private scoreMacroRatio: number = DEFAULT_SCORE_MACRO_RATIO;
+  private isLoveMode: boolean = false;
 
   // ── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -370,9 +371,11 @@ export class AudioEngine {
       this.highShelfFilter.gain.setTargetAtTime(targetGain, now, timeConstant);
     }
 
-    // 2. Reverb wet gain (0.0 when bypassed)
+    // 2. Reverb wet gain (0.0 when bypassed, max 0.75 in Love Mode)
     if (this.reverbGain) {
-      const targetReverb = this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.0;
+      const targetReverb = this.isLoveMode
+        ? 0.75
+        : (this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.0);
       this.reverbGain.gain.setTargetAtTime(targetReverb, now, timeConstant);
     }
 
@@ -421,7 +424,9 @@ export class AudioEngine {
       this.highShelfFilter.gain.setTargetAtTime(target, now, timeConstant);
     }
     if (this.reverbGain) {
-      const target = this.dspBypassFlags.reverbScaling ? reverbWet : 0.0;
+      const target = this.isLoveMode
+        ? 0.75
+        : (this.dspBypassFlags.reverbScaling ? reverbWet : 0.0);
       this.reverbGain.gain.setTargetAtTime(target, now, timeConstant);
     }
     if (this.limiter) {
@@ -433,6 +438,26 @@ export class AudioEngine {
         this.limiter.ratio.setTargetAtTime(1.0, now, 0.01);
       }
     }
+  }
+
+  /**
+   * Sets or clears Love Mode (🤟 gesture): max lush reverb (0.75) for intimate acoustic dream.
+   */
+  setLoveMode(active: boolean): void {
+    this.isLoveMode = active;
+    if (!this.ctx || !this.reverbGain) return;
+    const now = this.ctx.currentTime;
+    if (active) {
+      this.reverbGain.gain.setTargetAtTime(0.75, now, 0.06);
+    } else {
+      const preset = DYNAMIC_PRESETS[this.dynamicLevel] || DYNAMIC_PRESETS.mf;
+      const target = this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.0;
+      this.reverbGain.gain.setTargetAtTime(target, now, 0.12);
+    }
+  }
+
+  isLoveModeActive(): boolean {
+    return this.isLoveMode;
   }
 
   private setupMasterAcoustics(): void {

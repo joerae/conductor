@@ -258,15 +258,31 @@ export class CameraPreviewOverlay {
       ctx.fillStyle = "rgba(10, 12, 18, 0.75)";
       
       let gestureBadge = "";
-      if (sample.gesture === "Closed_Fist") gestureBadge = " • ✊ Fist";
-      else if (sample.gesture === "Open_Palm") gestureBadge = " • 𝄐 Fermata";
-      else if (sample.gesture === "Victory") gestureBadge = " • ✌️ Peace";
+      let gestureColor = primaryColor;
+
+      if (sample.gesture === "Thumb_Down") {
+        gestureBadge = " • 👎 Cutoff";
+        gestureColor = "#ff4d6d";
+      } else if (sample.gesture === "Thumb_Up") {
+        gestureBadge = " • 👍 Fermata";
+        gestureColor = "#ffd56b";
+      } else if (sample.gesture === "ILoveYou") {
+        gestureBadge = " • 🤟 Love";
+        gestureColor = "#ff70a6";
+      } else if (sample.gesture === "Victory") {
+        gestureBadge = " • ✌️ Peace";
+        gestureColor = "#6be7ff";
+      } else if (sample.gesture === "Closed_Fist") {
+        gestureBadge = " • ✊ Fist";
+      } else if (sample.gesture === "Open_Palm") {
+        gestureBadge = " • 🖐 Palm";
+      }
 
       const labelText = `${isLeft ? "Left" : "Right"} (${Math.round(sample.confidence * 100)}%)${gestureBadge}`;
       const textWidth = ctx.measureText(labelText).width;
       ctx.fillRect(labelX - textWidth / 2 - 4, labelY - 11, textWidth + 8, 15);
 
-      ctx.fillStyle = sample.gesture === "Closed_Fist" ? "#ff6b6b" : sample.gesture === "Victory" ? "#6be7ff" : primaryColor;
+      ctx.fillStyle = gestureColor;
       ctx.textAlign = "center";
       ctx.fillText(labelText, labelX, labelY);
       ctx.restore();

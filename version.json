@@ -1,9 +1,41 @@
 {
-  "version": "0.10.0",
+  "version": "0.13.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.13.0",
+      "date": "2026-09-01",
+      "summary": "Party Mode Refinement: Pure Visual Disco Effect Active Exclusively While Holding Double Peace Sign",
+      "details": [
+        "Uncoupled Dynamics from Party Mode: Preserved authentic conductor volume and dynamics without overriding or forcing fortissimo (fff), eliminating dynamic glitches",
+        "Synchronous Gesture Engagement: Party Mode visual disco lighting and banner remain active strictly while both peace signs are held, cleanly disengaging the moment hands change",
+        "Streamlined 'Party Mode' Banner: Simplified the celebratory banner text to a clean, focused 'Party Mode' banner"
+      ]
+    },
+    {
+      "version": "0.12.0",
+      "date": "2026-09-01",
+      "summary": "Gesture Streamlining: Thumbs Down Cutoff & Double Peace Party Mode Exclusively Active",
+      "details": [
+        "Focused Intentional Gestures: Retained the two most reliable and distinct conducting gestures: Thumbs Down (👎) for dramatic cutoff/pause and Double Peace Signs (✌️✌️) for Party Mode & tutti fortissimo (fff)",
+        "Suspended Accidental Triggers: Deactivated ILoveYou and Thumbs Up (Fermata) triggers to guarantee 100% false-positive-free rehearsal and conducting stability",
+        "Streamlined Stage Hints: Updated stage contextual prompts to clearly guide conductors on Thumbs Down and Double Peace Sign controls"
+      ]
+    },
+    {
+      "version": "0.11.0",
+      "date": "2026-09-01",
+      "summary": "Gesture Remapping: Thumbs-Down Cutoff, Thumbs-Up Fermata, and 'ILoveYou' (🤟) Love Mode (Pink Screen, pp & Max Reverb)",
+      "details": [
+        "Thumbs Down (👎) Dramatic Cutoff: Pointing thumb downward cleanly executes a dramatic orchestral pause/cutoff without false triggers; releasing the thumb instantly resumes playback",
+        "Thumbs Up (👍) Fermata: Pointing thumb upward enters a musical Fermata (𝄐), freezing the score transport to sustain the current chord with zero accidental activations during normal baton motion",
+        "ILoveYou (🤟) Love Mode: Forming the love gesture (thumb, index, pinky extended) transforms the stage into an ethereal romantic dreamscape with a glowing pink aura, whisper pianissimo (pp) dynamics, and max concert hall reverb bloom (0.75 wet mix)",
+        "Toggled Off Closed Fist & Open Palm Actions: Deactivated cutoff/fermata from fists and open palms so natural conducting hand shapes never trigger unexpected pauses or holds",
+        "Double Peace Signs (✌️✌️): Retained celebratory Party Mode disco lighting with maximum tutti fortissimo (fff)"
+      ]
+    },
     {
       "version": "0.10.0",
       "date": "2026-09-01",

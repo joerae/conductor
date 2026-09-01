@@ -1806,4 +1806,65 @@ body.debug-mode-active .section-debug-hud {
   animation: partyDiscoBackground 3.5s ease infinite alternate !important;
 }
 
+/* ── Love Mode Celebration (🤟 ILoveYou Gesture) ─────────────────────────── */
+.love-banner {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: linear-gradient(135deg, rgba(255, 105, 180, 0.95), rgba(255, 20, 147, 0.95));
+  color: #ffffff;
+  padding: 10px 24px;
+  border-radius: 30px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 35px rgba(255, 105, 180, 0.75);
+  pointer-events: none;
+  animation: lovePulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes lovePulse {
+  0% { transform: translateX(-50%) scale(1); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 25px rgba(255, 105, 180, 0.6); }
+  100% { transform: translateX(-50%) scale(1.04); box-shadow: 0 12px 36px rgba(0, 0, 0, 0.8), 0 0 45px rgba(255, 20, 147, 0.9); }
+}
+
+.love-emoji {
+  font-size: 1.3rem;
+  animation: loveHeartbeat 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes loveHeartbeat {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.2); }
+}
+
+/* Dreamy Romantic Pink Stage Aura */
+@keyframes loveStageAura {
+  0% {
+    background:
+      radial-gradient(ellipse 85% 75% at 50% 60%, rgba(255, 105, 180, 0.38) 0%, transparent 65%),
+      radial-gradient(ellipse 100% 100% at 50% 100%, rgba(139, 0, 80, 0.88) 0%, transparent 70%),
+      radial-gradient(circle at 50% 30%, rgba(255, 182, 193, 0.25) 0%, transparent 50%),
+      #1f0a18;
+  }
+  100% {
+    background:
+      radial-gradient(ellipse 90% 80% at 50% 55%, rgba(255, 20, 147, 0.44) 0%, transparent 65%),
+      radial-gradient(ellipse 100% 100% at 50% 100%, rgba(180, 20, 100, 0.92) 0%, transparent 70%),
+      radial-gradient(circle at 50% 35%, rgba(255, 192, 203, 0.32) 0%, transparent 50%),
+      #260c1e;
+  }
+}
+
+#stage.love-mode-active {
+  animation: loveStageAura 2.5s ease-in-out infinite alternate !important;
+}
+
 

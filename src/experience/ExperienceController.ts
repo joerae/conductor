@@ -59,6 +59,7 @@ export type UICallbacks = {
   onFistCutoffChange?: (isCutoff: boolean) => void;
   onFermataChange?: (isFermata: boolean) => void;
   onPartyModeChange?: (isParty: boolean) => void;
+  onLoveModeChange?: (isLove: boolean) => void;
 };
 
 // ─── ExperienceController ───────────────────────────────────────────────────
@@ -94,7 +95,7 @@ export class ExperienceController {
   private isFistCutoff: boolean = false;
   private isFermata: boolean = false;
   private isPartyMode: boolean = false;
-  private partyModeTimer: ReturnType<typeof setTimeout> | null = null;
+  private isLoveMode: boolean = false;
 
   // Overburn decay timer (for ff/fff dynamic)
   private overburnTimer: ReturnType<typeof setTimeout> | null = null;
@@ -297,9 +298,9 @@ export class ExperienceController {
         this.isHandsDown = samples.length === 0;
 
         if (samples.length > 0) {
-          // ── 1. Fist Cutoff: Any hand making a closed fist dramatically pauses music ──
-          const hasFist = samples.some(s => s.gesture === "Closed_Fist");
-          if (hasFist) {
+          // ── 1. Thumbs Down Cutoff (👎): Dramatically pauses music ──
+          const hasThumbDown = samples.some(s => s.gesture === "Thumb_Down");
+          if (hasThumbDown) {
             if (!this.isFistCutoff) {
               this.isFistCutoff = true;
               if (this.state === "playing") {
@@ -311,13 +312,13 @@ export class ExperienceController {
           } else if (this.isFistCutoff) {
             this.isFistCutoff = false;
             this.uiCallbacks.onFistCutoffChange?.(false);
-            // Auto-resume playback as soon as fist opens
+            // Auto-resume playback as soon as thumb down is released
             if (this.state === "paused") {
               this.startPlayback();
             }
           }
 
-          // ── 2. Double Peace Signs (✌️ + ✌️): Party Mode + Tutti Fortissimo ──
+          // ── 2. Double Peace Signs (✌️ + ✌️): Party Mode ──
           const hasDoublePeace = samples.length >= 2 &&
             samples[0].gesture === "Victory" &&
             samples[1].gesture === "Victory";
@@ -327,34 +328,9 @@ export class ExperienceController {
               this.isPartyMode = true;
               this.uiCallbacks.onPartyModeChange?.(true);
             }
-            if (this.partyModeTimer) {
-              clearTimeout(this.partyModeTimer);
-              this.partyModeTimer = null;
-            }
-            // Immediately ramp dynamic to maximum ff / fff
-            this.audioEngine.setContinuousDynamic(1.0);
-            this.setDynamicLevel("fff", false);
-          } else if (this.isPartyMode && !this.partyModeTimer) {
-            // Lingering celebration cooldown (2.5s)
-            this.partyModeTimer = setTimeout(() => {
-              this.isPartyMode = false;
-              this.partyModeTimer = null;
-              this.uiCallbacks.onPartyModeChange?.(false);
-            }, 2500);
-          }
-
-          // ── 3. Fermata (Open Palm / 5 Fingers Up): Hold current note/chord without advancing ──
-          const hasOpenPalm = samples.some(s => s.gesture === "Open_Palm");
-          if (hasOpenPalm && !hasFist && !hasDoublePeace && this.state === "playing") {
-            if (!this.isFermata) {
-              this.isFermata = true;
-              this.transport.setFermata(true, this.audioEngine.getAudioTime());
-              this.uiCallbacks.onFermataChange?.(true);
-            }
-          } else if (this.isFermata) {
-            this.isFermata = false;
-            this.transport.setFermata(false, this.audioEngine.getAudioTime());
-            this.uiCallbacks.onFermataChange?.(false);
+          } else if (this.isPartyMode) {
+            this.isPartyMode = false;
+            this.uiCallbacks.onPartyModeChange?.(false);
           }
 
           if (this.clock.getTempoMode() === "gestural" && !this.isFistCutoff && !this.isFermata) {
@@ -597,6 +573,10 @@ export class ExperienceController {
 
   getIsPartyMode(): boolean {
     return this.isPartyMode;
+  }
+
+  getIsLoveMode(): boolean {
+    return this.isLoveMode;
   }
 
   togglePause(): void {

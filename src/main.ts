@@ -64,7 +64,7 @@ function getPromptText(state: ExperienceState, pausedBeat: number, inputSource: 
         case "preparing":
           return "Hands raised — starting orchestra…";
         case "playing":
-          return "Playing! ✊ Fist for dramatic cutoff • 🖐 5 fingers for Fermata • ✌️✌️ Peace for Party!";
+          return "Playing! 👎 Thumb down for dramatic cutoff • ✌️✌️ Double Peace for Party Mode!";
         case "paused":
           return `Orchestra paused at beat ${pausedBeat.toFixed(1)}. Raise hands to resume.`;
         case "completed":
@@ -286,10 +286,10 @@ const controller = new ExperienceController({
     if (banner && icon && text) {
       if (isCutoff) {
         banner.className = "gesture-banner cutoff";
-        icon.textContent = "✊";
-        text.textContent = "DRAMATIC CUTOFF • Open fist to resume";
+        icon.textContent = "👎";
+        text.textContent = "DRAMATIC CUTOFF • Release thumb to resume";
         banner.style.display = "flex";
-        promptEl.textContent = "✊ Dramatic Cutoff! Open your fist to resume playback.";
+        promptEl.textContent = "👎 Dramatic Cutoff! Release thumbs-down to resume playback.";
       } else {
         banner.style.display = "none";
         promptEl.textContent = getPromptText(controller.getState(), controller.getPausedBeat(), controller.getInputSource());
@@ -303,14 +303,26 @@ const controller = new ExperienceController({
     if (banner && icon && text) {
       if (isFermata) {
         banner.className = "gesture-banner fermata";
-        icon.textContent = "𝄐";
+        icon.textContent = "👍";
         text.textContent = "FERMATA • Holding note";
         banner.style.display = "flex";
-        promptEl.textContent = "𝄐 Fermata active — sustaining note! Lower or relax hand to continue.";
+        promptEl.textContent = "👍 Fermata active — sustaining note! Release thumb to continue.";
       } else {
         banner.style.display = "none";
         promptEl.textContent = getPromptText(controller.getState(), controller.getPausedBeat(), controller.getInputSource());
       }
+    }
+  },
+  onLoveModeChange: (isLove: boolean) => {
+    const loveBanner = document.getElementById("love-banner");
+    if (isLove) {
+      stageEl.classList.add("love-mode-active");
+      if (loveBanner) loveBanner.style.display = "flex";
+      promptEl.textContent = "🤟 Love Mode! Intimate Pianissimo (pp) with lush concert hall reverb!";
+    } else {
+      stageEl.classList.remove("love-mode-active");
+      if (loveBanner) loveBanner.style.display = "none";
+      promptEl.textContent = getPromptText(controller.getState(), controller.getPausedBeat(), controller.getInputSource());
     }
   },
   onPartyModeChange: (isParty: boolean) => {
@@ -318,7 +330,7 @@ const controller = new ExperienceController({
     if (isParty) {
       stageEl.classList.add("party-mode-active");
       if (partyBanner) partyBanner.style.display = "flex";
-      promptEl.textContent = "✌️✌️ Party Mode! Tutti Fortissimo (fff) celebrating with the orchestra!";
+      promptEl.textContent = "✌️✌️ Party Mode!";
     } else {
       stageEl.classList.remove("party-mode-active");
       if (partyBanner) partyBanner.style.display = "none";
