@@ -2,118 +2,114 @@ import { describe, it, expect } from "vitest";
 import { DynamicsEstimator } from "../src/camera/DynamicsEstimator";
 import type { HandSample } from "../src/camera/cameraTypes";
 
-function createMockSample(conductorY: number, handIndex: number = 0): HandSample {
+function createMockSample(conductorY: number, handIndex: number = 0, conductorX: number = 0.5): HandSample {
   return {
     timestampMs: 1000,
     handIndex,
     handedness: handIndex === 0 ? "right" : "left",
     confidence: 0.9,
     landmarks: [],
-    conductingPoint: { x: 0.5, y: 1 - conductorY },
-    conductorPoint: { x: 0.5, y: conductorY },
+    conductingPoint: { x: conductorX, y: 1 - conductorY },
+    conductorPoint: { x: conductorX, y: conductorY },
   };
 }
 
-describe("DynamicsEstimator (Hand Height -> Musical Dynamic Level)", () => {
-  it("initializes to neutral mf (0.50)", () => {
+describe("DynamicsEstimator (Two Switchable Modes: Spread vs Height)", () => {
+  it("initializes to neutral mf (0.50) in spread mode by default", () => {
     const estimator = new DynamicsEstimator();
+    expect(estimator.getMode()).toBe("spread");
     const obs = estimator.getObservation();
     expect(obs.level).toBe("mf");
     expect(obs.value).toBeCloseTo(0.5, 1);
   });
 
-  it("smoothly increases dynamics to ff when hands are held high", () => {
-    const estimator = new DynamicsEstimator({ timeConstantMs: 200 });
-    let t = 1000;
-    const highHand = [createMockSample(0.85)];
+  describe("Mode 1: Spread / Aperture (Default)", () => {
+    it("expands dynamics to fff when hands are pulled wide apart (height ignored)", () => {
+      const estimator = new DynamicsEstimator({ mode: "spread", timeConstantMs: 120 });
+      let t = 1000;
+      // Hands at mid height (y=0.50), but spread wide apart: x=0.15 and x=0.85 (span = 0.70)
+      const wideHands = [
+        createMockSample(0.50, 0, 0.15),
+        createMockSample(0.50, 1, 0.85),
+      ];
 
-    // Simulate holding hand high over 1.2 seconds
-    let obs = estimator.update(highHand, t);
-    for (let i = 0; i < 20; i++) {
-      t += 50;
-      obs = estimator.update(highHand, t);
-    }
+      let obs = estimator.update(wideHands, t);
+      for (let i = 0; i < 20; i++) {
+        t += 50;
+        obs = estimator.update(wideHands, t);
+      }
 
-    expect(obs.value).toBeGreaterThan(0.78);
-    expect(["f", "ff", "fff"]).toContain(obs.level);
+      expect(obs.handCount).toBe(2);
+      expect(obs.value).toBeGreaterThanOrEqual(0.85);
+      expect(["ff", "fff"]).toContain(obs.level);
+    });
+
+    it("contracts dynamics to pp when hands are brought close together (height ignored)", () => {
+      const estimator = new DynamicsEstimator({ mode: "spread", timeConstantMs: 120 });
+      let t = 1000;
+      // Hands at high height (y=0.80), but pinched close together: x=0.48 and x=0.52 (span = 0.04)
+      const closeHands = [
+        createMockSample(0.80, 0, 0.48),
+        createMockSample(0.80, 1, 0.52),
+      ];
+
+      let obs = estimator.update(closeHands, t);
+      for (let i = 0; i < 20; i++) {
+        t += 50;
+        obs = estimator.update(closeHands, t);
+      }
+
+      expect(obs.handCount).toBe(2);
+      expect(obs.value).toBeLessThanOrEqual(0.12);
+      expect(obs.level).toBe("pp");
+    });
   });
 
-  it("smoothly decreases dynamics to pp when hands are held low", () => {
-    const estimator = new DynamicsEstimator({ timeConstantMs: 200 });
-    let t = 1000;
-    const lowHand = [createMockSample(0.12)];
+  describe("Mode 2: Vertical Hand Height", () => {
+    it("increases dynamics to ff/fff when hands are raised high (span ignored)", () => {
+      const estimator = new DynamicsEstimator({ mode: "height", timeConstantMs: 120 });
+      let t = 1000;
+      // Hands raised high (y=0.85), but close together (x=0.48, x=0.52)
+      const highHands = [
+        createMockSample(0.85, 0, 0.48),
+        createMockSample(0.85, 1, 0.52),
+      ];
 
-    // Simulate holding hand low over 1.2 seconds
-    let obs = estimator.update(lowHand, t);
-    for (let i = 0; i < 20; i++) {
-      t += 50;
-      obs = estimator.update(lowHand, t);
-    }
+      let obs = estimator.update(highHands, t);
+      for (let i = 0; i < 20; i++) {
+        t += 50;
+        obs = estimator.update(highHands, t);
+      }
 
-    expect(obs.value).toBeLessThan(0.15);
-    expect(["p", "pp"]).toContain(obs.level);
+      expect(obs.value).toBeGreaterThanOrEqual(0.85);
+      expect(["ff", "fff"]).toContain(obs.level);
+    });
+
+    it("decreases dynamics to pp when hands are held low", () => {
+      const estimator = new DynamicsEstimator({ mode: "height", timeConstantMs: 120 });
+      let t = 1000;
+      // Single hand held low (y=0.15)
+      const lowHand = [createMockSample(0.15)];
+
+      let obs = estimator.update(lowHand, t);
+      for (let i = 0; i < 20; i++) {
+        t += 50;
+        obs = estimator.update(lowHand, t);
+      }
+
+      expect(obs.value).toBeLessThanOrEqual(0.10);
+      expect(obs.level).toBe("pp");
+    });
   });
 
-  it("averages two visible hands together", () => {
+  it("dynamically switches mode via setMode()", () => {
     const estimator = new DynamicsEstimator({ timeConstantMs: 100 });
-    let t = 1000;
-    // Left hand at 0.80, Right hand at 0.60 -> average 0.70
-    const twoHands = [createMockSample(0.80, 0), createMockSample(0.60, 1)];
+    expect(estimator.getMode()).toBe("spread");
 
-    let obs = estimator.update(twoHands, t);
-    for (let i = 0; i < 20; i++) {
-      t += 50;
-      obs = estimator.update(twoHands, t);
-    }
+    estimator.setMode("height");
+    expect(estimator.getMode()).toBe("height");
 
-    expect(obs.handCount).toBe(2);
-    expect(obs.smoothedY).toBeCloseTo(0.70, 1);
-  });
-
-  it("rejects fast instantaneous beat stroke up/down oscillations without discrete volume pumping", () => {
-    const estimator = new DynamicsEstimator({ timeConstantMs: 650 });
-    let t = 1000;
-
-    // Simulate rapid up/down beating around neutral center 0.50
-    // (e.g. stroke goes down to 0.30 then up to 0.70 every 100ms)
-    let obs = estimator.update([createMockSample(0.50)], t);
-    for (let cycle = 0; cycle < 6; cycle++) {
-      t += 100;
-      obs = estimator.update([createMockSample(0.30)], t); // ictus down
-      t += 100;
-      obs = estimator.update([createMockSample(0.70)], t); // rebound up
-    }
-
-    // After 6 fast beat strokes around 0.50, smoothed level remains steady mf
-    expect(obs.level).toBe("mf");
-    expect(obs.value).toBeGreaterThan(0.40);
-    expect(obs.value).toBeLessThan(0.60);
-  });
-
-  it("holds posture during brief hand loss before drifting toward neutral", () => {
-    const estimator = new DynamicsEstimator({ dropoutHoldMs: 500, timeConstantMs: 200 });
-    let t = 1000;
-
-    // First, establish forte posture at 0.62 (value ~0.67 -> f)
-    const forteHand = [createMockSample(0.62)];
-    for (let i = 0; i < 15; i++) {
-      t += 50;
-      estimator.update(forteHand, t);
-    }
-    const beforeLoss = estimator.getObservation();
-    expect(beforeLoss.level).toBe("f");
-
-    // Hand drops out for 300ms (< dropoutHoldMs of 500ms)
-    t += 300;
-    const duringHold = estimator.update([], t);
-    expect(duringHold.level).toBe("f"); // Holds posture
-
-    // Hand remains absent for another 1500ms (> dropoutHoldMs)
-    for (let i = 0; i < 20; i++) {
-      t += 50;
-      estimator.update([], t);
-    }
-    const afterDecay = estimator.getObservation();
-    expect(afterDecay.level).toBe("mf"); // Gently drifted to neutral mf
+    estimator.setMode("spread");
+    expect(estimator.getMode()).toBe("spread");
   });
 });

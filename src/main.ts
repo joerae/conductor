@@ -286,10 +286,12 @@ const spaceKeyHint = document.getElementById("space-key-hint") as HTMLElement;
 function updateInputSourceButtons(source: InputSource): void {
   inputBtnKeyboard?.classList.toggle("active", source === "keyboard");
   inputBtnCamera?.classList.toggle("active", source === "camera");
+  stageEl.classList.toggle("camera-mode-active", source === "camera");
+  document.body.classList.toggle("camera-mode-active", source === "camera");
 
   if (spaceKeyHint) {
     if (source === "camera") {
-      spaceKeyHint.innerHTML = `<span class="key" style="border-color:#5cd87e; color:#5cd87e; background:rgba(52,199,89,0.08); box-shadow:0 0 12px rgba(52,199,89,0.2);">📷 MOTION ACTIVE</span>`;
+      spaceKeyHint.innerHTML = `<span class="key" style="border-color:#5cd87e; color:#5cd87e; background:rgba(52,199,89,0.08); box-shadow:0 0 12px rgba(52,199,89,0.2);">📷 MOTION ACTIVE • TAP SPACE FOR BEATS</span>`;
     } else {
       spaceKeyHint.innerHTML = `<span class="key">SPACE</span>`;
     }

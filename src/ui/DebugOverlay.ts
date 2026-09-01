@@ -46,6 +46,7 @@ export class DebugOverlay {
   private onDSPToggle?: (flag: keyof DSPBypassFlags, enabled: boolean) => void;
   private onTogglePause?: () => void;
   private onMacroRatioChange?: (ratio: number) => void;
+  private onCameraDynamicsModeChange?: (mode: "spread" | "height") => void;
 
   // Cached DOM elements for live text updates without innerHTML thrashing
   private elements: Record<string, HTMLElement> = {};
@@ -87,11 +88,13 @@ export class DebugOverlay {
   constructor(
     onDSPToggle?: (flag: keyof DSPBypassFlags, enabled: boolean) => void,
     onTogglePause?: () => void,
-    onMacroRatioChange?: (ratio: number) => void
+    onMacroRatioChange?: (ratio: number) => void,
+    onCameraDynamicsModeChange?: (mode: "spread" | "height") => void
   ) {
     this.onDSPToggle = onDSPToggle;
     this.onTogglePause = onTogglePause;
     this.onMacroRatioChange = onMacroRatioChange;
+    this.onCameraDynamicsModeChange = onCameraDynamicsModeChange;
     this.container = this.createContainer();
     document.body.appendChild(this.container);
 
@@ -125,25 +128,34 @@ export class DebugOverlay {
       "decomp-formula",
       "macro-ratio-val",
     ];
-    for (const key of keys) {
+
+    keys.forEach((key) => {
       const el = document.getElementById(`dbg-${key}`);
       if (el) this.elements[key] = el;
-    }
-
-    // Attach delegated change event handler once to persistent checkboxes
-    this.container.addEventListener("change", (e) => {
-      const target = e.target as HTMLInputElement;
-      if (target && target.dataset.dspFlag) {
-        const flag = target.dataset.dspFlag as keyof DSPBypassFlags;
-        const checked = target.checked;
-        this.snapshot.dynamics.bypassFlags[flag] = checked;
-        if (this.onDSPToggle) {
-          this.onDSPToggle(flag, checked);
-        }
-      }
     });
 
-    // Pause / Resume button
+    // Wire up A/B DSP checkboxes
+    const checkboxes = this.container.querySelectorAll<HTMLInputElement>("input[data-dsp-flag]");
+    checkboxes.forEach((cb) => {
+      cb.addEventListener("change", () => {
+        const flag = cb.dataset.dspFlag as keyof DSPBypassFlags;
+        if (flag && this.onDSPToggle) {
+          this.onDSPToggle(flag, cb.checked);
+        }
+      });
+    });
+
+    // Wire up Camera Dynamics Mode radio buttons
+    const dynModeRadios = this.container.querySelectorAll<HTMLInputElement>("input[name='dbg-camera-dyn-mode']");
+    dynModeRadios.forEach((radio) => {
+      radio.addEventListener("change", () => {
+        if (radio.checked && this.onCameraDynamicsModeChange) {
+          this.onCameraDynamicsModeChange(radio.value as "spread" | "height");
+        }
+      });
+    });
+
+    // Pause button in header
     const pauseBtn = document.getElementById("dbg-pause-btn");
     pauseBtn?.addEventListener("click", () => {
       if (this.onTogglePause) {
@@ -491,6 +503,28 @@ export class DebugOverlay {
         <label class="debug-checkbox-label" title="Toggle safety brickwall limiter (-1.0 dBFS) to prevent any DAC clipping">
           <input type="checkbox" data-dsp-flag="safetyLimiter" checked>
           <span>Safety Limiter (-1dB)</span>
+        </label>
+      </div>
+
+      <!-- Camera Dynamics Sensing Mode Selector -->
+      <div class="debug-section-header" style="margin-top: 10px;" title="Select which gesture modality drives the orchestral dynamic ladder in Camera Mode">CAMERA DYNAMICS SENSING MODE</div>
+      <div style="
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 213, 107, 0.2);
+        margin-top: 4px;
+      ">
+        <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Two-Hand Spread / Aperture: Pulling hands apart = Louder (ff/fff). Bringing hands close together = Softer (p/pp). Hand height is completely ignored!">
+          <input type="radio" name="dbg-camera-dyn-mode" value="spread" checked style="accent-color:#ffd56b; margin-right:6px;">
+          <span><strong>Two-Hand Spread</strong> (Default: Expanding / Contracting)</span>
+        </label>
+        <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Vertical Hand Height: Raising hands high = Louder (ff/fff). Lowering hands down = Softer (p/pp). Hand distance/spread is completely ignored!">
+          <input type="radio" name="dbg-camera-dyn-mode" value="height" style="accent-color:#ffd56b; margin-right:6px;">
+          <span><strong>Vertical Hand Height</strong> (Raising / Lowering)</span>
         </label>
       </div>
 

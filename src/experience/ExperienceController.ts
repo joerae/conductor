@@ -90,14 +90,17 @@ export class ExperienceController {
   // Sustained conductor dynamic level
   private baseDynamicLevel: DynamicLevel = "mf";
 
-  // Overburn decay timer (for ff dynamic)
+  // Camera Dynamics Mode: "spread" (default) or "height"
+  private cameraDynamicsMode: "spread" | "height" = "spread";
+
+  // Overburn decay timer (for ff/fff dynamic)
   private overburnTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(callbacks: UICallbacks) {
     this.uiCallbacks = callbacks;
     this.audioEngine = new AudioEngine();
 
-    // Wire debug overlay with A/B DSP bypass control, pause toggle, and macro ratio slider
+    // Wire debug overlay with A/B DSP bypass control, pause toggle, macro ratio slider, and camera dynamics mode
     this.debug = new DebugOverlay(
       (flag: keyof DSPBypassFlags, enabled: boolean) => {
         this.audioEngine.setDSPBypassFlags({ [flag]: enabled });
@@ -109,6 +112,9 @@ export class ExperienceController {
       (ratio: number) => {
         this.audioEngine.setScoreMacroRatio(ratio);
         this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
+      },
+      (mode: "spread" | "height") => {
+        this.setCameraDynamicsMode(mode);
       }
     );
 
@@ -204,6 +210,7 @@ export class ExperienceController {
     if (source === "camera") {
       if (!this.cameraInput) {
         this.cameraInput = new CameraBeatInputProvider();
+        this.cameraInput.setDynamicsMode(this.cameraDynamicsMode);
         // Wire camera dynamics directly into existing orchestral dynamic ladder & AudioEngine
         this.cameraInput.onDynamics(dyn => {
           if (this.inputSource === "camera") {
@@ -231,6 +238,17 @@ export class ExperienceController {
 
   getCameraProvider(): CameraBeatInputProvider | null {
     return this.cameraInput;
+  }
+
+  setCameraDynamicsMode(mode: "spread" | "height"): void {
+    this.cameraDynamicsMode = mode;
+    if (this.cameraInput) {
+      this.cameraInput.setDynamicsMode(mode);
+    }
+  }
+
+  getCameraDynamicsMode(): "spread" | "height" {
+    return this.cameraDynamicsMode;
   }
 
   async loadPiece(pieceId: string): Promise<void> {

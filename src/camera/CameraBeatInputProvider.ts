@@ -123,6 +123,14 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     return () => this.dynamicsCallbacks.delete(callback);
   }
 
+  setDynamicsMode(mode: "spread" | "height"): void {
+    this.dynamicsEstimator.setMode(mode);
+  }
+
+  getDynamicsMode(): "spread" | "height" {
+    return this.dynamicsEstimator.getMode();
+  }
+
   getState(): CameraState {
     return this.cameraController.getState();
   }

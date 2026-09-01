@@ -1,42 +1,64 @@
 /**
  * DynamicsEstimator.ts
  *
- * Estimates orchestral dynamic levels from the broad vertical posture of one or two hands.
+ * Estimates orchestral dynamic levels from camera hand tracking.
+ * Supports two distinct, non-conflicting modes:
  *
- * Key design principles (Section 9 of CONDUCTOR_CAMERA_IMPLEMENTATION.md):
- *   - Continuous broad hand height mapping: hands higher = louder, hands lower = softer.
- *   - Heavy low-pass filtering (time constant ~650ms) to reject instantaneous beat strokes
- *     and prevent volume pumping.
- *   - Works seamlessly with either 1 hand, 2 hands (averaged), or smooth hold during tracking dropouts.
+ * 1. "spread" (DEFAULT):
+ *    - Expanding & Contracting Gesture (Two-Hand Spread / Aperture).
+ *    - Hand height is completely ignored.
+ *    - Pulling hands apart (wide span) = louder (f -> ff -> fff).
+ *    - Bringing hands close together (contracted span) = softer (mp -> p -> pp).
+ *
+ * 2. "height":
+ *    - Vertical Hand Height.
+ *    - Hand span / expansion is completely ignored.
+ *    - Raising hand(s) high = louder, lowering hand(s) = softer.
  */
 
 import type { DynamicLevel } from "../audio/dynamicsTypes";
 import type { DynamicsObservation, HandSample } from "./cameraTypes";
 
+export type CameraDynamicsMode = "spread" | "height";
+
 export interface DynamicsEstimatorConfig {
-  /** Time constant for exponential low-pass filtering in ms (~650ms). */
+  /** Dynamics sensing mode: "spread" (default) or "height". */
+  mode: CameraDynamicsMode;
+  /** Time constant for exponential low-pass filtering in ms (~450ms). */
   timeConstantMs: number;
-  /** Conductor-space Y corresponding to quietest level (0.0 = bottom). */
-  minY: number;
-  /** Conductor-space Y corresponding to loudest level (1.0 = top). */
-  maxY: number;
   /** Time to hold last dynamics before slowly decaying toward neutral (ms). */
   dropoutHoldMs: number;
-  /** Neutral resting conductor-space Y (~0.50 = mf). */
+
+  // Parameters for "spread" mode
+  minSpan: number;
+  neutralSpan: number;
+  maxSpan: number;
+
+  // Parameters for "height" mode
+  minY: number;
   neutralY: number;
+  maxY: number;
 }
 
 export const DEFAULT_DYNAMICS_CONFIG: DynamicsEstimatorConfig = {
-  timeConstantMs: 650,
-  minY: 0.15,
-  maxY: 0.85,
-  dropoutHoldMs: 1200,
+  mode: "spread",
+  timeConstantMs: 400,
+  dropoutHoldMs: 1400,
+
+  // Spread Mode (Hand distance: ~0.15 close, ~0.34 natural resting shoulder width, ~0.60 wide)
+  minSpan: 0.15,
+  neutralSpan: 0.34,
+  maxSpan: 0.60,
+
+  // Height Mode (Conductor Y: ~0.20 floor, ~0.50 neutral, ~0.80 ceiling)
+  minY: 0.20,
   neutralY: 0.50,
+  maxY: 0.80,
 };
 
 export class DynamicsEstimator {
   private config: DynamicsEstimatorConfig;
-  private smoothedY: number;
+  private smoothedValue: number = 0.50;
   private lastTimestampMs: number = 0;
   private lastVisibleTimestampMs: number = 0;
   private currentObservation: DynamicsObservation;
@@ -44,16 +66,24 @@ export class DynamicsEstimator {
 
   constructor(config?: Partial<DynamicsEstimatorConfig>) {
     this.config = { ...DEFAULT_DYNAMICS_CONFIG, ...config };
-    this.smoothedY = this.config.neutralY;
+    this.smoothedValue = 0.50;
 
     this.currentObservation = {
       timestampMs: performance.now(),
-      value: 0.5,
+      value: 0.50,
       smoothedY: this.config.neutralY,
       level: "mf",
       handCount: 0,
       confidence: 0,
     };
+  }
+
+  setMode(mode: CameraDynamicsMode): void {
+    this.config.mode = mode;
+  }
+
+  getMode(): CameraDynamicsMode {
+    return this.config.mode;
   }
 
   onDynamics(callback: (dyn: DynamicsObservation) => void): () => void {
@@ -65,17 +95,16 @@ export class DynamicsEstimator {
     return { ...this.currentObservation };
   }
 
-  reset(initialNeutralY: number = this.config.neutralY): void {
-    this.smoothedY = initialNeutralY;
+  reset(): void {
+    this.smoothedValue = 0.50;
     this.lastTimestampMs = 0;
     this.lastVisibleTimestampMs = 0;
-    const value = this.computeNormalizedValue(this.smoothedY);
-    const level = this.valueToDynamicLevel(value);
+    const level = this.valueToDynamicLevel(this.smoothedValue);
 
     this.currentObservation = {
       timestampMs: performance.now(),
-      value,
-      smoothedY: this.smoothedY,
+      value: this.smoothedValue,
+      smoothedY: this.config.neutralY,
       level,
       handCount: 0,
       confidence: 0,
@@ -83,7 +112,7 @@ export class DynamicsEstimator {
   }
 
   /**
-   * Updates dynamics estimation from incoming hand samples.
+   * Updates dynamics estimation from incoming hand samples based on active mode.
    */
   update(samples: HandSample[], timestampMs: number = performance.now()): DynamicsObservation {
     if (this.lastTimestampMs === 0) {
@@ -92,39 +121,81 @@ export class DynamicsEstimator {
     const deltaMs = Math.max(1, Math.min(250, timestampMs - this.lastTimestampMs));
     this.lastTimestampMs = timestampMs;
 
-    let targetY = this.smoothedY;
+    let targetValue = this.smoothedValue;
     let handCount = samples.length;
     let confidence = 0;
+    let reportingY = this.config.neutralY;
 
-    if (samples.length === 1) {
-      targetY = samples[0].conductorPoint.y;
-      confidence = samples[0].confidence;
-      this.lastVisibleTimestampMs = timestampMs;
-    } else if (samples.length >= 2) {
-      targetY = (samples[0].conductorPoint.y + samples[1].conductorPoint.y) / 2;
-      confidence = Math.min(1.0, (samples[0].confidence + samples[1].confidence) / 1.6);
-      this.lastVisibleTimestampMs = timestampMs;
-    } else {
-      // 0 hands visible: hold posture, then slowly decay toward neutral
-      const timeSinceVisible = timestampMs - this.lastVisibleTimestampMs;
-      if (this.lastVisibleTimestampMs > 0 && timeSinceVisible > this.config.dropoutHoldMs) {
-        targetY = this.config.neutralY;
+    if (this.config.mode === "spread") {
+      // ── MODE 1: EXPANSION / CONTRACTION (SPREAD) ─────────────────────────
+      // Height does NOT matter at all in this mode!
+      if (samples.length >= 2) {
+        // Pure horizontal span between conducting points for predictable conducting response
+        const span = Math.abs(samples[0].conductorPoint.x - samples[1].conductorPoint.x);
+
+        if (span <= this.config.neutralSpan) {
+          // Contracting gesture: bringing hands closer together drops smoothly to pp
+          const spanRange = Math.max(0.05, this.config.neutralSpan - this.config.minSpan);
+          const ratio = Math.max(0, Math.min(1, (span - this.config.minSpan) / spanRange));
+          targetValue = 0.50 * ratio; // [0.00, 0.50]
+        } else {
+          // Expanding gesture: pulling hands apart climbs smoothly to fff
+          const spanRange = Math.max(0.05, this.config.maxSpan - this.config.neutralSpan);
+          const ratio = Math.max(0, Math.min(1, (span - this.config.neutralSpan) / spanRange));
+          targetValue = 0.50 + 0.50 * ratio; // [0.50, 1.00]
+        }
+
+        reportingY = (samples[0].conductorPoint.y + samples[1].conductorPoint.y) / 2;
+        confidence = Math.min(1.0, (samples[0].confidence + samples[1].confidence) / 1.6);
+        this.lastVisibleTimestampMs = timestampMs;
+      } else if (samples.length === 1) {
+        // 1 hand visible in spread mode: hold current dynamics
+        reportingY = samples[0].conductorPoint.y;
+        confidence = samples[0].confidence * 0.7;
+        this.lastVisibleTimestampMs = timestampMs;
+      } else {
+        // 0 hands visible: hold, then slowly drift back to neutral 0.50 (mf)
+        const timeSinceVisible = timestampMs - this.lastVisibleTimestampMs;
+        if (this.lastVisibleTimestampMs > 0 && timeSinceVisible > this.config.dropoutHoldMs) {
+          targetValue = 0.50;
+        }
+        confidence = 0;
       }
-      confidence = 0;
+    } else {
+      // ── MODE 2: VERTICAL HAND HEIGHT ─────────────────────────────────────
+      // Spread / width does NOT matter at all in this mode!
+      if (samples.length === 1) {
+        reportingY = samples[0].conductorPoint.y;
+        targetValue = this.heightToNormalizedValue(reportingY);
+        confidence = samples[0].confidence;
+        this.lastVisibleTimestampMs = timestampMs;
+      } else if (samples.length >= 2) {
+        reportingY = (samples[0].conductorPoint.y + samples[1].conductorPoint.y) / 2;
+        targetValue = this.heightToNormalizedValue(reportingY);
+        confidence = Math.min(1.0, (samples[0].confidence + samples[1].confidence) / 1.6);
+        this.lastVisibleTimestampMs = timestampMs;
+      } else {
+        // 0 hands visible: hold, then slowly drift back to neutral
+        const timeSinceVisible = timestampMs - this.lastVisibleTimestampMs;
+        if (this.lastVisibleTimestampMs > 0 && timeSinceVisible > this.config.dropoutHoldMs) {
+          targetValue = 0.50;
+        }
+        confidence = 0;
+      }
     }
 
-    // Exponential moving average filter: alpha = 1 - exp(-dt / tau)
+    // Exponential moving average filter on the normalized dynamic value [0, 1]
     const alpha = 1 - Math.exp(-deltaMs / this.config.timeConstantMs);
-    this.smoothedY = this.smoothedY + alpha * (targetY - this.smoothedY);
-    this.smoothedY = Math.max(0, Math.min(1, this.smoothedY));
+    this.smoothedValue = this.smoothedValue + alpha * (targetValue - this.smoothedValue);
+    this.smoothedValue = Math.max(0, Math.min(1, this.smoothedValue));
 
-    const value = this.computeNormalizedValue(this.smoothedY);
-    const level = this.valueToDynamicLevel(value);
+    const finalValue = Math.round(this.smoothedValue * 1000) / 1000;
+    const level = this.valueToDynamicLevel(finalValue);
 
     this.currentObservation = {
       timestampMs,
-      value,
-      smoothedY: Math.round(this.smoothedY * 1000) / 1000,
+      value: finalValue,
+      smoothedY: Math.round(reportingY * 1000) / 1000,
       level,
       handCount,
       confidence: Math.round(confidence * 100) / 100,
@@ -141,23 +212,24 @@ export class DynamicsEstimator {
     return this.currentObservation;
   }
 
-  private computeNormalizedValue(y: number): number {
+  private heightToNormalizedValue(y: number): number {
     const range = this.config.maxY - this.config.minY;
-    if (range <= 0) return 0.5;
+    if (range <= 0) return 0.50;
     const norm = (y - this.config.minY) / range;
-    return Math.max(0, Math.min(1, Math.round(norm * 1000) / 1000));
+    return Math.max(0, Math.min(1, norm));
   }
 
   /**
    * Maps normalized dynamics value [0, 1] to musical dynamic markings.
+   * Balanced symmetrical tier distribution with generous pp and fff accessibility.
    */
   private valueToDynamicLevel(value: number): DynamicLevel {
-    if (value < 0.14) return "pp";
+    if (value < 0.16) return "pp";
     if (value < 0.28) return "p";
-    if (value < 0.44) return "mp";
-    if (value < 0.60) return "mf";
-    if (value < 0.78) return "f";
-    if (value < 0.92) return "ff";
+    if (value < 0.42) return "mp";
+    if (value < 0.58) return "mf";
+    if (value < 0.72) return "f";
+    if (value < 0.86) return "ff";
     return "fff";
   }
 }
