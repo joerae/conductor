@@ -215,14 +215,15 @@ html, body {
 
 /* Section labels under each group */
 .section-label {
-  fill: #8a8070;
+  fill: #e2e8f0;
   font-family: var(--font-ui);
   font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.12em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   transition: fill 0.15s ease, filter 0.15s ease;
   user-select: none;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
 }
 
 .conductor { fill: var(--conductor-fill); }
@@ -282,73 +283,86 @@ html, body {
   text-transform: uppercase;
 }
 
-/* ── A/B Tempo Mode Selector ──────────────────────────────────────────────── */
+/* ── A/B Tempo & Input Mode Selectors ─────────────────────────────────────── */
 .mode-selector-container {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  background: rgba(0, 0, 0, 0.4);
-  padding: 6px 14px;
+  gap: 10px;
+  background: rgba(14, 18, 28, 0.85);
+  padding: 6px 16px;
   border-radius: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 213, 107, 0.28);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   margin-bottom: var(--spacing-xs);
-  transition: border-color var(--transition-fast);
+  transition: all var(--transition-fast);
 }
 
 .mode-selector-container:hover {
-  border-color: rgba(201, 168, 76, 0.3);
+  border-color: rgba(255, 213, 107, 0.45);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.65), 0 0 12px rgba(255, 213, 107, 0.15);
 }
 
 .mode-label {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  letter-spacing: 0.08em;
+  font-size: 0.76rem;
+  color: #cbd5e1;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .mode-pill-group {
   display: flex;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 20px;
-  padding: 2px;
-  gap: 2px;
+  padding: 3px;
+  gap: 3px;
 }
 
 .mode-pill {
   background: none;
   border: none;
-  color: var(--text-secondary);
+  color: #cbd5e1;
   font-family: var(--font-ui);
-  font-size: 0.75rem;
+  font-size: 0.80rem;
   font-weight: 500;
-  padding: 5px 12px;
+  padding: 6px 14px;
   border-radius: 16px;
   cursor: pointer;
-  letter-spacing: 0.04em;
-  transition: all var(--transition-fast);
+  letter-spacing: 0.03em;
+  transition: all 0.15s ease-out;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .mode-pill:hover {
-  color: var(--text-primary);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .mode-pill.active {
-  background: var(--accent-gold);
-  color: #12151e;
-  font-weight: 600;
-  box-shadow: 0 0 12px rgba(201, 168, 76, 0.4);
+  background: linear-gradient(135deg, #ffd56b 0%, #e6b840 100%);
+  color: #0c1018;
+  font-weight: 700;
+  box-shadow: 0 0 14px rgba(255, 213, 107, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .mode-shortcut-hint {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  opacity: 0.7;
+  font-size: 0.78rem;
+  color: #e2e8f0;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  opacity: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
 .mode-shortcut-hint strong {
-  color: var(--accent-gold);
+  color: #ffd56b;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(255, 213, 107, 0.4);
 }
 
 /* ── Vertical Orchestral Dynamic Ladder ───────────────────────────────────── */

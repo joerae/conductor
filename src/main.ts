@@ -138,15 +138,14 @@ function renderOrchestraStage(piece: PieceDefinition): void {
   trackNameToSectionMap.clear();
 
   let sectionsSvg = "";
-  const numSections = piece.sections.length;
 
   if (piece.layout === "chamber_strings") {
-    // 4 sections in classical semi-circle
+    // 4 sections in spacious classical semi-circle
     const positions = [
-      { x: 155, labelX: 155, eggs: [{ cx: 108, cy: 155, rx: 22, ry: 32 }, { cx: 155, cy: 146, rx: 25, ry: 36 }, { cx: 202, cy: 155, rx: 22, ry: 32 }] },
-      { x: 315, labelX: 315, eggs: [{ cx: 268, cy: 148, rx: 22, ry: 32 }, { cx: 315, cy: 140, rx: 25, ry: 36 }, { cx: 362, cy: 148, rx: 22, ry: 32 }] },
-      { x: 525, labelX: 525, eggs: [{ cx: 478, cy: 148, rx: 22, ry: 32 }, { cx: 525, cy: 140, rx: 25, ry: 36 }, { cx: 572, cy: 148, rx: 22, ry: 32 }] },
-      { x: 685, labelX: 685, eggs: [{ cx: 638, cy: 155, rx: 22, ry: 32 }, { cx: 685, cy: 146, rx: 25, ry: 36 }, { cx: 732, cy: 155, rx: 22, ry: 32 }] },
+      { x: 160, labelX: 160, cy: 150, eggs: [{ cx: 115, cy: 154, rx: 22, ry: 32 }, { cx: 160, cy: 145, rx: 25, ry: 36 }, { cx: 205, cy: 154, rx: 22, ry: 32 }] },
+      { x: 380, labelX: 380, cy: 144, eggs: [{ cx: 335, cy: 148, rx: 22, ry: 32 }, { cx: 380, cy: 140, rx: 25, ry: 36 }, { cx: 425, cy: 148, rx: 22, ry: 32 }] },
+      { x: 620, labelX: 620, cy: 144, eggs: [{ cx: 575, cy: 148, rx: 22, ry: 32 }, { cx: 620, cy: 140, rx: 25, ry: 36 }, { cx: 665, cy: 148, rx: 22, ry: 32 }] },
+      { x: 840, labelX: 840, cy: 150, eggs: [{ cx: 795, cy: 154, rx: 22, ry: 32 }, { cx: 840, cy: 145, rx: 25, ry: 36 }, { cx: 885, cy: 154, rx: 22, ry: 32 }] },
     ];
 
     piece.sections.forEach((sec, idx) => {
@@ -154,7 +153,7 @@ function renderOrchestraStage(piece: PieceDefinition): void {
       sectionsSvg += `
         <g id="section-${sec.id}" class="instrument-section" data-section-id="${sec.id}">
           <g class="section-debug-hud">
-            <rect x="${pos.labelX - 80}" y="32" width="160" height="52" rx="6" class="debug-vel-pill" />
+            <rect x="${pos.labelX - 75}" y="32" width="150" height="52" rx="6" class="debug-vel-pill" />
             <text x="${pos.labelX}" y="49" text-anchor="middle" class="debug-vel-main">v: —</text>
             <text x="${pos.labelX}" y="63" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
             <text x="${pos.labelX}" y="75" text-anchor="middle" class="debug-vel-history">History: —</text>
@@ -165,38 +164,50 @@ function renderOrchestraStage(piece: PieceDefinition): void {
       `;
     });
   } else {
-    // 7 sections for Full Symphony Orchestra
+    // 7 sections for Full Symphony Orchestra with 140px clean breathing room
+    const positions7 = [
+      { centerX: 75,  cy: 150 },
+      { centerX: 215, cy: 142 },
+      { centerX: 355, cy: 136 },
+      { centerX: 500, cy: 132 },
+      { centerX: 645, cy: 136 },
+      { centerX: 785, cy: 142 },
+      { centerX: 925, cy: 150 },
+    ];
+
     piece.sections.forEach((sec, idx) => {
-      const centerX = 35 + (idx + 1) * (770 / (numSections + 1));
-      const cy = idx % 2 === 0 ? 152 : 144;
+      const p = positions7[idx] || { centerX: 75 + idx * 140, cy: 144 };
+      const centerX = p.centerX;
+      const cy = p.cy;
+
       sectionsSvg += `
         <g id="section-${sec.id}" class="instrument-section" data-section-id="${sec.id}">
           <g class="section-debug-hud">
-            <rect x="${centerX - 48}" y="32" width="96" height="52" rx="6" class="debug-vel-pill" />
-            <text x="${centerX}" y="49" text-anchor="middle" class="debug-vel-main" style="font-size:12px;">v: —</text>
-            <text x="${centerX}" y="63" text-anchor="middle" class="debug-vel-decomp" style="font-size:8.5px;">Raw —</text>
-            <text x="${centerX}" y="75" text-anchor="middle" class="debug-vel-history" style="font-size:8px;">—</text>
+            <rect x="${centerX - 55}" y="30" width="110" height="52" rx="6" class="debug-vel-pill" />
+            <text x="${centerX}" y="47" text-anchor="middle" class="debug-vel-main" style="font-size:11.5px;">v: —</text>
+            <text x="${centerX}" y="61" text-anchor="middle" class="debug-vel-decomp" style="font-size:8.5px;">Raw —</text>
+            <text x="${centerX}" y="73" text-anchor="middle" class="debug-vel-history" style="font-size:8px;">—</text>
           </g>
-          <ellipse cx="${centerX - 24}" cy="${cy + 6}" rx="16" ry="24" class="musician ${sec.id} egg-0" />
-          <ellipse cx="${centerX}" cy="${cy}" rx="18" ry="28" class="musician ${sec.id} egg-1" />
-          <ellipse cx="${centerX + 24}" cy="${cy + 6}" rx="16" ry="24" class="musician ${sec.id} egg-2" />
-          <text x="${centerX}" y="202" text-anchor="middle" class="section-label" style="font-size: 10.5px;">${sec.name}</text>
+          <ellipse cx="${centerX - 21}" cy="${cy + 6}" rx="15" ry="23" class="musician ${sec.id} egg-0" />
+          <ellipse cx="${centerX}" cy="${cy}" rx="17" ry="27" class="musician ${sec.id} egg-1" />
+          <ellipse cx="${centerX + 21}" cy="${cy + 6}" rx="15" ry="23" class="musician ${sec.id} egg-2" />
+          <text x="${centerX}" y="202" text-anchor="middle" class="section-label" style="font-size: 10px; letter-spacing: 0.05em;">${sec.name}</text>
         </g>
       `;
     });
   }
 
   silhouetteContainer.innerHTML = `
-    <svg viewBox="0 0 840 230" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+    <svg viewBox="0 0 1000 230" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
       <!-- Conductor podium & Baton (Center) -->
       <g id="conductor-group" class="conductor-group">
-        <rect x="410" y="65" width="60" height="10" rx="5" class="podium" />
-        <ellipse cx="440" cy="50" rx="19" ry="24" class="conductor" />
-        <line id="baton-line" x1="450" y1="42" x2="495" y2="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="baton" />
+        <rect x="470" y="65" width="60" height="10" rx="5" class="podium" />
+        <ellipse cx="500" cy="50" rx="19" ry="24" class="conductor" />
+        <line id="baton-line" x1="510" y1="42" x2="555" y2="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="baton" />
       </g>
       ${sectionsSvg}
       <!-- Stage floor -->
-      <rect x="20" y="210" width="800" height="4" rx="2" class="stage-floor" />
+      <rect x="20" y="214" width="960" height="4" rx="2" class="stage-floor" />
     </svg>
   `;
 
