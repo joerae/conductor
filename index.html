@@ -239,25 +239,16 @@
         </div>
 
         <div id="tempo-mode-selector" class="mode-selector-container">
-          <span class="mode-label">Tempo:</span>
+          <span class="mode-label">Mode:</span>
           <div class="mode-pill-group">
-            <button id="mode-btn-a" class="mode-pill" data-mode="balanced" title="Mode A: Balanced PLL smoothing (inertia over ~3 beats)">
-              Mode A: Balanced
+            <button id="mode-btn-e" class="mode-pill active" data-mode="gestural" title="Expressive Mode (Default): Continuous Gestural Conducting (Raise hands to start, height modulates speed, drop hands to stop)">
+              🪄 Expressive
             </button>
-            <button id="mode-btn-b" class="mode-pill" data-mode="instant" title="Mode B: Super-responsive on a dime (instant cuts & speedups)">
-              Mode B: Instant
-            </button>
-            <button id="mode-btn-c" class="mode-pill" data-mode="autoplay" title="Mode C: Autoplay (tap twice to set tempo, plays continuously at tempo)">
-              Mode C: Autoplay ⚡
-            </button>
-            <button id="mode-btn-d" class="mode-pill" data-mode="inertial" title="Mode D: Inertial Cruise (forgiving, steer tempo with beats and release without stopping)">
-              Mode D: Cruise 📷
-            </button>
-            <button id="mode-btn-e" class="mode-pill active" data-mode="gestural" title="Mode E: Continuous Gestural Conducting (Default: raise hands to start at piece BPM, height controls accelerando, drop hands to stop)">
-              Mode E: Gesture 🪄
+            <button id="mode-btn-d" class="mode-pill" data-mode="inertial" title="Beat Mode: Conduct in cut time (1 stroke = 2 beats). Steer tempo with beats and release without stopping">
+              🥁 Beat
             </button>
           </div>
-          <span class="mode-shortcut-hint">Press <strong>T</strong> to cycle (or <strong>1–5</strong>)</span>
+          <span id="mode-hint-text" class="mode-shortcut-hint">🪄 <strong>Expressive</strong>: Raise hands to start • Height controls tempo (Accelerando / Rallentando) • Drop to stop</span>
         </div>
       </div>
 
@@ -277,7 +268,7 @@
 
       <!-- Footer controls -->
       <footer id="stage-footer">
-        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.7.1</button>
+        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.8.0</button>
         <span class="footer-divider">•</span>
         <span id="debug-hint" class="debug-hint">Press D for debug overlay & A/B DSP</span>
       </footer>

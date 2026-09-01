@@ -131,6 +131,13 @@ export class ExperienceController {
       },
       (deadbandRatio: number) => {
         this.clock.setTempoDeadband(deadbandRatio);
+      },
+      (mode: TempoMode) => {
+        this.setTempoMode(mode);
+        this.uiCallbacks.onStateChange(this.state);
+      },
+      () => {
+        this.startAutoplayInTempo();
       }
     );
 
@@ -197,13 +204,18 @@ export class ExperienceController {
       ]);
       this.transport.setEvents(this.midiScore.getEvents(), this.midiScore.getMetadata().totalBeats);
       const beatsPerTap = this.clock.getTempoMode() === "inertial" ? 2 : (piece.beatsPerTap || 1);
+      this.clock.setBeatsPerTap(beatsPerTap);
       this.transport.setBeatsPerTap(beatsPerTap);
 
       // Save baseline piece BPM for gestural tempo modulation
       const meta = this.midiScore.getMetadata();
       this.basePieceBpm = meta?.embeddedBpm || piece.defaultBpm || 140;
       this.currentGesturalBpm = this.basePieceBpm;
-      this.clock.setPeriodMs(60000 / this.basePieceBpm);
+      if (this.clock.getTempoMode() === "inertial") {
+        this.clock.setPeriodMs((60000 / this.basePieceBpm) * beatsPerTap);
+      } else {
+        this.clock.setPeriodMs(60000 / this.basePieceBpm);
+      }
 
       // Wire active input provider → clock
       this.keyboardInput.onBeat(obs => this.handleBeatObservation(obs));
@@ -563,12 +575,14 @@ export class ExperienceController {
       return;
     }
 
-    // Compute indicated instantaneous BPM with light smoothing
+    // Compute indicated instantaneous BPM with light smoothing (accounting for cut time in Mode D)
     const now = obs.timestampMs;
+    const piece = this.getCurrentPiece();
+    const beatsPerTap = this.clock.getTempoMode() === "inertial" ? 2 : (piece?.beatsPerTap || 1);
     if (this.lastBeatObservationMs > 0) {
       const dtMs = now - this.lastBeatObservationMs;
-      if (dtMs >= 100 && dtMs <= 2000) {
-        const instantBpm = 60000 / dtMs;
+      if (dtMs >= 100 && dtMs <= 3000) {
+        const instantBpm = (60000 / dtMs) * beatsPerTap;
         this.indicatedBpm = this.indicatedBpm > 0
           ? this.indicatedBpm * 0.55 + instantBpm * 0.45
           : instantBpm;
@@ -719,7 +733,27 @@ export class ExperienceController {
     this.debug.updateTempoMode(mode);
     const piece = this.getCurrentPiece();
     const beatsPerTap = mode === "inertial" ? 2 : (piece?.beatsPerTap || 1);
+    this.clock.setBeatsPerTap(beatsPerTap);
     this.transport.setBeatsPerTap(beatsPerTap);
+
+    if (mode === "gestural") {
+      this.clock.setPeriodMs(60000 / this.basePieceBpm);
+    } else if (mode === "inertial") {
+      this.clock.setPeriodMs((60000 / this.basePieceBpm) * beatsPerTap);
+    }
+  }
+
+  startAutoplayInTempo(): void {
+    this.setTempoMode("autoplay");
+    this.clock.setPeriodMs(60000 / this.basePieceBpm);
+    if (this.state === "ready" || this.state === "paused") {
+      this.startPlayback();
+    }
+  }
+
+  getEffectiveBeatsPerTap(): number {
+    const piece = this.getCurrentPiece();
+    return this.clock.getTempoMode() === "inertial" ? 2 : (piece?.beatsPerTap || 1);
   }
 
   getTempoMode(): TempoMode {

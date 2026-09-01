@@ -222,4 +222,30 @@ describe("ConductorClock Mode D (Coasting & Consistent Tempo Steering)", () => {
 
     vi.useRealTimers();
   });
+
+  it("accurately calculates score BPM when conducting in cut time (beatsPerTap = 2)", () => {
+    let audioTime = 0.0;
+    const clock = new ConductorClock({
+      getAudioTime: () => audioTime,
+      initialMode: "inertial",
+    });
+
+    clock.setBeatsPerTap(2);
+    expect(clock.getBeatsPerTap()).toBe(2);
+
+    // Conductor taps at 857ms interval (1 stroke = 2 beats for 140 BPM piece)
+    clock.acceptObservation({ source: "camera", timestampMs: 1000, confidence: 1.0 });
+    audioTime = 0.857;
+    clock.acceptObservation({ source: "camera", timestampMs: 1857.14, confidence: 1.0 });
+
+    const state = clock.getState();
+    expect(state.periodMs).toBeCloseTo(857.14, 1);
+    // Score BPM should be doubled (140 BPM, not 70 BPM)
+    expect(state.bpm).toBeCloseTo(140, 0);
+
+    // Setting BPM directly updates periodMs accounting for cut time
+    clock.setBpm(160);
+    expect(clock.getState().bpm).toBeCloseTo(160, 0);
+    expect(clock.getState().periodMs).toBeCloseTo((60000 / 160) * 2, 1); // 750ms
+  });
 });

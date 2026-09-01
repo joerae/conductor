@@ -59,6 +59,8 @@ export class DebugOverlay {
   private onCameraDynamicsModeChange?: (mode: "spread" | "height") => void;
   private onBeatSoundToggle?: (enabled: boolean) => void;
   private onTempoDeadbandChange?: (ratio: number) => void;
+  private onTempoModeChange?: (mode: "balanced" | "instant" | "autoplay" | "inertial" | "gestural") => void;
+  private onAutoplayInTempo?: () => void;
 
   // Cached DOM elements for live text updates without innerHTML thrashing
   private elements: Record<string, HTMLElement> = {};
@@ -109,7 +111,9 @@ export class DebugOverlay {
     onMacroRatioChange?: (ratio: number) => void,
     onCameraDynamicsModeChange?: (mode: "spread" | "height") => void,
     onBeatSoundToggle?: (enabled: boolean) => void,
-    onTempoDeadbandChange?: (ratio: number) => void
+    onTempoDeadbandChange?: (ratio: number) => void,
+    onTempoModeChange?: (mode: "balanced" | "instant" | "autoplay" | "inertial" | "gestural") => void,
+    onAutoplayInTempo?: () => void
   ) {
     this.onDSPToggle = onDSPToggle;
     this.onTogglePause = onTogglePause;
@@ -117,6 +121,8 @@ export class DebugOverlay {
     this.onCameraDynamicsModeChange = onCameraDynamicsModeChange;
     this.onBeatSoundToggle = onBeatSoundToggle;
     this.onTempoDeadbandChange = onTempoDeadbandChange;
+    this.onTempoModeChange = onTempoModeChange;
+    this.onAutoplayInTempo = onAutoplayInTempo;
     this.container = this.createContainer();
     document.body.appendChild(this.container);
 
@@ -213,6 +219,27 @@ export class DebugOverlay {
       }
     });
 
+    // Autoplay in tempo button
+    const autoplayBtn = this.container.querySelector<HTMLButtonElement>("#dbg-mode-autoplay-btn");
+    autoplayBtn?.addEventListener("click", () => {
+      this.onAutoplayInTempo?.();
+    });
+
+    // Tempo mode buttons in debug overlay
+    const modeButtons = this.container.querySelectorAll<HTMLButtonElement>(".dbg-tempo-mode-btn");
+    modeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const mode = btn.dataset.mode as "balanced" | "instant" | "autoplay" | "inertial" | "gestural";
+        if (mode) {
+          if (mode === "autoplay") {
+            this.onAutoplayInTempo?.();
+          } else {
+            this.onTempoModeChange?.(mode);
+          }
+        }
+      });
+    });
+
     // Jitter Deadband Slider
     const deadbandSlider = document.getElementById("dbg-deadband-slider") as HTMLInputElement;
     deadbandSlider?.addEventListener("input", () => {
@@ -245,8 +272,17 @@ export class DebugOverlay {
           : mode === "autoplay"
             ? "C (Autoplay ⚡)"
             : mode === "inertial"
-              ? "D (Coast & Steer 📷)"
-              : "E (Gesture / Accelerando 🪄)";
+              ? "Beat (Cut Time 🥁)"
+              : "Expressive (Gesture 🪄)";
+
+    const modeButtons = this.container?.querySelectorAll<HTMLButtonElement>(".dbg-tempo-mode-btn");
+    modeButtons?.forEach(btn => {
+      const isMatch = btn.dataset.mode === mode;
+      btn.style.background = isMatch ? "rgba(255, 213, 107, 0.25)" : "rgba(255, 255, 255, 0.05)";
+      btn.style.borderColor = isMatch ? "#ffd56b" : "rgba(255, 255, 255, 0.15)";
+      btn.style.color = isMatch ? "#ffd56b" : "#d0f0d0";
+      btn.style.fontWeight = isMatch ? "700" : "400";
+    });
   }
 
   updateClock(state: ClockState): void {
@@ -565,6 +601,16 @@ export class DebugOverlay {
           transition: all 0.15s ease;
           white-space: nowrap;
         ">⏸ Pause Orchestra</button>
+      </div>
+
+      <!-- Tempo & Playback Modes (Debug Panel) -->
+      <div class="debug-section-header" title="Select clock algorithm or trigger automated in-tempo playback">TEMPO & AUTOPLAY MODES</div>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 4px 0 10px 0;">
+        <button id="dbg-mode-autoplay-btn" style="grid-column: span 2; background: rgba(52, 199, 89, 0.2); color: #5cd87e; border: 1px solid #5cd87e; border-radius: 4px; padding: 6px 8px; font-family: inherit; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.15s ease;" title="Play piece continuously in tempo at default BPM without requiring manual conducting">⚡ Play Song in Tempo (Autoplay)</button>
+        <button class="dbg-tempo-mode-btn" data-mode="gestural" style="background: rgba(255,213,107,0.25); color: #ffd56b; border: 1px solid #ffd56b; border-radius: 4px; padding: 5px; font-family: inherit; font-size: 10px; font-weight: 700; cursor: pointer;">🪄 Expressive</button>
+        <button class="dbg-tempo-mode-btn" data-mode="inertial" style="background: rgba(255,255,255,0.05); color: #d0f0d0; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; padding: 5px; font-family: inherit; font-size: 10px; cursor: pointer;">🥁 Beat (Cut Time)</button>
+        <button class="dbg-tempo-mode-btn" data-mode="balanced" style="background: rgba(255,255,255,0.05); color: #d0f0d0; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; padding: 5px; font-family: inherit; font-size: 10px; cursor: pointer;">⚖️ Balanced PLL</button>
+        <button class="dbg-tempo-mode-btn" data-mode="instant" style="background: rgba(255,255,255,0.05); color: #d0f0d0; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; padding: 5px; font-family: inherit; font-size: 10px; cursor: pointer;">⏱️ Instant Dime</button>
       </div>
 
       <!-- Conductor Jitter & Stability Diagnostics -->

@@ -106,12 +106,25 @@ export class ConductorClock {
   private inertialTimer: ReturnType<typeof setTimeout> | null = null;
   private inertialFreeWheelCount: number = 0;
 
+  // Mode D & Cut Time multiplier (1 for 4/4 in 4, 2 for cut time in 2)
+  private beatsPerTap: number = 1;
+
   constructor(config: ConductorClockConfig) {
     this.getAudioTime = config.getAudioTime;
     this.tempoGain = config.tempoGain ?? TEMPO_GAIN;
     this.phaseGain = config.phaseGain ?? PHASE_GAIN;
     this.mode = config.initialMode ?? "balanced";
     this.tempoDeadband = config.tempoDeadband ?? MODE_D_DEFAULT_TEMPO_DEADBAND;
+  }
+
+  /** Set the beats advanced per tap/stroke (1 for standard, 2 for cut time). */
+  setBeatsPerTap(multiplier: number): void {
+    this.beatsPerTap = Math.max(1, multiplier);
+  }
+
+  /** Get the current beats per tap. */
+  getBeatsPerTap(): number {
+    return this.beatsPerTap;
   }
 
   /** Set the tempo following mode: 'balanced', 'instant', 'autoplay', 'inertial', or 'gestural' */
@@ -160,7 +173,7 @@ export class ConductorClock {
   /** Directly set BPM (used in Mode E for continuous height-based accelerando/rallentando). */
   setBpm(bpm: number): void {
     const clamped = Math.max(BPM_MIN, Math.min(BPM_MAX, bpm));
-    this.periodMs = 60000 / clamped;
+    this.periodMs = (60000 / clamped) * this.beatsPerTap;
     this.prevIntervalMs = this.periodMs;
   }
 
@@ -231,7 +244,7 @@ export class ConductorClock {
     if (this.mode === "inertial") {
       if (this.acceptedBeatCount === 1) {
         // Second tap: establish initial conducting pulse period
-        const impliedBpm = 60000 / elapsedMs;
+        const impliedBpm = (60000 / elapsedMs) * this.beatsPerTap;
         if (impliedBpm < BPM_MIN || impliedBpm > BPM_MAX) {
           if (impliedBpm < BPM_MIN) {
             this.lastAcceptedTapMs = nowMs;
@@ -473,7 +486,7 @@ export class ConductorClock {
   getState(): ClockState {
     return {
       periodMs: this.periodMs,
-      bpm: 60000 / this.periodMs,
+      bpm: (60000 / this.periodMs) * this.beatsPerTap,
       nextBeatAudioTime: this.nextBeatAudioTime,
       phaseErrorMs: this.phaseErrorMs,
       phaseCorrectionSec: this.phaseCorrectionSec,

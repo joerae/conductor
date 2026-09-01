@@ -1,9 +1,21 @@
 {
-  "version": "0.7.1",
+  "version": "0.8.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.8.0",
+      "date": "2026-09-01",
+      "summary": "Cut Time Mode D Tempo Doubling, Simplified Two-Mode UI (Expressive & Beat), and In-Tempo Autoplay Debug Integration",
+      "details": [
+        "Cut Time Tempo Display: Mode D ('Beat' Mode) accurately reflects cut time conducting (1 stroke = 2 beats). Both the Tempo Speedometer readout and internal clock now double the pulse rate to display true quarter-note score BPM (e.g. 140 BPM instead of 70 BPM)",
+        "Simplified Two-Mode Stage UI: Streamlined main stage tempo controls down to two clear, expressive modes: '🪄 Expressive' (Mode E continuous gestural conducting, default) and '🥁 Beat' (Mode D cut-time conducting)",
+        "Contextual Mode Hint Texts: Informative dynamic hints below the mode selector instruct users on exactly how to use each mode in real time",
+        "Debug Panel Autoplay Integration: Modes A (Balanced PLL), B (Instant), and C (In-Tempo Autoplay) moved to the Diagnostics & Debug Overlay (D key), including a one-click 'Play Song in Tempo' button",
+        "BPM Green Zone in All Modes: The ±20 BPM target band on the tempo gauge is now active across modes to guide tempo steering"
+      ]
+    },
     {
       "version": "0.7.1",
       "date": "2026-09-01",
