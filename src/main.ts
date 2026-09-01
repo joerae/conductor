@@ -666,6 +666,10 @@ loadRepertoireCatalog().then(() => {
     loadingEl.style.display = "none";
     stageEl.style.display = "flex";
     
+    // Sync UI buttons & hint text with initial controller state (Camera + Mode E)
+    updateInputSourceButtons(controller.getInputSource());
+    updateModeButtons(controller.getTempoMode());
+
     // Continuous smooth update loop for BPM gauge & Analogue Dynamics Marker
     function gaugeRenderLoop(): void {
       updateBpmGaugeUI();
@@ -673,9 +677,6 @@ loadRepertoireCatalog().then(() => {
       requestAnimationFrame(gaugeRenderLoop);
     }
     gaugeRenderLoop();
-
-    // Start in Camera Mode by default
-    setInputSource("camera");
   }).catch(err => {
     loadingEl.innerHTML = `<p class="error">Failed to load: ${err.message}</p>`;
   });

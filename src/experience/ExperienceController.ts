@@ -209,8 +209,8 @@ export class ExperienceController {
       this.keyboardInput.onBeat(obs => this.handleBeatObservation(obs));
       this.keyboardInput.start();
 
-      if (this.inputSource === "camera" && this.cameraInput) {
-        this.cameraInput.start();
+      if (this.inputSource === "camera") {
+        await this.initCamera();
       }
 
       this.prepTapCount = 0;
@@ -223,137 +223,12 @@ export class ExperienceController {
   }
 
   async setInputSource(source: InputSource): Promise<void> {
-    if (source === this.inputSource) return;
-
     if (source === "camera") {
-      if (!this.cameraInput) {
-        this.cameraInput = new CameraBeatInputProvider();
-        this.cameraInput.setDynamicsMode(this.cameraDynamicsMode);
-        // Wire camera dynamics directly into existing orchestral dynamic ladder & AudioEngine
-        this.cameraInput.onDynamics(dyn => {
-          if (this.inputSource === "camera") {
-            // Use continuous 0-1 value for smooth interpolated DSP; discrete level is derived internally
-            this.audioEngine.setContinuousDynamic(dyn.value);
-            const snappedLevel = this.audioEngine.getDynamicLevel();
-            this.baseDynamicLevel = snappedLevel;
-            this.uiCallbacks.onDynamicChange?.(snappedLevel);
-            this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
-          }
-        });
-        // Wire camera telemetry into debug overlay
-        this.cameraInput.onTelemetry(t => {
-          this.debug.updateCameraTelemetry(t);
-        });
-        // Wire camera beat observations into clock
-        this.cameraInput.onBeat(obs => this.handleBeatObservation(obs));
-        // Wire sample tracking for hands-down detection & Mode E continuous height tempo
-        this.cameraInput.onSamples(samples => {
-          // In Mode E: only pause when hands are completely off-screen.
-          // Low hand position = rallentando, NOT a stop signal.
-          this.isHandsDown = samples.length === 0;
-
-          if (samples.length > 0) {
-            if (this.clock.getTempoMode() === "gestural") {
-              // Update per-hand Y history for steady-vs-beating detection
-              for (const s of samples) {
-                let hist = this.handYHistory.get(s.handIndex);
-                if (!hist) { hist = []; this.handYHistory.set(s.handIndex, hist); }
-                hist.push(s.conductorPoint.y);
-                if (hist.length > this.HAND_Y_HISTORY_LEN) hist.shift();
-              }
-
-              // Determine effective tempo-control Y using steady-hand filtering:
-              // If one hand is "beating" (high Y variance) and one is "steady",
-              // use ONLY the steady hand's smoothed mean Y for tempo to prevent beating
-              // motion from modulating speed.
-              let effectiveY: number;
-              if (samples.length === 2) {
-                const stats = samples.map(s => {
-                  const hist = this.handYHistory.get(s.handIndex) ?? [s.conductorPoint.y];
-                  const mean = hist.reduce((a, b) => a + b, 0) / hist.length;
-                  const variance = hist.reduce((a, b) => a + (b - mean) ** 2, 0) / hist.length;
-                  return { y: s.conductorPoint.y, mean, variance };
-                });
-
-                const [h0, h1] = stats;
-                // Hand is beating if its Y variance is notably higher than the other (> 2.0x ratio & > 0.0006 abs variance)
-                const h0Beating = h0.variance > 0.0006 && h0.variance > 2.0 * h1.variance;
-                const h1Beating = h1.variance > 0.0006 && h1.variance > 2.0 * h0.variance;
-
-                if (h0Beating && !h1Beating) {
-                  // Hand 0 is beating, hand 1 is steady — use hand 1's smooth mean position
-                  effectiveY = h1.mean;
-                } else if (h1Beating && !h0Beating) {
-                  // Hand 1 is beating, hand 0 is steady — use hand 0's smooth mean position
-                  effectiveY = h0.mean;
-                } else {
-                  // Both steady or both beating — use average of smooth means
-                  effectiveY = (h0.mean + h1.mean) / 2;
-                }
-              } else {
-                const hist = this.handYHistory.get(samples[0].handIndex) ?? [samples[0].conductorPoint.y];
-                effectiveY = hist.reduce((a, b) => a + b, 0) / hist.length;
-              }
-
-              // Mode E: Auto-start as soon as user moves or raises hands from resting position
-              if (this.state === "ready" || this.state === "paused") {
-                const isMovingOrRaised = samples.some(s => {
-                  const hist = this.handYHistory.get(s.handIndex);
-                  if (!hist || hist.length < 2) return s.conductorPoint.y >= 0.20;
-                  const dy = Math.abs(s.conductorPoint.y - hist[0]);
-                  return s.conductorPoint.y >= 0.22 || dy > 0.02;
-                });
-
-                if (isMovingOrRaised) {
-                  this.startPlayback();
-                }
-              } else if (this.state === "playing") {
-                // Continuous Height Modulation for Accelerando / Rallentando:
-                // Hands comfortably in front of body ~0.40 -> 1.0x intended piece BPM (Dead center of Green Zone)
-                // Raising hands up to 0.85 -> 1.65x intended piece BPM
-                // Lowering hands down to 0.10 -> 0.35x intended piece BPM (Largo)
-                let heightMultiplier = 1.0;
-                const NEUTRAL_Y = 0.40;
-                const DEADBAND = 0.03; // [0.37, 0.43] holds exact middle of green zone
-
-                if (effectiveY > NEUTRAL_Y + DEADBAND) {
-                  const norm = Math.min(1.0, (effectiveY - (NEUTRAL_Y + DEADBAND)) / (0.85 - (NEUTRAL_Y + DEADBAND)));
-                  heightMultiplier = 1.0 + 0.65 * norm;
-                } else if (effectiveY < NEUTRAL_Y - DEADBAND) {
-                  const norm = Math.min(1.0, ((NEUTRAL_Y - DEADBAND) - effectiveY) / ((NEUTRAL_Y - DEADBAND) - 0.10));
-                  heightMultiplier = 1.0 - 0.65 * norm;
-                } else {
-                  heightMultiplier = 1.0;
-                }
-
-                const targetBpm = Math.max(40, Math.min(240, this.basePieceBpm * heightMultiplier));
-                const now = performance.now();
-                if (this.lastGesturalUpdateMs === 0) this.lastGesturalUpdateMs = now;
-                const dt = Math.max(0.005, (now - this.lastGesturalUpdateMs) / 1000);
-                this.lastGesturalUpdateMs = now;
-
-                // Smooth slew interpolation (~350ms time constant)
-                const alpha = 1 - Math.exp(-dt / 0.35);
-                this.currentGesturalBpm += alpha * (targetBpm - this.currentGesturalBpm);
-
-                this.clock.setBpm(this.currentGesturalBpm);
-                this.indicatedBpm = Math.round(this.currentGesturalBpm);
-
-                // Update transport period in real-time
-                this.transport.updatePeriod(
-                  this.audioEngine.getAudioTime(),
-                  60 / this.currentGesturalBpm,
-                  0
-                );
-              }
-            }
-          }
-        });
-      }
       this.inputSource = "camera";
       this.setTempoMode("gestural");
-      await this.cameraInput.start();
+      await this.initCamera();
     } else {
+      if (source === this.inputSource && !this.cameraInput) return;
       this.inputSource = "keyboard";
       if (this.clock.getTempoMode() === "inertial" || this.clock.getTempoMode() === "gestural") {
         this.setTempoMode("balanced");
@@ -364,6 +239,135 @@ export class ExperienceController {
     }
 
     this.uiCallbacks.onInputSourceChange?.(this.inputSource);
+  }
+
+  private async initCamera(): Promise<void> {
+    if (!this.cameraInput) {
+      this.cameraInput = new CameraBeatInputProvider();
+      this.cameraInput.setDynamicsMode(this.cameraDynamicsMode);
+      // Wire camera dynamics directly into existing orchestral dynamic ladder & AudioEngine
+      this.cameraInput.onDynamics(dyn => {
+        if (this.inputSource === "camera") {
+          // Use continuous 0-1 value for smooth interpolated DSP; discrete level is derived internally
+          this.audioEngine.setContinuousDynamic(dyn.value);
+          const snappedLevel = this.audioEngine.getDynamicLevel();
+          this.baseDynamicLevel = snappedLevel;
+          this.uiCallbacks.onDynamicChange?.(snappedLevel);
+          this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
+        }
+      });
+      // Wire camera telemetry into debug overlay
+      this.cameraInput.onTelemetry(t => {
+        this.debug.updateCameraTelemetry(t);
+      });
+      // Wire camera beat observations into clock
+      this.cameraInput.onBeat(obs => this.handleBeatObservation(obs));
+      // Wire sample tracking for hands-down detection & Mode E continuous height tempo
+      this.cameraInput.onSamples(samples => {
+        // In Mode E: only pause when hands are completely off-screen.
+        // Low hand position = rallentando, NOT a stop signal.
+        this.isHandsDown = samples.length === 0;
+
+        if (samples.length > 0) {
+          if (this.clock.getTempoMode() === "gestural") {
+            // Update per-hand Y history for steady-vs-beating detection
+            for (const s of samples) {
+              let hist = this.handYHistory.get(s.handIndex);
+              if (!hist) { hist = []; this.handYHistory.set(s.handIndex, hist); }
+              hist.push(s.conductorPoint.y);
+              if (hist.length > this.HAND_Y_HISTORY_LEN) hist.shift();
+            }
+
+            // Determine effective tempo-control Y using steady-hand filtering:
+            // If one hand is "beating" (high Y variance) and one is "steady",
+            // use ONLY the steady hand's smoothed mean Y for tempo to prevent beating
+            // motion from modulating speed.
+            let effectiveY: number;
+            if (samples.length === 2) {
+              const stats = samples.map(s => {
+                const hist = this.handYHistory.get(s.handIndex) ?? [s.conductorPoint.y];
+                const mean = hist.reduce((a, b) => a + b, 0) / hist.length;
+                const variance = hist.reduce((a, b) => a + (b - mean) ** 2, 0) / hist.length;
+                return { y: s.conductorPoint.y, mean, variance };
+              });
+
+              const [h0, h1] = stats;
+              // Hand is beating if its Y variance is notably higher than the other (> 2.0x ratio & > 0.0006 abs variance)
+              const h0Beating = h0.variance > 0.0006 && h0.variance > 2.0 * h1.variance;
+              const h1Beating = h1.variance > 0.0006 && h1.variance > 2.0 * h0.variance;
+
+              if (h0Beating && !h1Beating) {
+                // Hand 0 is beating, hand 1 is steady — use hand 1's smooth mean position
+                effectiveY = h1.mean;
+              } else if (h1Beating && !h0Beating) {
+                // Hand 1 is beating, hand 0 is steady — use hand 0's smooth mean position
+                effectiveY = h0.mean;
+              } else {
+                // Both steady or both beating — use average of smooth means
+                effectiveY = (h0.mean + h1.mean) / 2;
+              }
+            } else {
+              const hist = this.handYHistory.get(samples[0].handIndex) ?? [samples[0].conductorPoint.y];
+              effectiveY = hist.reduce((a, b) => a + b, 0) / hist.length;
+            }
+
+            // Mode E: Auto-start as soon as user moves or raises hands from resting position
+            if (this.state === "ready" || this.state === "paused") {
+              const isMovingOrRaised = samples.some(s => {
+                const hist = this.handYHistory.get(s.handIndex);
+                if (!hist || hist.length < 2) return s.conductorPoint.y >= 0.20;
+                const dy = Math.abs(s.conductorPoint.y - hist[0]);
+                return s.conductorPoint.y >= 0.22 || dy > 0.02;
+              });
+
+              if (isMovingOrRaised) {
+                this.startPlayback();
+              }
+            } else if (this.state === "playing") {
+              // Continuous Height Modulation for Accelerando / Rallentando:
+              // Hands comfortably in front of body ~0.40 -> 1.0x intended piece BPM (Dead center of Green Zone)
+              // Raising hands up to 0.85 -> 1.65x intended piece BPM
+              // Lowering hands down to 0.10 -> 0.35x intended piece BPM (Largo)
+              let heightMultiplier = 1.0;
+              const NEUTRAL_Y = 0.40;
+              const DEADBAND = 0.03; // [0.37, 0.43] holds exact middle of green zone
+
+              if (effectiveY > NEUTRAL_Y + DEADBAND) {
+                const norm = Math.min(1.0, (effectiveY - (NEUTRAL_Y + DEADBAND)) / (0.85 - (NEUTRAL_Y + DEADBAND)));
+                heightMultiplier = 1.0 + 0.65 * norm;
+              } else if (effectiveY < NEUTRAL_Y - DEADBAND) {
+                const norm = Math.min(1.0, ((NEUTRAL_Y - DEADBAND) - effectiveY) / ((NEUTRAL_Y - DEADBAND) - 0.10));
+                heightMultiplier = 1.0 - 0.65 * norm;
+              } else {
+                heightMultiplier = 1.0;
+              }
+
+              const targetBpm = Math.max(40, Math.min(240, this.basePieceBpm * heightMultiplier));
+              const now = performance.now();
+              if (this.lastGesturalUpdateMs === 0) this.lastGesturalUpdateMs = now;
+              const dt = Math.max(0.005, (now - this.lastGesturalUpdateMs) / 1000);
+              this.lastGesturalUpdateMs = now;
+
+              // Smooth slew interpolation (~350ms time constant)
+              const alpha = 1 - Math.exp(-dt / 0.35);
+              this.currentGesturalBpm += alpha * (targetBpm - this.currentGesturalBpm);
+
+              this.clock.setBpm(this.currentGesturalBpm);
+              this.indicatedBpm = Math.round(this.currentGesturalBpm);
+
+              // Update transport period in real-time
+              this.transport.updatePeriod(
+                this.audioEngine.getAudioTime(),
+                60 / this.currentGesturalBpm,
+                0
+              );
+            }
+          }
+        }
+      });
+    }
+
+    await this.cameraInput.start();
   }
 
   getInputSource(): InputSource {
