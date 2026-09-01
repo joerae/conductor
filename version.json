@@ -1,9 +1,29 @@
 {
-  "version": "0.13.0",
+  "version": "0.15.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.15.0",
+      "date": "2026-09-01",
+      "summary": "Feature-Flagged Thumbs-Up VFX Burst with Debug Toggle Checkbox",
+      "details": [
+        "Feature Flagged OFF by Default: Thumbs-Up particle starburst VFX is deactivated by default for standard performance purity",
+        "Debug Diagnostic Checkbox: Added a toggle checkbox in the D (Debug) diagnostic menu ('✨ Thumbs Up Camera VFX Burst') to easily test and demonstrate the celestial particle effect on demand",
+        "Zero Performance Overhead: Particle loops and gesture listeners are completely bypassed when the flag is disabled"
+      ]
+    },
+    {
+      "version": "0.14.0",
+      "date": "2026-09-01",
+      "summary": "Magical Thumbs-Up Canvas Particle & Shockwave VFX Burst",
+      "details": [
+        "Pure Visual Thumbs-Up Magic: Pointing thumb upward triggers a sparkling celestial VFX burst on the camera feed with zero intrusive text or transport interruptions",
+        "Celestial Particle System: Emits 16 shimmering diamond-star particles in golden, champagne, cyan, and star-white hues that radiate outwards with dynamic rotation and decay",
+        "Dual Shockwave Rings & Border Glow: Renders expanding radiant gold energy rings and a golden preview container halo upon detection"
+      ]
+    },
     {
       "version": "0.13.0",
       "date": "2026-09-01",

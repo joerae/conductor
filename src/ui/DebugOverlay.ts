@@ -61,6 +61,7 @@ export class DebugOverlay {
   private onTempoDeadbandChange?: (ratio: number) => void;
   private onTempoModeChange?: (mode: "balanced" | "instant" | "autoplay" | "inertial" | "gestural") => void;
   private onAutoplayInTempo?: () => void;
+  private onThumbsUpVFXToggle?: (enabled: boolean) => void;
 
   // Cached DOM elements for live text updates without innerHTML thrashing
   private elements: Record<string, HTMLElement> = {};
@@ -80,7 +81,7 @@ export class DebugOverlay {
     audioLatencyMs: 0,
     audioOutputLatencyMs: 0,
     isPaused: false,
-    tempoDeadband: 0.055,
+    tempoDeadband: 0.04,
     lastJitterMs: 0,
     lastJitterPercent: 0,
     averageJitterMs: 0,
@@ -113,7 +114,8 @@ export class DebugOverlay {
     onBeatSoundToggle?: (enabled: boolean) => void,
     onTempoDeadbandChange?: (ratio: number) => void,
     onTempoModeChange?: (mode: "balanced" | "instant" | "autoplay" | "inertial" | "gestural") => void,
-    onAutoplayInTempo?: () => void
+    onAutoplayInTempo?: () => void,
+    onThumbsUpVFXToggle?: (enabled: boolean) => void
   ) {
     this.onDSPToggle = onDSPToggle;
     this.onTogglePause = onTogglePause;
@@ -123,6 +125,7 @@ export class DebugOverlay {
     this.onTempoDeadbandChange = onTempoDeadbandChange;
     this.onTempoModeChange = onTempoModeChange;
     this.onAutoplayInTempo = onAutoplayInTempo;
+    this.onThumbsUpVFXToggle = onThumbsUpVFXToggle;
     this.container = this.createContainer();
     document.body.appendChild(this.container);
 
@@ -205,6 +208,14 @@ export class DebugOverlay {
     orchNeedleCb?.addEventListener("change", () => {
       const gauge = document.getElementById("bpm-gauge-container");
       gauge?.classList.toggle("show-orchestra-speed", orchNeedleCb.checked);
+    });
+
+    // Wire up Thumbs Up Camera VFX Burst toggle (Default: OFF)
+    const thumbsUpVfxCb = this.container.querySelector<HTMLInputElement>("#dbg-thumbsup-vfx-cb");
+    thumbsUpVfxCb?.addEventListener("change", () => {
+      if (this.onThumbsUpVFXToggle) {
+        this.onThumbsUpVFXToggle(thumbsUpVfxCb.checked);
+      }
     });
 
     // Pause button in header
@@ -799,6 +810,10 @@ export class DebugOverlay {
         <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Show a secondary cyan beacon needle on the stage speedometer tracking actual audio clock playback speed">
           <input type="checkbox" id="dbg-show-orchestra-needle-cb" style="accent-color:#ffd56b; margin-right:6px;">
           <span><strong>📊 Show Orchestra Speed Needle</strong> (Cyan Clock Beacon)</span>
+        </label>
+        <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Trigger a sparkling celestial particle starburst on the camera preview when showing a Thumbs Up gesture (Feature Flag)">
+          <input type="checkbox" id="dbg-thumbsup-vfx-cb" style="accent-color:#ffd56b; margin-right:6px;">
+          <span><strong>✨ Thumbs Up Camera VFX Burst</strong> (Sparkle Starburst)</span>
         </label>
       </div>
 

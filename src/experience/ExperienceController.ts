@@ -96,6 +96,7 @@ export class ExperienceController {
   private isFermata: boolean = false;
   private isPartyMode: boolean = false;
   private isLoveMode: boolean = false;
+  private isThumbsUpVFXEnabled: boolean = false; // Feature flag (Default: OFF)
 
   // Overburn decay timer (for ff/fff dynamic)
   private overburnTimer: ReturnType<typeof setTimeout> | null = null;
@@ -153,6 +154,9 @@ export class ExperienceController {
       },
       () => {
         this.startAutoplayInTempo();
+      },
+      (enabled: boolean) => {
+        this.setThumbsUpVFXEnabled(enabled);
       }
     );
 
@@ -274,6 +278,7 @@ export class ExperienceController {
     if (!this.cameraInput) {
       this.cameraInput = new CameraBeatInputProvider();
       this.cameraInput.setDynamicsMode(this.cameraDynamicsMode);
+      this.cameraInput.setThumbsUpVFXEnabled(this.isThumbsUpVFXEnabled);
       // Wire camera dynamics directly into existing orchestral dynamic ladder & AudioEngine
       this.cameraInput.onDynamics(dyn => {
         if (this.inputSource === "camera") {
@@ -660,6 +665,15 @@ export class ExperienceController {
 
   getDynamicsTelemetry(): DynamicsTelemetry {
     return this.audioEngine.getDynamicsTelemetry();
+  }
+
+  setThumbsUpVFXEnabled(enabled: boolean): void {
+    this.isThumbsUpVFXEnabled = enabled;
+    this.cameraInput?.setThumbsUpVFXEnabled(enabled);
+  }
+
+  isThumbsUpVFXActive(): boolean {
+    return this.isThumbsUpVFXEnabled;
   }
 
   // ── Beat observation handler ─────────────────────────────────────────────

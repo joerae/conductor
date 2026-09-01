@@ -42,6 +42,8 @@ export class CameraBeatInputProvider implements BeatInputProvider {
   private beatDetector: HandBeatDetector;
   private beatFusion: BeatFusion;
   private previewOverlay: CameraPreviewOverlay | null = null;
+  private lastThumbsUpBurstTime = new Map<number, number>();
+  private isThumbsUpVFXEnabled: boolean = false;
 
   private callbacks: Array<(beat: BeatObservation) => void> = [];
   private stateChangeCallbacks: Set<(state: CameraState, error?: string) => void> = new Set();
@@ -122,6 +124,19 @@ export class CameraBeatInputProvider implements BeatInputProvider {
         const candidate = this.beatDetector.processSample(motion, sample.handIndex);
         if (candidate) {
           this.beatFusion.submitCandidate(candidate, samples.length);
+        }
+      }
+
+      // 3. Trigger Thumbs Up VFX bursts on preview overlay (when feature flag enabled)
+      if (this.isThumbsUpVFXEnabled) {
+        for (const sample of samples) {
+          if (sample.gesture === "Thumb_Up") {
+            const lastBurst = this.lastThumbsUpBurstTime.get(sample.handIndex) || 0;
+            if (now - lastBurst > 450) {
+              this.lastThumbsUpBurstTime.set(sample.handIndex, now);
+              this.previewOverlay?.triggerThumbsUpVFXBurst(sample.conductorPoint.x, sample.conductorPoint.y);
+            }
+          }
         }
       }
 
@@ -261,6 +276,17 @@ export class CameraBeatInputProvider implements BeatInputProvider {
       confidence,
     };
     this.callbacks.forEach(cb => cb(obs));
+  }
+
+  /**
+   * Toggles Thumbs-Up magical canvas VFX burst feature flag.
+   */
+  setThumbsUpVFXEnabled(enabled: boolean): void {
+    this.isThumbsUpVFXEnabled = enabled;
+  }
+
+  isThumbsUpVFXActive(): boolean {
+    return this.isThumbsUpVFXEnabled;
   }
 
   private handleCameraStateChange(state: CameraState, error?: string): void {

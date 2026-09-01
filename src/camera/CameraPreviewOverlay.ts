@@ -34,6 +34,12 @@ export class CameraPreviewOverlay {
   private mirror: boolean;
   private onClose?: () => void;
   private activeBeatFlashes: Array<{ x: number; y: number; startTime: number; direction: "trough" | "apex" }> = [];
+  private activeThumbsUpBursts: Array<{
+    x: number;
+    y: number;
+    startTime: number;
+    particles: Array<{ vx: number; vy: number; size: number; color: string; rotation: number; rotSpeed: number }>;
+  }> = [];
 
   constructor(options?: CameraPreviewOverlayOptions) {
     this.mirror = options?.mirror ?? true;
@@ -50,6 +56,40 @@ export class CameraPreviewOverlay {
           this.containerEl.style.boxShadow = "";
         }
       }, 150);
+    }
+  }
+
+  triggerThumbsUpVFXBurst(x: number, y: number): void {
+    const particleColors = ["#ffd700", "#fff3b0", "#ffffff", "#6be7ff", "#ff9e00"];
+    const count = 16;
+    const particles = [];
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
+      const speed = 75 + Math.random() * 85;
+      particles.push({
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size: 3.5 + Math.random() * 3.5,
+        color: particleColors[i % particleColors.length],
+        rotation: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 8,
+      });
+    }
+
+    this.activeThumbsUpBursts.push({
+      x,
+      y,
+      startTime: performance.now(),
+      particles,
+    });
+
+    if (this.containerEl) {
+      this.containerEl.style.boxShadow = "0 16px 48px rgba(0, 0, 0, 0.85), 0 0 48px rgba(255, 215, 0, 0.85)";
+      setTimeout(() => {
+        if (this.containerEl) {
+          this.containerEl.style.boxShadow = "";
+        }
+      }, 200);
     }
   }
 
@@ -324,6 +364,67 @@ export class CameraPreviewOverlay {
       ctx.stroke();
       ctx.restore();
 
+      return true;
+    });
+
+    // 6. Render active Thumbs Up VFX bursts (golden shockwaves + sparkling diamond star particles)
+    this.activeThumbsUpBursts = this.activeThumbsUpBursts.filter(burst => {
+      const elapsed = now - burst.startTime;
+      if (elapsed > 550) return false;
+
+      const progress = elapsed / 550; // 0 -> 1
+      const alpha = Math.max(0, 1 - progress);
+      const px = burst.x * width;
+      const py = (1 - burst.y) * height;
+
+      ctx.save();
+
+      // Outer expanding shimmer shockwave
+      const ringRadius = 10 + progress * 55;
+      ctx.beginPath();
+      ctx.arc(px, py, ringRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 215, 0, ${alpha * 0.95})`;
+      ctx.lineWidth = 3.5 * (1 - progress);
+      ctx.shadowColor = "#ffd700";
+      ctx.shadowBlur = 18 * (1 - progress);
+      ctx.stroke();
+
+      // Inner fast sparkle ring
+      const innerRingRadius = 6 + progress * 30;
+      ctx.beginPath();
+      ctx.arc(px, py, innerRingRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.85})`;
+      ctx.lineWidth = 2 * (1 - progress);
+      ctx.stroke();
+
+      // Sparkle diamond star particles shooting outward
+      const dt = elapsed / 1000;
+      for (const p of burst.particles) {
+        const partX = px + p.vx * dt;
+        const partY = py + p.vy * dt;
+        const partSize = p.size * (1 - progress * 0.65);
+
+        ctx.save();
+        ctx.translate(partX, partY);
+        ctx.rotate(p.rotation + p.rotSpeed * dt);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = alpha;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 10 * (1 - progress);
+
+        // Draw 4-point diamond star sparkle
+        ctx.beginPath();
+        ctx.moveTo(0, -partSize);
+        ctx.lineTo(partSize * 0.35, 0);
+        ctx.lineTo(0, partSize);
+        ctx.lineTo(-partSize * 0.35, 0);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      ctx.restore();
       return true;
     });
   }
