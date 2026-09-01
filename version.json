@@ -1,9 +1,20 @@
 {
-  "version": "0.17.0",
+  "version": "0.18.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.18.0",
+      "date": "2026-09-02",
+      "summary": "Spotlight Refinements: Vertical Hand Angle Gating, 60fps GPU Performance & Layout Polish",
+      "details": [
+        "Strict Hand Angle & Verticality Gating: Hand orientation must be substantially vertical with index finger pointing straight up, eliminating false trigger from sideways/tilted hands and dynamics conducting",
+        "Tighter Finger Curling Threshold: Middle, ring, and pinky fingers must be substantially curled into the palm, preventing loose or relaxed conducting hands from triggering spotlight mode",
+        "Buttery Smooth 60fps Framerate: Removed expensive Canvas 2D CPU software shadowBlur passes and multi-pass nested SVG CSS drop-shadow filters, moving to GPU-accelerated gradient layering",
+        "Layout & Boundary Polish: Removed redundant conductor illustration ('egg with chopsticks') to reclaim vertical screen space, elevated orchestra silhouette with z-index 40 to prevent camera frame collisions, and repositioned top banner"
+      ]
+    },
     {
       "version": "0.17.0",
       "date": "2026-09-02",

@@ -1870,132 +1870,119 @@ body.debug-mode-active .section-debug-hud {
 /* ── Instrument Focus Mode (✨ Pointing & Pinch Section Mix) ─────────────── */
 .focus-banner {
   position: fixed;
-  top: 24px;
+  top: 12px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 9999;
-  background: linear-gradient(135deg, rgba(20, 30, 48, 0.96), rgba(36, 59, 85, 0.96));
+  background: linear-gradient(135deg, rgba(20, 30, 48, 0.95), rgba(36, 59, 85, 0.95));
   color: #ffd56b;
-  padding: 10px 24px;
-  border-radius: 30px;
-  border: 2px solid rgba(255, 213, 107, 0.75);
+  padding: 6px 18px;
+  border-radius: 20px;
+  border: 1.5px solid rgba(255, 213, 107, 0.85);
   font-family: var(--font-ui);
-  font-size: 0.95rem;
+  font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   display: flex;
   align-items: center;
-  gap: 12px;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.85), 0 0 32px rgba(255, 213, 107, 0.35);
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75);
   pointer-events: none;
-  animation: focusBannerPop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: focusBannerPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .focus-banner.grabbed {
   border-color: #ffd56b;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.9), 0 0 45px rgba(255, 213, 107, 0.65);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.85), 0 0 20px rgba(255, 213, 107, 0.4);
   background: linear-gradient(135deg, rgba(35, 30, 15, 0.98), rgba(65, 50, 20, 0.98));
 }
 
 @keyframes focusBannerPop {
-  0% { transform: translateX(-50%) scale(0.85); opacity: 0; }
+  0% { transform: translateX(-50%) scale(0.88); opacity: 0; }
   100% { transform: translateX(-50%) scale(1); opacity: 1; }
 }
 
 .focus-banner-icon {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   line-height: 1;
 }
 
 .focus-banner-badge {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 3px 8px;
-  border-radius: 12px;
+  padding: 2px 7px;
+  border-radius: 10px;
   background: rgba(255, 213, 107, 0.2);
   color: #ffffff;
   border: 1px solid rgba(255, 213, 107, 0.4);
 }
 
-/* ── Spotlight Focus Mode Section Downward Transition ────────────────────── */
+/* ── Spotlight Focus Mode Clean Elevation & Section Highlighting ───────── */
 #orchestra-silhouette {
   width: min(720px, 80vw);
   flex-shrink: 1;
   position: relative;
-  z-index: 25;
-  margin-bottom: 2px;
-  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-              opacity 0.35s ease,
-              filter 0.35s ease;
+  z-index: 40;
+  margin-top: 2px;
+  margin-bottom: 10px;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.25s ease;
   transform-origin: center top;
 }
 
 #stage.focus-mode-active #orchestra-silhouette {
-  /* Smooth downward glide towards pointing finger with golden halo */
-  transform: translateY(22px) scale(1.03);
-  filter: drop-shadow(0 14px 36px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 32px rgba(255, 213, 107, 0.50));
+  transform: scale(1.02);
 }
 
 #stage.focus-mode-active #dynamic-ladder-container {
-  opacity: 0.30;
+  opacity: 0.35;
   pointer-events: none;
-  filter: blur(1px);
-  transition: opacity 0.4s ease, filter 0.4s ease;
+  transition: opacity 0.3s ease;
 }
 
 /* ── Section Visual States during Spotlight Focus Mode ───────────────────── */
 #stage.focus-mode-active .instrument-section {
   opacity: 0.50;
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-              opacity 0.25s ease,
-              filter 0.25s ease;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.2s ease;
 }
 
 #stage.focus-mode-active .instrument-section.focus-hover {
   opacity: 1.0 !important;
-  transform: scale(1.08) translateY(-4px);
-  filter: drop-shadow(0 0 20px rgba(255, 213, 107, 0.95));
+  transform: scale(1.06);
 }
 
 #stage.focus-mode-active .instrument-section.focus-hover .musician {
   stroke: #ffd56b !important;
   stroke-width: 2.5 !important;
-  filter: drop-shadow(0 0 16px rgba(255, 213, 107, 0.9));
 }
 
 #stage.focus-mode-active .instrument-section.focus-hover .section-label {
   fill: #ffd56b !important;
   font-weight: 700 !important;
-  filter: drop-shadow(0 0 12px #ffd56b);
 }
 
 #stage.focus-mode-active .instrument-section.focus-grabbed {
   opacity: 1.0 !important;
-  transform: scale(1.12) translateY(-6px);
-  filter: drop-shadow(0 0 32px rgba(255, 213, 107, 1.0)) drop-shadow(0 0 55px rgba(255, 176, 58, 0.9));
+  transform: scale(1.08);
 }
 
 #stage.focus-mode-active .instrument-section.focus-grabbed .musician {
   fill: #ffd56b !important;
   stroke: #ffffff !important;
   stroke-width: 3.5 !important;
-  filter: drop-shadow(0 0 22px rgba(255, 213, 107, 1.0)) drop-shadow(0 0 38px rgba(255, 176, 58, 0.95));
 }
 
 #stage.focus-mode-active .instrument-section.focus-grabbed .section-label {
   fill: #ffffff !important;
   font-weight: 800 !important;
   letter-spacing: 0.08em;
-  text-shadow: 0 0 16px #ffd56b, 0 0 32px #ffb03a;
 }
 
 #stage.focus-mode-active.has-grabbed-section .instrument-section:not(.focus-grabbed) {
-  opacity: 0.25 !important;
-  filter: grayscale(0.5) blur(0.8px);
+  opacity: 0.22 !important;
 }
 
 

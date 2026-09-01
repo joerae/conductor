@@ -158,7 +158,7 @@ describe("Hand Gesture Detection", () => {
     expect(gesture).toBe("Victory");
   });
 
-  it("classifies Pointing_Up when index is extended and middle, ring, pinky are curled", () => {
+  it("classifies Pointing_Up when index is extended vertically and other fingers are strictly curled", () => {
     const pointingLandmarks = createMockHandLandmarks({
       thumbExtended: false,
       indexExtended: true,
@@ -169,6 +169,40 @@ describe("Hand Gesture Detection", () => {
 
     const gesture = classifyHandGestureFromLandmarks(pointingLandmarks);
     expect(gesture).toBe("Pointing_Up");
+  });
+
+  it("does NOT classify Pointing_Up when hand is oriented sideways/horizontal", () => {
+    const sidewaysLandmarks = createMockHandLandmarks({
+      thumbExtended: false,
+      indexExtended: true,
+      middleExtended: false,
+      ringExtended: false,
+      pinkyExtended: false,
+    });
+    // Rotate wrist and knuckles so palm axis is horizontal (wrist at right, knuckles at left)
+    sidewaysLandmarks[HAND_LANDMARK_INDICES.WRIST] = { x: 0.70, y: 0.60, z: 0 };
+    sidewaysLandmarks[HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP] = { x: 0.40, y: 0.60, z: 0 };
+    sidewaysLandmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP] = { x: 0.40, y: 0.55, z: 0 };
+    sidewaysLandmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] = { x: 0.35, y: 0.50, z: 0 };
+    sidewaysLandmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP] = { x: 0.30, y: 0.45, z: 0 };
+
+    const gesture = classifyHandGestureFromLandmarks(sidewaysLandmarks);
+    expect(gesture).not.toBe("Pointing_Up");
+  });
+
+  it("does NOT classify Pointing_Up when other fingers are half-open / floating", () => {
+    const looseHandLandmarks = createMockHandLandmarks({
+      thumbExtended: false,
+      indexExtended: true,
+      middleExtended: false,
+      ringExtended: false,
+      pinkyExtended: false,
+    });
+    // Middle tip is extended upwards towards PIP rather than curled into palm
+    looseHandLandmarks[HAND_LANDMARK_INDICES.MIDDLE_FINGER_TIP] = { x: 0.50, y: 0.48, z: 0 }; // past PIP y: 0.52
+
+    const gesture = classifyHandGestureFromLandmarks(looseHandLandmarks);
+    expect(gesture).not.toBe("Pointing_Up");
   });
 
   it("calculates normalized pinch distance correctly", () => {

@@ -405,54 +405,36 @@ export class CameraPreviewOverlay {
         ctx.save();
         const pulse = (Math.sin(now / 120) + 1) / 2; // 0..1 pulse
 
-        // Outer targeting reticle ring
-        ctx.beginPath();
-        ctx.arc(fx, fy, 14 + pulse * 4, 0, Math.PI * 2);
-        ctx.strokeStyle = focusTelemetry.state === "grabbed"
-          ? "rgba(255, 213, 107, 0.95)"
-          : "rgba(107, 231, 255, 0.85)";
-        ctx.lineWidth = 2.5;
-        ctx.shadowColor = focusTelemetry.state === "grabbed" ? "#ffd56b" : "#6be7ff";
-        ctx.shadowBlur = 14;
-        ctx.stroke();
-
-        // 4 crosshair pips on reticle
-        for (let i = 0; i < 4; i++) {
-          const ang = (Math.PI / 2) * i + (now / 1000);
-          const r1 = 18 + pulse * 3;
-          const r2 = 24 + pulse * 3;
-          ctx.beginPath();
-          ctx.moveTo(fx + Math.cos(ang) * r1, fy + Math.sin(ang) * r1);
-          ctx.lineTo(fx + Math.cos(ang) * r2, fy + Math.sin(ang) * r2);
-          ctx.stroke();
-        }
-
-        // Inner glowing jewel
-        ctx.beginPath();
-        ctx.arc(fx, fy, 5, 0, Math.PI * 2);
-        ctx.fillStyle = "#ffffff";
-        ctx.shadowColor = "#ffffff";
-        ctx.shadowBlur = 8;
-        ctx.fill();
-
-        // If spotlight active: Draw radiant upward spotlight cone & energy beam
+        // 1. If spotlight active: Draw GPU-accelerated radiant upward spotlight cone & beam
         if (focusTelemetry.state === "grabbed" || focusTelemetry.state === "hovering") {
-          // Shimmering conical spotlight beam shooting towards top of frame into orchestra section
-          ctx.save();
-          const beamGrad = ctx.createLinearGradient(fx, fy, fx, 0);
-          beamGrad.addColorStop(0, "rgba(255, 213, 107, 0.75)");
-          beamGrad.addColorStop(0.4, "rgba(255, 230, 150, 0.35)");
-          beamGrad.addColorStop(1, "rgba(255, 255, 255, 0.08)");
+          // Wide outer ambient cone
+          const outerGrad = ctx.createLinearGradient(fx, fy, fx, 0);
+          outerGrad.addColorStop(0, "rgba(255, 213, 107, 0.35)");
+          outerGrad.addColorStop(0.35, "rgba(255, 230, 150, 0.16)");
+          outerGrad.addColorStop(1, "rgba(255, 255, 255, 0.0)");
 
           ctx.beginPath();
-          ctx.moveTo(fx - 10, fy);
-          ctx.lineTo(fx - 36, 0);
-          ctx.lineTo(fx + 36, 0);
-          ctx.lineTo(fx + 10, fy);
+          ctx.moveTo(fx - 14, fy);
+          ctx.lineTo(fx - 44, 0);
+          ctx.lineTo(fx + 44, 0);
+          ctx.lineTo(fx + 14, fy);
           ctx.closePath();
-          ctx.fillStyle = beamGrad;
-          ctx.shadowColor = "#ffd56b";
-          ctx.shadowBlur = 22;
+          ctx.fillStyle = outerGrad;
+          ctx.fill();
+
+          // Intense inner focus beam
+          const innerGrad = ctx.createLinearGradient(fx, fy, fx, 0);
+          innerGrad.addColorStop(0, "rgba(255, 240, 190, 0.75)");
+          innerGrad.addColorStop(0.4, "rgba(255, 220, 110, 0.35)");
+          innerGrad.addColorStop(1, "rgba(255, 255, 255, 0.05)");
+
+          ctx.beginPath();
+          ctx.moveTo(fx - 5, fy);
+          ctx.lineTo(fx - 18, 0);
+          ctx.lineTo(fx + 18, 0);
+          ctx.lineTo(fx + 5, fy);
+          ctx.closePath();
+          ctx.fillStyle = innerGrad;
           ctx.fill();
 
           // Central radiant core laser beam
@@ -460,21 +442,49 @@ export class CameraPreviewOverlay {
           ctx.moveTo(fx, fy);
           ctx.lineTo(fx, 0);
           ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-          ctx.lineWidth = 3.5;
-          ctx.shadowColor = "#ffd56b";
-          ctx.shadowBlur = 14;
+          ctx.lineWidth = 3.0;
           ctx.stroke();
 
           // Concentric spotlight halo rings
           ctx.beginPath();
           ctx.arc(fx, fy, 22 + pulse * 6, 0, Math.PI * 2);
-          ctx.strokeStyle = "rgba(255, 213, 107, 0.85)";
-          ctx.lineWidth = 2.5;
-          ctx.shadowColor = "#ffd56b";
-          ctx.shadowBlur = 12;
+          ctx.strokeStyle = "rgba(255, 213, 107, 0.65)";
+          ctx.lineWidth = 2.0;
           ctx.stroke();
-          ctx.restore();
         }
+
+        // 2. Outer targeting reticle ring & glowing aura
+        ctx.beginPath();
+        ctx.arc(fx, fy, 14 + pulse * 4, 0, Math.PI * 2);
+        ctx.fillStyle = focusTelemetry.state === "grabbed"
+          ? "rgba(255, 213, 107, 0.18)"
+          : "rgba(107, 231, 255, 0.15)";
+        ctx.fill();
+        ctx.strokeStyle = focusTelemetry.state === "grabbed"
+          ? "rgba(255, 213, 107, 0.95)"
+          : "rgba(107, 231, 255, 0.85)";
+        ctx.lineWidth = 2.2;
+        ctx.stroke();
+
+        // 4 crosshair pips on reticle
+        for (let i = 0; i < 4; i++) {
+          const ang = (Math.PI / 2) * i + (now / 1000);
+          const r1 = 17 + pulse * 3;
+          const r2 = 23 + pulse * 3;
+          ctx.beginPath();
+          ctx.moveTo(fx + Math.cos(ang) * r1, fy + Math.sin(ang) * r1);
+          ctx.lineTo(fx + Math.cos(ang) * r2, fy + Math.sin(ang) * r2);
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.90)";
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+        }
+
+        // Inner glowing jewel
+        ctx.beginPath();
+        ctx.arc(fx, fy, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+
         ctx.restore();
       }
     }
