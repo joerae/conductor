@@ -36,7 +36,7 @@ const STOP_AFTER_PERIODS = 3.0;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type TempoMode = "balanced" | "instant" | "autoplay";
+export type TempoMode = "balanced" | "instant" | "autoplay" | "inertial";
 
 export type ClockEventType = "beat" | "rejected" | "stopped";
 
@@ -75,6 +75,8 @@ export class ConductorClock {
   private listeners: Listener[] = [];
   private stopTimer: ReturnType<typeof setTimeout> | null = null;
   private autoplayTimer: ReturnType<typeof setTimeout> | null = null;
+  private inertialTimer: ReturnType<typeof setTimeout> | null = null;
+  private inertialFreeWheelCount: number = 0;
 
   constructor(config: ConductorClockConfig) {
     this.getAudioTime = config.getAudioTime;
@@ -83,7 +85,7 @@ export class ConductorClock {
     this.mode = config.initialMode ?? "balanced";
   }
 
-  /** Set the tempo following mode: 'balanced', 'instant', or 'autoplay' */
+  /** Set the tempo following mode: 'balanced', 'instant', 'autoplay', or 'inertial' */
   setTempoMode(mode: TempoMode): void {
     const prevMode = this.mode;
     this.mode = mode;
@@ -91,9 +93,15 @@ export class ConductorClock {
     if (this.isRunning()) {
       if (mode === "autoplay" && prevMode !== "autoplay") {
         this.cancelStopTimer();
+        this.cancelInertialLoop();
         this.startAutoplayLoop();
-      } else if (mode !== "autoplay" && prevMode === "autoplay") {
+      } else if (mode === "inertial" && prevMode !== "inertial") {
         this.cancelAutoplayLoop();
+        this.cancelStopTimer();
+        this.startInertialLoop();
+      } else if (mode !== "autoplay" && mode !== "inertial") {
+        this.cancelAutoplayLoop();
+        this.cancelInertialLoop();
         this.scheduleStopTimer();
       }
     }
@@ -120,7 +128,13 @@ export class ConductorClock {
       return;
     }
 
-    const intervalMs = nowMs - this.lastAcceptedTapMs;
+    let intervalMs = nowMs - this.lastAcceptedTapMs;
+
+    // ── Mode D (Inertial): handle re-entry after free-wheeling multiple beats
+    if (this.mode === "inertial" && this.acceptedBeatCount >= 2 && intervalMs > this.periodMs * 1.5) {
+      const beatsElapsed = Math.max(1, Math.round(intervalMs / this.periodMs));
+      intervalMs = intervalMs / beatsElapsed;
+    }
 
     // ── Reject: double-tap (keyboard bounce)
     if (intervalMs < DOUBLE_TAP_GUARD_MS) {
@@ -137,6 +151,7 @@ export class ConductorClock {
         this.acceptedBeatCount = 1;
         this.confidence = 0.1;
         this.cancelAutoplayLoop();
+        this.cancelInertialLoop();
       }
       this.emit({ type: "rejected", reason: "out_of_range", timestampMs: nowMs });
       return;
@@ -171,6 +186,19 @@ export class ConductorClock {
       }
       const phaseCorrectionMs = phaseErrorMs * 0.85;
       this.phaseCorrectionSec = phaseCorrectionMs / 1000;
+    } else if (this.mode === "inertial") {
+      // ── Mode D: Inertial Cruise / Steer & Release
+      this.inertialFreeWheelCount = 0;
+      if (this.acceptedBeatCount === 1) {
+        this.periodMs = intervalMs;
+        this.prevIntervalMs = intervalMs;
+      } else {
+        // Smooth blending with high inertia (follows deliberate guidance without jitter)
+        this.periodMs = this.periodMs * 0.72 + intervalMs * 0.28;
+      }
+      // Gentle phase correction to avoid jarring tempo jumps
+      const phaseCorrectionMs = phaseErrorMs * 0.25;
+      this.phaseCorrectionSec = phaseCorrectionMs / 1000;
     } else {
       // ── Mode A: Balanced PLL
       if (this.acceptedBeatCount === 1) {
@@ -196,6 +224,8 @@ export class ConductorClock {
 
     if (this.mode === "autoplay") {
       this.startAutoplayLoop();
+    } else if (this.mode === "inertial") {
+      this.startInertialLoop();
     } else {
       this.scheduleStopTimer();
     }
@@ -242,11 +272,13 @@ export class ConductorClock {
   reset(): void {
     this.cancelStopTimer();
     this.cancelAutoplayLoop();
+    this.cancelInertialLoop();
     this.lastAcceptedTapMs = -1;
     this.nextBeatAudioTime = -1;
     this.acceptedBeatCount = 0;
     this.phaseErrorMs = 0;
     this.confidence = 0;
+    this.inertialFreeWheelCount = 0;
   }
 
   // ── Private ─────────────────────────────────────────────────────────────────
@@ -291,9 +323,55 @@ export class ConductorClock {
     }
   }
 
+  /**
+   * In Mode D (Inertial / Cruise Control), carries the tempo forward through missed beats
+   * for up to 16 bars without halting, allowing steer & release conducting.
+   */
+  private startInertialLoop(): void {
+    this.cancelInertialLoop();
+    if (this.mode !== "inertial" || this.acceptedBeatCount < 2) return;
+
+    const scheduleNext = () => {
+      this.inertialTimer = setTimeout(() => {
+        if (this.mode !== "inertial" || this.acceptedBeatCount < 2) return;
+
+        this.inertialFreeWheelCount++;
+        // If conductor has not conducted for 16 bars, gently halt
+        if (this.inertialFreeWheelCount > 16) {
+          this.reset();
+          this.emit({ type: "stopped" });
+          return;
+        }
+
+        const audioNow = this.getAudioTime();
+        const periodSec = this.periodMs / 1000;
+        this.nextBeatAudioTime = audioNow + periodSec;
+        this.acceptedBeatCount++;
+        this.confidence = Math.max(0.40, this.confidence - 0.03);
+
+        this.emit({
+          type: "beat",
+          state: this.getState(),
+          beatNumber: this.acceptedBeatCount,
+        });
+
+        scheduleNext();
+      }, this.periodMs);
+    };
+
+    scheduleNext();
+  }
+
+  private cancelInertialLoop(): void {
+    if (this.inertialTimer !== null) {
+      clearTimeout(this.inertialTimer);
+      this.inertialTimer = null;
+    }
+  }
+
   private scheduleStopTimer(): void {
     this.cancelStopTimer();
-    if (this.mode === "autoplay") return; // Autoplay never halts on silence
+    if (this.mode === "autoplay" || this.mode === "inertial") return;
 
     this.stopTimer = setTimeout(() => {
       this.reset();

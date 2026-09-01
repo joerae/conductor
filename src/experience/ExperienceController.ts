@@ -217,13 +217,17 @@ export class ExperienceController {
             this.setDynamicLevel(dyn.level);
           }
         });
-        // Wire camera beat observations into clock (for Phase C1+)
+        // Wire camera beat observations into clock (Phases C1 & C2)
         this.cameraInput.onBeat(obs => this.handleBeatObservation(obs));
       }
       this.inputSource = "camera";
+      this.setTempoMode("inertial");
       await this.cameraInput.start();
     } else {
       this.inputSource = "keyboard";
+      if (this.clock.getTempoMode() === "inertial") {
+        this.setTempoMode("balanced");
+      }
       if (this.cameraInput) {
         this.cameraInput.stop();
       }

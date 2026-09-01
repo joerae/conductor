@@ -1,6 +1,7 @@
 # TODO.md
 
-- [x] **FIRST FEW NOTES**: Sort out the problem when you start the piece it misses the first few notes (Resolved in v0.2.3: Clamped near-past boundary notes in Scheduler so downbeat notes never drop under tap jitter).
-- [x] **GOES ON WITHOUT YOU**: Sometime it gets into a state where the orchestra keeps playing but you have no more input, and you can't control it (Resolved in v0.2.3: Reset tap timestamp baseline on slow gaps in ConductorClock so conducting control is immediately recaptured).
-- [x] **CUT TIME**: For Symphony #5, it feels like I need to conduct a lot. Make it that I conduct in "cut time" i.e. just half of the beats (Resolved in v0.2.3: Added `beatsPerTap: 2` for Beethoven 5, so 1 tap = 2 beats / 1 bar).
-- [x] **SONG METADATA**: Metadata for songs colocated alongside `.mid` files in `public/midi/` (Resolved in v0.2.3: Created `Eine-Kleine-Nachtmusik1.json`, `5th-Symphony-Part-1.json`, and `repertoire.json`).
+ **FIRST FEW NOTES**: With Beethoven's 5, we miss the first few notes. Maybe we could just add a couple of extra beats beforehand that will be played with a little "ding" to indicate the speed or something? This could be part of the song's metadata
+
+ ** INTERPOLATE DYNAMICS** with camera control, we have a wonderful range of dynamic adjustment that could fit between each level, e.g. mf and f. While we will visually display the dynamic we are on, I think it would sound richer and more expressive if it smoothly moved between the dynamic levels, expecially with hand control. We could visualise exatly where we are with a line that moves up and down next to the dynamics in response to your hand gesture. And all the funcitons of dynamics would interpolate too (e.g. the reverb amount would go on a curve too)
+
+ ** MAKE CAMERA VIEW MORE MAGICAL ** add some vfx in time with the beat, and maybe overlay some particle systems that react to the music and your hand

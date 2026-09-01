@@ -33,10 +33,23 @@ export class CameraPreviewOverlay {
   private isCollapsed = false;
   private mirror: boolean;
   private onClose?: () => void;
+  private activeBeatFlashes: Array<{ x: number; y: number; startTime: number }> = [];
 
   constructor(options?: CameraPreviewOverlayOptions) {
     this.mirror = options?.mirror ?? true;
     this.onClose = options?.onClose;
+  }
+
+  triggerBeatFlash(x: number, y: number): void {
+    this.activeBeatFlashes.push({ x, y, startTime: performance.now() });
+    if (this.containerEl) {
+      this.containerEl.style.boxShadow = "0 16px 48px rgba(0, 0, 0, 0.85), 0 0 42px rgba(255, 213, 107, 0.65)";
+      setTimeout(() => {
+        if (this.containerEl) {
+          this.containerEl.style.boxShadow = "";
+        }
+      }, 150);
+    }
   }
 
   mount(parentElement: HTMLElement = document.body): void {
@@ -248,6 +261,39 @@ export class CameraPreviewOverlay {
       ctx.textAlign = "center";
       ctx.fillText(labelText, labelX, labelY);
       ctx.restore();
+    });
+
+    // 5. Render active beat flash ripples
+    const now = performance.now();
+    this.activeBeatFlashes = this.activeBeatFlashes.filter(flash => {
+      const elapsed = now - flash.startTime;
+      if (elapsed > 400) return false;
+
+      const progress = elapsed / 400; // 0 -> 1
+      const rippleRadius = 8 + progress * 42;
+      const rippleAlpha = Math.max(0, 1 - progress);
+
+      const px = flash.x * width;
+      const py = (1 - flash.y) * height; // Convert from conductor Y to canvas Y
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(px, py, rippleRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 213, 107, ${rippleAlpha * 0.9})`;
+      ctx.lineWidth = 3.5 * (1 - progress);
+      ctx.shadowColor = "#ffd56b";
+      ctx.shadowBlur = 16 * (1 - progress);
+      ctx.stroke();
+
+      // Inner burst ring
+      ctx.beginPath();
+      ctx.arc(px, py, rippleRadius * 0.5, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${rippleAlpha * 0.8})`;
+      ctx.lineWidth = 2 * (1 - progress);
+      ctx.stroke();
+      ctx.restore();
+
+      return true;
     });
   }
 

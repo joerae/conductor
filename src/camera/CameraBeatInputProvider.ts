@@ -2,13 +2,10 @@
  * CameraBeatInputProvider.ts
  *
  * Implements BeatInputProvider for camera-based motion conducting.
- * Orchestrates CameraController, HandTracker, and CameraPreviewOverlay.
+ * Orchestrates CameraController, HandTracker, HandMotionFilter, HandBeatDetector,
+ * BeatFusion, DynamicsEstimator, and CameraPreviewOverlay.
  *
- * In Stage A (Phase C0):
- *   - Establishes browser camera access, local MediaPipe HandLandmarker inference,
- *     dual-hand tracking, and live skeleton overlay rendering.
- *   - Clean start/stop lifecycle without lingering media tracks or animation loops.
- *   - Downstream beat emission pipeline will be integrated in Phase C1 (HandBeatDetector).
+ * Provides real-time hand-gesture beat detection (Phases C1 & C2) and continuous dynamics control.
  */
 
 import type { BeatInputProvider } from "../input/BeatInputProvider";
@@ -24,6 +21,9 @@ import { CameraController } from "./CameraController";
 import { HandTracker } from "./HandTracker";
 import { CameraPreviewOverlay } from "./CameraPreviewOverlay";
 import { DynamicsEstimator } from "./DynamicsEstimator";
+import { HandMotionFilter } from "./HandMotionFilter";
+import { HandBeatDetector } from "./HandBeatDetector";
+import { BeatFusion } from "./BeatFusion";
 
 export interface CameraBeatInputOptions {
   config?: Partial<CameraConfig>;
@@ -38,6 +38,9 @@ export class CameraBeatInputProvider implements BeatInputProvider {
   private cameraController: CameraController;
   private handTracker: HandTracker;
   private dynamicsEstimator: DynamicsEstimator;
+  private motionFilter: HandMotionFilter;
+  private beatDetector: HandBeatDetector;
+  private beatFusion: BeatFusion;
   private previewOverlay: CameraPreviewOverlay | null = null;
 
   private callbacks: Array<(beat: BeatObservation) => void> = [];
@@ -63,6 +66,9 @@ export class CameraBeatInputProvider implements BeatInputProvider {
 
     this.handTracker = new HandTracker(options?.config);
     this.dynamicsEstimator = new DynamicsEstimator();
+    this.motionFilter = new HandMotionFilter(16);
+    this.beatDetector = new HandBeatDetector();
+    this.beatFusion = new BeatFusion();
 
     if (options?.mountOverlay !== false && typeof document !== "undefined") {
       this.previewOverlay = new CameraPreviewOverlay({
@@ -76,9 +82,37 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     if (options?.onSamples) this.onSamples(options.onSamples);
     if (options?.onDynamics) this.onDynamics(options.onDynamics);
 
-    // Wire tracker frame output to dynamics estimator, preview overlay & callbacks
+    // Wire Fused Beats to clock listeners & preview visual flash
+    this.beatFusion.onFusedBeat((beat, details) => {
+      this.callbacks.forEach(cb => {
+        try {
+          cb(beat);
+        } catch (err) {
+          console.warn("CameraBeatInput onBeat error:", err);
+        }
+      });
+
+      if (details && this.previewOverlay) {
+        this.previewOverlay.triggerBeatFlash(details.x, details.y);
+      }
+    });
+
+    // Wire tracker frame output to motion filter, beat detector, dynamics estimator, preview overlay & callbacks
     this.handTracker.onFrame((samples, telemetry) => {
-      const dynamicsObs = this.dynamicsEstimator.update(samples, performance.now());
+      const now = performance.now();
+
+      // 1. Process dynamics
+      const dynamicsObs = this.dynamicsEstimator.update(samples, now);
+
+      // 2. Process beat detection for each tracked hand
+      for (const sample of samples) {
+        const motion = this.motionFilter.update(sample);
+        const candidate = this.beatDetector.processSample(motion, sample.handIndex);
+        if (candidate) {
+          this.beatFusion.submitCandidate(candidate, samples.length);
+        }
+      }
+
       const fullTelemetry: CameraTelemetry = {
         ...telemetry,
         dynamics: dynamicsObs,
@@ -146,6 +180,11 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     if (this.isStarted) return;
     this.isStarted = true;
 
+    this.motionFilter.reset();
+    this.beatDetector.reset();
+    this.beatFusion.reset();
+    this.dynamicsEstimator.reset();
+
     try {
       if (this.previewOverlay) {
         this.previewOverlay.mount();
@@ -170,6 +209,10 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     this.isStarted = false;
     this.handTracker.stop();
     this.cameraController.stop();
+    this.motionFilter.reset();
+    this.beatDetector.reset();
+    this.beatFusion.reset();
+
     if (this.previewOverlay) {
       this.previewOverlay.updateState("stopped");
       this.previewOverlay.setVisible(false);
@@ -190,13 +233,13 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     this.stateChangeCallbacks.clear();
     this.telemetryCallbacks.clear();
     this.sampleCallbacks.clear();
+    this.dynamicsCallbacks.clear();
   }
 
   /**
-   * Helper to emit a beat observation downstream to ConductorClock.
-   * (Ready for Phase C1 integration).
+   * Helper to manually emit a beat observation downstream (e.g. for testing).
    */
-  protected emitBeat(timestampMs: number, confidence: number = 1.0): void {
+  emitBeat(timestampMs: number, confidence: number = 1.0): void {
     const obs: BeatObservation = {
       source: "camera",
       timestampMs,

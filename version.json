@@ -1,9 +1,24 @@
 {
-  "version": "0.4.0",
+  "version": "0.5.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.5.0",
+      "date": "2026-09-01",
+      "summary": "Stage B (Phases C1 & C2): Camera Beat Detection, Clock Mode D (Inertial Cruise Control / Steer & Release), and Switchable Two-Hand Dynamics Modes",
+      "details": [
+        "Permissive Hand Beat Detection: Real-time kinematic ictus detection from downward stroke velocity and bottom inflection reversal points",
+        "Two-Hand Beat Fusion & Jitter Rejection: Merges dual-hand beats within ~75ms into a single confident beat (C=1.0) and rejects stationary resting tremors",
+        "Visual Beat Feedback: Expanding golden ripple halo bursts rendered on camera preview skeleton upon each detected ictus",
+        "Clock Mode D (Inertial Cruise / Steer & Release): Flywheel inertia carries tempo for up to 16 bars without stopping; multi-beat re-entry calculation enables seamless steering and releasing",
+        "Auto-Default to Mode D: Switching to Camera Mode (C key) automatically engages Mode D, with hotkeys 1–4 and T cycling between all 4 modes",
+        "Switchable Camera Dynamics Modes: Mode 1 (Spread/Aperture: horizontal expanding/contracting from pp to fff) vs Mode 2 (Vertical Height: raising/lowering)",
+        "Ergonomic Symmetrical Calibration: Neutral shoulder-width (0.34) at mf, contracted chest-width (<0.21) for pp/p, wide arms (>0.53) for fff",
+        "Top-Left Docked Camera UI: Camera preview and dynamic ladder positioned side-by-side with 'loading magic finger detecting coolness!' loading status"
+      ]
+    },
     {
       "version": "0.4.0",
       "date": "2026-09-01",

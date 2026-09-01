@@ -319,11 +319,13 @@ inputBtnCamera?.addEventListener("click", () => setInputSource("camera"));
 const modeBtnA = document.getElementById("mode-btn-a") as HTMLButtonElement;
 const modeBtnB = document.getElementById("mode-btn-b") as HTMLButtonElement;
 const modeBtnC = document.getElementById("mode-btn-c") as HTMLButtonElement;
+const modeBtnD = document.getElementById("mode-btn-d") as HTMLButtonElement;
 
 function updateModeButtons(mode: TempoMode): void {
   modeBtnA?.classList.toggle("active", mode === "balanced");
   modeBtnB?.classList.toggle("active", mode === "instant");
   modeBtnC?.classList.toggle("active", mode === "autoplay");
+  modeBtnD?.classList.toggle("active", mode === "inertial");
 }
 
 function setMode(mode: TempoMode): void {
@@ -334,6 +336,7 @@ function setMode(mode: TempoMode): void {
 modeBtnA?.addEventListener("click", () => setMode("balanced"));
 modeBtnB?.addEventListener("click", () => setMode("instant"));
 modeBtnC?.addEventListener("click", () => setMode("autoplay"));
+modeBtnD?.addEventListener("click", () => setMode("inertial"));
 
 // ── Orchestral Dynamics & Vertical Dynamic Ladder ───────────────────────────
 
@@ -390,7 +393,7 @@ window.addEventListener("wheel", (e) => {
   }
 }, { passive: false });
 
-// Keyboard shortcuts: C (toggle input source), T (toggle tempo mode), P (pause), ↑/↓ (dynamics), → (accent burst)
+// Keyboard shortcuts: C (toggle input source), T (toggle tempo mode), 1-4 (modes), P (pause), ↑/↓ (dynamics), → (accent burst)
 window.addEventListener("keydown", (e) => {
   if (versionModal.style.display === "flex" || repertoireModal.style.display === "flex") return;
 
@@ -399,9 +402,17 @@ window.addEventListener("keydown", (e) => {
     setInputSource(current === "keyboard" ? "camera" : "keyboard");
   } else if (e.code === "KeyT" && !e.repeat) {
     const current = controller.getTempoMode();
-    const modes: TempoMode[] = ["balanced", "instant", "autoplay"];
+    const modes: TempoMode[] = ["balanced", "instant", "autoplay", "inertial"];
     const nextIdx = (modes.indexOf(current) + 1) % modes.length;
     setMode(modes[nextIdx]);
+  } else if (e.code === "Digit1" && !e.repeat) {
+    setMode("balanced");
+  } else if (e.code === "Digit2" && !e.repeat) {
+    setMode("instant");
+  } else if (e.code === "Digit3" && !e.repeat) {
+    setMode("autoplay");
+  } else if (e.code === "Digit4" && !e.repeat) {
+    setMode("inertial");
   } else if (e.code === "KeyP" && !e.repeat) {
     controller.togglePause();
   } else if (e.code === "ArrowRight" && !e.repeat) {

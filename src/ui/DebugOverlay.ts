@@ -186,13 +186,15 @@ export class DebugOverlay {
 
   // ── Update methods (called by ExperienceController) ─────────────────────
 
-  updateTempoMode(mode: "balanced" | "instant" | "autoplay"): void {
+  updateTempoMode(mode: "balanced" | "instant" | "autoplay" | "inertial"): void {
     this.snapshot.tempoMode =
       mode === "balanced"
         ? "A (Balanced PLL)"
         : mode === "instant"
         ? "B (Instant / Dime)"
-        : "C (Autoplay ⚡)";
+        : mode === "autoplay"
+        ? "C (Autoplay ⚡)"
+        : "D (Inertial Cruise 📷)";
   }
 
   updateClock(state: ClockState): void {
