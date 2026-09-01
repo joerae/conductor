@@ -1867,4 +1867,132 @@ body.debug-mode-active .section-debug-hud {
   animation: loveStageAura 2.5s ease-in-out infinite alternate !important;
 }
 
+/* ── Instrument Focus Mode (✨ Pointing & Pinch Section Mix) ─────────────── */
+.focus-banner {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: linear-gradient(135deg, rgba(20, 30, 48, 0.96), rgba(36, 59, 85, 0.96));
+  color: #ffd56b;
+  padding: 10px 24px;
+  border-radius: 30px;
+  border: 2px solid rgba(255, 213, 107, 0.75);
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.85), 0 0 32px rgba(255, 213, 107, 0.35);
+  pointer-events: none;
+  animation: focusBannerPop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.focus-banner.grabbed {
+  border-color: #ffd56b;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.9), 0 0 45px rgba(255, 213, 107, 0.65);
+  background: linear-gradient(135deg, rgba(35, 30, 15, 0.98), rgba(65, 50, 20, 0.98));
+}
+
+@keyframes focusBannerPop {
+  0% { transform: translateX(-50%) scale(0.85); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+.focus-banner-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.focus-banner-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: rgba(255, 213, 107, 0.2);
+  color: #ffffff;
+  border: 1px solid rgba(255, 213, 107, 0.4);
+}
+
+/* ── Focus Mode Smooth Section Elevation ─────────────────────────────────── */
+#orchestra-silhouette {
+  position: relative;
+  z-index: 30;
+  transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.4s ease,
+              filter 0.4s ease;
+  transform-origin: center top;
+}
+
+#stage.focus-mode-active #orchestra-silhouette {
+  transform: translateY(-410px) scale(0.96);
+  filter: drop-shadow(0 14px 36px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 30px rgba(255, 213, 107, 0.35));
+}
+
+#stage.focus-mode-active #dynamic-ladder-container {
+  opacity: 0.25;
+  pointer-events: none;
+  filter: blur(1px);
+  transition: opacity 0.4s ease, filter 0.4s ease;
+}
+
+/* ── Section Visual States during Focus Mode ─────────────────────────────── */
+#stage.focus-mode-active .instrument-section {
+  opacity: 0.55;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.25s ease,
+              filter 0.25s ease;
+}
+
+#stage.focus-mode-active .instrument-section.focus-hover {
+  opacity: 1.0 !important;
+  transform: scale(1.08) translateY(-6px);
+  filter: drop-shadow(0 0 16px rgba(255, 213, 107, 0.95));
+}
+
+#stage.focus-mode-active .instrument-section.focus-hover .musician {
+  stroke: #ffd56b !important;
+  stroke-width: 2.5 !important;
+  filter: drop-shadow(0 0 14px rgba(255, 213, 107, 0.85));
+}
+
+#stage.focus-mode-active .instrument-section.focus-hover .section-label {
+  fill: #ffd56b !important;
+  font-weight: 700 !important;
+  filter: drop-shadow(0 0 10px #ffd56b);
+}
+
+#stage.focus-mode-active .instrument-section.focus-grabbed {
+  opacity: 1.0 !important;
+  transform: scale(1.14) translateY(-10px);
+  filter: drop-shadow(0 0 28px rgba(255, 213, 107, 1.0)) drop-shadow(0 0 50px rgba(255, 176, 58, 0.85));
+}
+
+#stage.focus-mode-active .instrument-section.focus-grabbed .musician {
+  fill: #ffd56b !important;
+  stroke: #ffffff !important;
+  stroke-width: 3.5 !important;
+  filter: drop-shadow(0 0 20px rgba(255, 213, 107, 1.0)) drop-shadow(0 0 35px rgba(255, 176, 58, 0.9));
+}
+
+#stage.focus-mode-active .instrument-section.focus-grabbed .section-label {
+  fill: #ffffff !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 14px #ffd56b, 0 0 28px #ffb03a;
+}
+
+#stage.focus-mode-active.has-grabbed-section .instrument-section:not(.focus-grabbed) {
+  opacity: 0.28 !important;
+  filter: grayscale(0.4) blur(0.6px);
+}
+
+
 

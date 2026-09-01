@@ -9,6 +9,7 @@
 import { describe, it, expect } from "vitest";
 import {
   classifyHandGestureFromLandmarks,
+  getNormalizedPinchDistance,
   HAND_LANDMARK_INDICES,
   type HandLandmark,
 } from "../src/camera/cameraTypes";
@@ -155,6 +156,28 @@ describe("Hand Gesture Detection", () => {
 
     const gesture = classifyHandGestureFromLandmarks(peaceLandmarks);
     expect(gesture).toBe("Victory");
+  });
+
+  it("classifies Pointing_Up when index is extended and middle, ring, pinky are curled", () => {
+    const pointingLandmarks = createMockHandLandmarks({
+      thumbExtended: false,
+      indexExtended: true,
+      middleExtended: false,
+      ringExtended: false,
+      pinkyExtended: false,
+    });
+
+    const gesture = classifyHandGestureFromLandmarks(pointingLandmarks);
+    expect(gesture).toBe("Pointing_Up");
+  });
+
+  it("calculates normalized pinch distance correctly", () => {
+    const landmarks = createMockHandLandmarks({ indexExtended: true });
+    // Set thumb and index tips very close
+    landmarks[HAND_LANDMARK_INDICES.THUMB_TIP] = { x: 0.46, y: 0.36, z: 0 };
+    landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP] = { x: 0.46, y: 0.35, z: 0 };
+    const pinchDist = getNormalizedPinchDistance(landmarks);
+    expect(pinchDist).toBeLessThan(0.40);
   });
 
   it("returns none for incomplete or empty landmark arrays", () => {

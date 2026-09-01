@@ -12,6 +12,7 @@ import { ConductorClock } from "../clock/ConductorClock";
 import type { ClockEvent, TempoMode } from "../clock/ConductorClock";
 import { KeyboardBeatInput } from "../input/KeyboardBeatInput";
 import { CameraBeatInputProvider } from "../camera/CameraBeatInputProvider";
+import type { FocusTelemetry } from "../camera/InstrumentFocusController";
 import { MidiScore } from "../score/MidiScore";
 import { ScoreTransport } from "../score/ScoreTransport";
 import { Scheduler } from "../scheduler/Scheduler";
@@ -60,6 +61,7 @@ export type UICallbacks = {
   onFermataChange?: (isFermata: boolean) => void;
   onPartyModeChange?: (isParty: boolean) => void;
   onLoveModeChange?: (isLove: boolean) => void;
+  onFocusChange?: (telemetry: FocusTelemetry) => void;
 };
 
 // ─── ExperienceController ───────────────────────────────────────────────────
@@ -240,6 +242,11 @@ export class ExperienceController {
       this.keyboardInput.onBeat(obs => this.handleBeatObservation(obs));
       this.keyboardInput.start();
 
+      if (this.cameraInput) {
+        this.cameraInput.setSections(piece.sections);
+      }
+      this.audioEngine.setSectionFocus(null, 0);
+
       if (this.inputSource === "camera") {
         await this.initCamera();
       }
@@ -279,9 +286,19 @@ export class ExperienceController {
       this.cameraInput = new CameraBeatInputProvider();
       this.cameraInput.setDynamicsMode(this.cameraDynamicsMode);
       this.cameraInput.setThumbsUpVFXEnabled(this.isThumbsUpVFXEnabled);
+
+      const piece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
+      if (piece) {
+        this.cameraInput.setSections(piece.sections);
+      }
+
       // Wire camera dynamics directly into existing orchestral dynamic ladder & AudioEngine
       this.cameraInput.onDynamics(dyn => {
         if (this.inputSource === "camera") {
+          // Suppress global dynamics if actively in focus mode
+          if (this.cameraInput?.getFocusController().shouldSuppressGlobalDynamics()) {
+            return;
+          }
           // Use continuous 0-1 value for smooth interpolated DSP; discrete level is derived internally
           this.audioEngine.setContinuousDynamic(dyn.value);
           const snappedLevel = this.audioEngine.getDynamicLevel();
@@ -290,6 +307,23 @@ export class ExperienceController {
           this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
         }
       });
+
+      // Wire Instrument Focus Mode telemetry & dynamic section mixing
+      this.cameraInput.onFocus(focusTel => {
+        if (this.inputSource === "camera") {
+          if (focusTel.isActive && focusTel.grabbedSectionId && focusTel.sectionFocus > 0.001) {
+            const currentPiece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
+            const sec = currentPiece?.sections.find(s => s.id === focusTel.grabbedSectionId);
+            if (sec) {
+              this.audioEngine.setSectionFocus(sec.channels, focusTel.sectionFocus);
+            }
+          } else {
+            this.audioEngine.setSectionFocus(null, 0);
+          }
+          this.uiCallbacks.onFocusChange?.(focusTel);
+        }
+      });
+
       // Wire camera telemetry into debug overlay
       this.cameraInput.onTelemetry(t => {
         this.debug.updateCameraTelemetry(t);
@@ -302,7 +336,9 @@ export class ExperienceController {
         // Low hand position = rallentando, NOT a stop signal.
         this.isHandsDown = samples.length === 0;
 
-        if (samples.length > 0) {
+        const isFocusActive = this.cameraInput?.getFocusController().isFocusModeActive() ?? false;
+
+        if (samples.length > 0 && !isFocusActive) {
           // ── 1. Thumbs Down Cutoff (👎): Dramatically pauses music ──
           const hasThumbDown = samples.some(s => s.gesture === "Thumb_Down");
           if (hasThumbDown) {
@@ -944,6 +980,10 @@ export class ExperienceController {
 
   getPausedBeat(): number {
     return this.pausedBeat;
+  }
+
+  getCurrentPieceId(): string {
+    return this.currentPieceId;
   }
 
   getMidiMetadata() {

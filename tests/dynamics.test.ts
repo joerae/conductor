@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { AudioEngine } from "../src/audio/AudioEngine";
 import {
   DYNAMIC_ORDER,
   DYNAMIC_PRESETS,
@@ -162,5 +163,30 @@ describe("DSP Bypass Defaults & Macro Ratio Control", () => {
     expect(scaleVelocity(rawVel, "mf", true, true, 0.45)).toBe(91);
     // Ratio 1.0: raw score dynamics (72 + 43*1.0 = 115)
     expect(scaleVelocity(rawVel, "mf", true, true, 1.0)).toBe(115);
+  });
+});
+
+describe("AudioEngine Section Focus Mixing", () => {
+  it("calculates correct foreground boost and background reduction multipliers", () => {
+    const engine = new AudioEngine();
+    // Default: no focus active
+    expect(engine.getChannelFocusMultiplier(0)).toBe(1.0);
+    expect(engine.getChannelFocusMultiplier(1)).toBe(1.0);
+
+    // Focus channel 0 with focus 0.5
+    engine.setSectionFocus([0], 0.5);
+    expect(engine.getFocusAmount()).toBeCloseTo(0.5);
+    expect(engine.getChannelFocusMultiplier(0)).toBeCloseTo(1.175);
+    expect(engine.getChannelFocusMultiplier(1)).toBeCloseTo(0.725);
+
+    // Focus channel 0 with max focus 1.0
+    engine.setSectionFocus([0], 1.0);
+    expect(engine.getChannelFocusMultiplier(0)).toBeCloseTo(1.35);
+    expect(engine.getChannelFocusMultiplier(1)).toBeCloseTo(0.45);
+
+    // Reset focus
+    engine.setSectionFocus(null, 0);
+    expect(engine.getChannelFocusMultiplier(0)).toBe(1.0);
+    expect(engine.getChannelFocusMultiplier(1)).toBe(1.0);
   });
 });

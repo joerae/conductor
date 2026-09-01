@@ -13,7 +13,9 @@ import type {
 } from "./cameraTypes";
 import {
   HAND_CONNECTIONS,
+  HAND_LANDMARK_INDICES,
 } from "./cameraTypes";
+import type { FocusTelemetry } from "./InstrumentFocusController";
 
 export interface CameraPreviewOverlayOptions {
   onClose?: () => void;
@@ -212,9 +214,9 @@ export class CameraPreviewOverlay {
   }
 
   /**
-   * Renders detected landmarks, bones, conducting point halos, and telemetry.
+   * Renders detected landmarks, bones, conducting point halos, telemetry, and focus visuals.
    */
-  render(samples: HandSample[], telemetry: CameraTelemetry): void {
+  render(samples: HandSample[], telemetry: CameraTelemetry, focusTelemetry?: FocusTelemetry): void {
     this.updateTelemetry(telemetry);
 
     if (!this.canvasEl || !this.ctx || !this.videoEl) return;
@@ -388,6 +390,87 @@ export class CameraPreviewOverlay {
       ctx.restore();
       return true;
     });
+
+    // 7. Render Focus Mode pointer & targeting visual cues
+    if (focusTelemetry && focusTelemetry.isActive && samples.length > 0) {
+      const pointingHand = (focusTelemetry.pointingHandIndex !== null
+        ? samples.find(s => s.handIndex === focusTelemetry.pointingHandIndex)
+        : null) || samples[0];
+
+      if (pointingHand) {
+        const tip = pointingHand.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP] || pointingHand.conductingPoint;
+        const fx = tip.x * width;
+        const fy = tip.y * height;
+
+        ctx.save();
+        const pulse = (Math.sin(now / 120) + 1) / 2; // 0..1 pulse
+
+        // Outer targeting reticle ring
+        ctx.beginPath();
+        ctx.arc(fx, fy, 14 + pulse * 4, 0, Math.PI * 2);
+        ctx.strokeStyle = focusTelemetry.state === "grabbed"
+          ? "rgba(255, 213, 107, 0.95)"
+          : "rgba(107, 231, 255, 0.85)";
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = focusTelemetry.state === "grabbed" ? "#ffd56b" : "#6be7ff";
+        ctx.shadowBlur = 14;
+        ctx.stroke();
+
+        // 4 crosshair pips on reticle
+        for (let i = 0; i < 4; i++) {
+          const ang = (Math.PI / 2) * i + (now / 1000);
+          const r1 = 18 + pulse * 3;
+          const r2 = 24 + pulse * 3;
+          ctx.beginPath();
+          ctx.moveTo(fx + Math.cos(ang) * r1, fy + Math.sin(ang) * r1);
+          ctx.lineTo(fx + Math.cos(ang) * r2, fy + Math.sin(ang) * r2);
+          ctx.stroke();
+        }
+
+        // Inner glowing jewel
+        ctx.beginPath();
+        ctx.arc(fx, fy, 5, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.shadowColor = "#ffffff";
+        ctx.shadowBlur = 8;
+        ctx.fill();
+
+        // If grabbed: Draw radiant tether beam & energy ripples
+        if (focusTelemetry.state === "grabbed") {
+          // Shimmering tether beam shooting towards top of frame (into orchestra section)
+          const grad = ctx.createLinearGradient(fx, fy, fx, 0);
+          grad.addColorStop(0, "rgba(255, 213, 107, 0.95)");
+          grad.addColorStop(1, "rgba(255, 255, 255, 0.35)");
+
+          ctx.beginPath();
+          ctx.moveTo(fx, fy);
+          ctx.lineTo(fx, 0);
+          ctx.strokeStyle = grad;
+          ctx.lineWidth = 3 + focusTelemetry.sectionFocus * 5;
+          ctx.shadowColor = "#ffd56b";
+          ctx.shadowBlur = 18;
+          ctx.stroke();
+
+          // Concentric focus expansion rings
+          const expRadius = 16 + focusTelemetry.sectionFocus * 45;
+          ctx.beginPath();
+          ctx.arc(fx, fy, expRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(255, 213, 107, ${0.45 + focusTelemetry.sectionFocus * 0.5})`;
+          ctx.lineWidth = 2.5;
+          ctx.shadowColor = "#ffd56b";
+          ctx.shadowBlur = 12;
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+  }
+
+  setFocusModeActive(active: boolean): void {
+    if (this.videoEl) {
+      this.videoEl.style.transition = "opacity 0.45s cubic-bezier(0.2, 0.8, 0.2, 1)";
+      this.videoEl.style.opacity = active ? "0.12" : "1.0";
+    }
   }
 
   private updateTelemetry(telemetry: CameraTelemetry): void {

@@ -122,6 +122,10 @@ export class AudioEngine {
   private scoreMacroRatio: number = DEFAULT_SCORE_MACRO_RATIO;
   private isLoveMode: boolean = false;
 
+  // Section Focus Mode State
+  private focusedChannels: Set<number> | null = null;
+  private focusAmount: number = 0.0;
+
   // ── Lifecycle ───────────────────────────────────────────────────────────
 
   /**
@@ -460,6 +464,57 @@ export class AudioEngine {
     return this.isLoveMode;
   }
 
+  /**
+   * Sets continuous section focus.
+   * When focusAmount > 0 and focusedChannels is provided:
+   * - Focused channels gain is boosted moderately (up to 1.35x, ~+2.6dB)
+   * - Other channels are gently backgrounded (down to 0.45x, ~-7dB)
+   * - All active ringing voices are smoothly transitioned in real-time
+   */
+  setSectionFocus(focusedChannels: number[] | null, focusAmount: number): void {
+    const clamped = Math.max(0.0, Math.min(1.0, focusAmount));
+    if (focusedChannels && focusedChannels.length > 0 && clamped > 0.001) {
+      this.focusedChannels = new Set(focusedChannels);
+      this.focusAmount = clamped;
+    } else {
+      this.focusedChannels = null;
+      this.focusAmount = 0.0;
+    }
+
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+
+    // Smoothly transition all active voices in real time
+    for (const voice of this.activeVoices.values()) {
+      const mult = this.getChannelFocusMultiplier(voice.channel);
+      const targetGain = Math.max(0.0001, voice.targetVolume * mult);
+      try {
+        voice.gainNode.gain.setTargetAtTime(targetGain, now, 0.05);
+      } catch {
+        // Ignore audio node scheduling error
+      }
+    }
+  }
+
+  getChannelFocusMultiplier(channel: number): number {
+    if (!this.focusedChannels || this.focusAmount <= 0.001) return 1.0;
+    if (this.focusedChannels.has(channel)) {
+      // Moderate foreground boost: 1.0 -> 1.35 (+2.6 dB)
+      return 1.0 + 0.35 * this.focusAmount;
+    } else {
+      // Gentle background reduction: 1.0 -> 0.45 (-7 dB)
+      return 1.0 - 0.55 * this.focusAmount;
+    }
+  }
+
+  getFocusedChannels(): Set<number> | null {
+    return this.focusedChannels;
+  }
+
+  getFocusAmount(): number {
+    return this.focusAmount;
+  }
+
   private setupMasterAcoustics(): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
@@ -684,7 +739,9 @@ export class AudioEngine {
     );
 
     const rawVelRatio = Math.max(0.08, effectiveVelocity / 127);
-    const volume = Math.min(1.0, Math.pow(rawVelRatio, 1.15) * 1.05);
+    const baseVolume = Math.min(1.0, Math.pow(rawVelRatio, 1.15) * 1.05);
+    const focusMultiplier = this.getChannelFocusMultiplier(channel);
+    const volume = Math.min(1.0, baseVolume * focusMultiplier);
 
     // Dynamic Attack Time: Bite on loud notes, gentle swell on quiet notes
     const dynamicPreset = DYNAMIC_PRESETS[this.dynamicLevel] || DYNAMIC_PRESETS.mf;

@@ -24,6 +24,8 @@ import { DynamicsEstimator } from "./DynamicsEstimator";
 import { HandMotionFilter } from "./HandMotionFilter";
 import { HandBeatDetector } from "./HandBeatDetector";
 import { BeatFusion } from "./BeatFusion";
+import { InstrumentFocusController, type FocusTelemetry } from "./InstrumentFocusController";
+import type { PieceSection } from "../score/repertoire";
 
 export interface CameraBeatInputOptions {
   config?: Partial<CameraConfig>;
@@ -32,6 +34,7 @@ export interface CameraBeatInputOptions {
   onTelemetry?: (telemetry: CameraTelemetry) => void;
   onSamples?: (samples: HandSample[]) => void;
   onDynamics?: (dynamics: DynamicsObservation) => void;
+  onFocus?: (telemetry: FocusTelemetry) => void;
 }
 
 export class CameraBeatInputProvider implements BeatInputProvider {
@@ -41,15 +44,18 @@ export class CameraBeatInputProvider implements BeatInputProvider {
   private motionFilter: HandMotionFilter;
   private beatDetector: HandBeatDetector;
   private beatFusion: BeatFusion;
+  private focusController: InstrumentFocusController;
   private previewOverlay: CameraPreviewOverlay | null = null;
   private lastThumbsUpBurstTime = new Map<number, number>();
   private isThumbsUpVFXEnabled: boolean = false;
+  private currentSections: PieceSection[] = [];
 
   private callbacks: Array<(beat: BeatObservation) => void> = [];
   private stateChangeCallbacks: Set<(state: CameraState, error?: string) => void> = new Set();
   private telemetryCallbacks: Set<(telemetry: CameraTelemetry) => void> = new Set();
   private sampleCallbacks: Set<(samples: HandSample[]) => void> = new Set();
   private dynamicsCallbacks: Set<(dynamics: DynamicsObservation) => void> = new Set();
+  private focusCallbacks: Set<(telemetry: FocusTelemetry) => void> = new Set();
 
   private isStarted = false;
   private currentTelemetry: CameraTelemetry = {
@@ -71,6 +77,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     this.motionFilter = new HandMotionFilter(16);
     this.beatDetector = new HandBeatDetector();
     this.beatFusion = new BeatFusion();
+    this.focusController = new InstrumentFocusController();
 
     if (options?.mountOverlay !== false && typeof document !== "undefined") {
       this.previewOverlay = new CameraPreviewOverlay({
@@ -83,6 +90,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     if (options?.onTelemetry) this.onTelemetry(options.onTelemetry);
     if (options?.onSamples) this.onSamples(options.onSamples);
     if (options?.onDynamics) this.onDynamics(options.onDynamics);
+    if (options?.onFocus) this.onFocus(options.onFocus);
 
     // Track last beat for telemetry
     let lastBeatDetail: CameraTelemetry["lastBeat"] = undefined;
@@ -111,19 +119,26 @@ export class CameraBeatInputProvider implements BeatInputProvider {
       }
     });
 
-    // Wire tracker frame output to motion filter, beat detector, dynamics estimator, preview overlay & callbacks
+    // Wire tracker frame output to focus controller, motion filter, beat detector, dynamics estimator, preview overlay & callbacks
     this.handTracker.onFrame((samples, telemetry) => {
       const now = performance.now();
+
+      // 0. Process Instrument Focus Mode
+      const isMirrored = this.handTracker.getConfig().mirrorPreview ?? true;
+      const focusTelemetry = this.focusController.update(samples, this.currentSections, now, isMirrored);
+      this.previewOverlay?.setFocusModeActive(focusTelemetry.isActive);
 
       // 1. Process dynamics
       const dynamicsObs = this.dynamicsEstimator.update(samples, now);
 
-      // 2. Process beat detection for each tracked hand
-      for (const sample of samples) {
-        const motion = this.motionFilter.update(sample);
-        const candidate = this.beatDetector.processSample(motion, sample.handIndex);
-        if (candidate) {
-          this.beatFusion.submitCandidate(candidate, samples.length);
+      // 2. Process beat detection for each tracked hand (suppressed during active focus mode)
+      if (!this.focusController.shouldSuppressBeats()) {
+        for (const sample of samples) {
+          const motion = this.motionFilter.update(sample);
+          const candidate = this.beatDetector.processSample(motion, sample.handIndex);
+          if (candidate) {
+            this.beatFusion.submitCandidate(candidate, samples.length);
+          }
         }
       }
 
@@ -148,10 +163,11 @@ export class CameraBeatInputProvider implements BeatInputProvider {
       };
 
       this.currentTelemetry = fullTelemetry;
-      this.previewOverlay?.render(samples, fullTelemetry);
+      this.previewOverlay?.render(samples, fullTelemetry, focusTelemetry);
       this.telemetryCallbacks.forEach(cb => cb(fullTelemetry));
       this.sampleCallbacks.forEach(cb => cb(samples));
       this.dynamicsCallbacks.forEach(cb => cb(dynamicsObs));
+      this.focusCallbacks.forEach(cb => cb(focusTelemetry));
     });
 
     this.handTracker.onStateChange((state, error) => {
@@ -186,6 +202,19 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     return () => this.dynamicsCallbacks.delete(callback);
   }
 
+  onFocus(callback: (telemetry: FocusTelemetry) => void): () => void {
+    this.focusCallbacks.add(callback);
+    return () => this.focusCallbacks.delete(callback);
+  }
+
+  setSections(sections: PieceSection[]): void {
+    this.currentSections = sections;
+  }
+
+  getFocusController(): InstrumentFocusController {
+    return this.focusController;
+  }
+
   setDynamicsMode(mode: "spread" | "height"): void {
     this.dynamicsEstimator.setMode(mode);
   }
@@ -213,6 +242,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     this.beatDetector.reset();
     this.beatFusion.reset();
     this.dynamicsEstimator.reset();
+    this.focusController.reset();
 
     try {
       if (this.previewOverlay) {
@@ -242,6 +272,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     this.motionFilter.reset();
     this.beatDetector.reset();
     this.beatFusion.reset();
+    this.focusController.reset();
 
     if (this.previewOverlay) {
       this.previewOverlay.updateState("stopped");
@@ -264,6 +295,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     this.telemetryCallbacks.clear();
     this.sampleCallbacks.clear();
     this.dynamicsCallbacks.clear();
+    this.focusCallbacks.clear();
   }
 
   /**

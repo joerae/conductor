@@ -270,7 +270,12 @@ export function classifyHandGestureFromLandmarks(landmarks: HandLandmark[]): Han
     return "Victory";
   }
 
-  // 3. Four main fingers curled in
+  // 3. Pointing_Up (☝️): Index extended; Middle, Ring & Pinky curled
+  if (isIndexExt && !isMiddleExt && !isRingExt && !isPinkyExt) {
+    return "Pointing_Up";
+  }
+
+  // 4. Four main fingers curled in
   if (!isIndexExt && !isMiddleExt && !isRingExt && !isPinkyExt) {
     if (isThumbExt && thumbTip && thumbMcp) {
       // In image space, y = 0 is top, y = 1 is bottom
@@ -283,10 +288,30 @@ export function classifyHandGestureFromLandmarks(landmarks: HandLandmark[]): Han
     return "Closed_Fist";
   }
 
-  // 4. Open Palm: All 4 main fingers extended
+  // 5. Open Palm: All 4 main fingers extended
   if (isIndexExt && isMiddleExt && isRingExt && isPinkyExt) {
     return "Open_Palm";
   }
 
   return "none";
+}
+
+/**
+ * Calculates normalized distance between thumb tip and index tip relative to hand scale.
+ * Hand scale is measured as distance from wrist (0) to middle finger knuckle (MCP 9).
+ * Returns ratio [0, ~2.0+]. A ratio < 0.40 indicates a pinch/grab.
+ */
+export function getNormalizedPinchDistance(landmarks: HandLandmark[]): number {
+  if (!landmarks || landmarks.length < 21) return 1.0;
+  const thumbTip = landmarks[HAND_LANDMARK_INDICES.THUMB_TIP];
+  const indexTip = landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP];
+  const wrist = landmarks[HAND_LANDMARK_INDICES.WRIST];
+  const middleMcp = landmarks[HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP];
+
+  if (!thumbTip || !indexTip || !wrist || !middleMcp) return 1.0;
+
+  const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+  const handScale = Math.max(0.04, Math.hypot(middleMcp.x - wrist.x, middleMcp.y - wrist.y));
+
+  return pinchDist / handScale;
 }

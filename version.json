@@ -1,9 +1,21 @@
 {
-  "version": "0.15.0",
+  "version": "0.16.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.16.0",
+      "date": "2026-09-01",
+      "summary": "Camera Instrument Focus Mode: Select & Bring Orchestral Sections Forward with Gestures",
+      "details": [
+        "Pointing Gesture Focus Mode: Holding a Pointing Up (☝️) gesture fades the webcam down while keeping glowing hands vivid, smoothly elevating the orchestra section UI above the camera view",
+        "Generous Fingertip Hover: Index fingertip serves as an intuitive pointer with forgiving hit targets and anti-flicker debouncing",
+        "Pinch to Grab: Bringing index fingertip and thumb together (scale-normalized distance) grabs and locks onto the hovered instrument section",
+        "Two-Hand Continuous Focus Modulation: Spreading hands apart pulls the selected section forward in the mix (+2.6dB) while gently backgrounding other sections (-7dB) with smooth acoustic transitions",
+        "Conflict-Free Conducting: Camera beats and global dynamics are cleanly isolated during focus manipulation and restored seamlessly upon release"
+      ]
+    },
     {
       "version": "0.15.0",
       "date": "2026-09-01",
@@ -162,7 +174,7 @@
         "Finger Beating: When one hand is steady and the other is actively beating time, only the steady hand governs tempo — the beating hand does not modulate accelerando",
         "Interpolated Continuous Dynamics: Hand separation now feeds a 0–1 continuous value into AudioEngine, smoothly interpolating LPF cutoff, high-shelf gain, reverb wet, and velocity multiplier between the 7 preset breakpoints (pp to fff) with no discrete step",
         "Beethoven 5 Lead-In Beat: One silent beat of anticipation before the orchestra plays its first note, timed precisely to the established conducting tempo",
-        "Cursor Key Tempo Nudge (Mode E): ← / → keys shift the base BPM ±5 BPM; \ always triggers accent in all modes",
+        "Cursor Key Tempo Nudge (Mode E): ← / → keys shift the base BPM ±5 BPM; \\ always triggers accent in all modes",
         "BPM Green Zone: Soft translucent green band on the tempo speedometer gauge shows ±20 BPM around the piece's intended BPM in Mode E",
         "Hands-Down Threshold Fix: Mode E only pauses when hands are fully off-screen, not just held low — allows conducting at Largo speed without accidentally pausing",
         "Beat Sound Off by Default: Instant cymbal cue now defaults to off; VFX beat flash still fires. Toggle in Debug Overlay (D key)",

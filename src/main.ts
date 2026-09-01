@@ -6,7 +6,7 @@
 import { ExperienceController } from "./experience/ExperienceController";
 import type { ExperienceState, InputSource } from "./experience/ExperienceController";
 import type { TempoMode } from "./clock/ConductorClock";
-import { loadRepertoireCatalog } from "./score/repertoire";
+import { loadRepertoireCatalog, getPieceById, REPERTOIRE } from "./score/repertoire";
 import type { PieceDefinition } from "./score/repertoire";
 import type { DynamicLevel } from "./audio/dynamicsTypes";
 import "./style.css";
@@ -334,6 +334,91 @@ const controller = new ExperienceController({
     } else {
       stageEl.classList.remove("party-mode-active");
       if (partyBanner) partyBanner.style.display = "none";
+      promptEl.textContent = getPromptText(controller.getState(), controller.getPausedBeat(), controller.getInputSource());
+    }
+  },
+  onFocusChange: (telemetry) => {
+    const focusBanner = document.getElementById("focus-banner");
+    const focusText = document.getElementById("focus-banner-text");
+    const focusBadge = document.getElementById("focus-banner-badge");
+    const currentPiece = getPieceById(controller.getCurrentPieceId()) || REPERTOIRE[0];
+
+    if (telemetry.isActive) {
+      stageEl.classList.add("focus-mode-active");
+
+      // Background non-selected sections when one is grabbed
+      if (telemetry.grabbedSectionId) {
+        stageEl.classList.add("has-grabbed-section");
+        focusBanner?.classList.add("grabbed");
+      } else {
+        stageEl.classList.remove("has-grabbed-section");
+        focusBanner?.classList.remove("grabbed");
+      }
+
+      if (focusBanner) focusBanner.style.display = "flex";
+
+      // Clear previous focus highlight classes
+      document.querySelectorAll(".instrument-section").forEach(el => {
+        el.classList.remove("focus-hover", "focus-grabbed");
+      });
+
+      // Highlight hovered section
+      if (telemetry.hoveredSectionId) {
+        const hoveredEl = document.getElementById(`section-${telemetry.hoveredSectionId}`);
+        if (hoveredEl) {
+          hoveredEl.classList.add("focus-hover");
+        }
+      }
+
+      // Highlight grabbed section & display focus percentage
+      if (telemetry.grabbedSectionId) {
+        const grabbedEl = document.getElementById(`section-${telemetry.grabbedSectionId}`);
+        if (grabbedEl) {
+          grabbedEl.classList.add("focus-grabbed");
+          const labelEl = grabbedEl.querySelector(".section-label");
+          const sec = currentPiece?.sections.find(s => s.id === telemetry.grabbedSectionId);
+          const percent = Math.round(telemetry.sectionFocus * 100);
+          if (labelEl && sec) {
+            labelEl.textContent = `${sec.name} • ${percent}%`;
+          }
+        }
+      } else {
+        // Restore normal section labels
+        currentPiece?.sections.forEach(sec => {
+          const el = document.getElementById(`section-${sec.id}`);
+          const labelEl = el?.querySelector(".section-label");
+          if (labelEl) labelEl.textContent = sec.name;
+        });
+      }
+
+      // Update prompts & banner badges
+      if (telemetry.state === "grabbed" && telemetry.grabbedSectionId) {
+        const sec = currentPiece?.sections.find(s => s.id === telemetry.grabbedSectionId);
+        const percent = Math.round(telemetry.sectionFocus * 100);
+        if (focusText) focusText.textContent = `FOCUS: ${sec?.name || "SECTION"}`;
+        if (focusBadge) focusBadge.textContent = `${percent}% FOCUS`;
+        promptEl.textContent = `✨ Section Focus: ${sec?.name} (${percent}%) • Spread hands to bring forward, bring together to balance`;
+      } else if (telemetry.hoveredSectionId) {
+        const sec = currentPiece?.sections.find(s => s.id === telemetry.hoveredSectionId);
+        if (focusText) focusText.textContent = `HOVERING: ${sec?.name || "SECTION"}`;
+        if (focusBadge) focusBadge.textContent = "PINCH TO GRAB";
+        promptEl.textContent = `👉 Hovering ${sec?.name} • Pinch index finger + thumb together to grab!`;
+      } else {
+        if (focusText) focusText.textContent = "INSTRUMENT FOCUS MODE";
+        if (focusBadge) focusBadge.textContent = "POINT TO HOVER";
+        promptEl.textContent = "🪄 Instrument Focus Mode • Point index finger at an orchestra section to hover";
+      }
+    } else {
+      stageEl.classList.remove("focus-mode-active", "has-grabbed-section");
+      if (focusBanner) focusBanner.style.display = "none";
+      document.querySelectorAll(".instrument-section").forEach(el => {
+        el.classList.remove("focus-hover", "focus-grabbed");
+      });
+      currentPiece?.sections.forEach(sec => {
+        const el = document.getElementById(`section-${sec.id}`);
+        const labelEl = el?.querySelector(".section-label");
+        if (labelEl) labelEl.textContent = sec.name;
+      });
       promptEl.textContent = getPromptText(controller.getState(), controller.getPausedBeat(), controller.getInputSource());
     }
   },
