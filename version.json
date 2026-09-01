@@ -1,9 +1,29 @@
 {
-  "version": "0.9.2",
+  "version": "0.9.4",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.9.4",
+      "date": "2026-09-01",
+      "summary": "Gesture-Aligned UI Reorientation (Horizontal Dynamics Ribbon & Vertical Tempo Speedometer), Classic Gestures Default & Intuitive Keyboard Controls",
+      "details": [
+        "Gesture-Aligned UI Orientation: Redrew UI components so visual layouts map 1:1 to conducting gestures — Horizontal Dynamics Ribbon spans below the camera (matching hand width spread) and Vertical Tempo Speedometer climbs beside the camera (matching hand height)",
+        "Classic Gesture Mapping as Default: Two-hand horizontal width controls orchestral dynamics (pp to fff) while vertical hand height controls conducting tempo (0.35x to 1.65x piece BPM), with the experimental flipped option housed cleanly in the D (Debug) HUD",
+        "Intuitive Expressive Keyboard Controls: Swapped arrow keys to match visual orientation — ↑ / ↓ adjust Target Tempo and ← / → adjust Orchestral Dynamics"
+      ]
+    },
+    {
+      "version": "0.9.3",
+      "date": "2026-09-01",
+      "summary": "Flipped Camera Axis Gestures (Width: Tempo / Height: Volume Default), Camera Axes Feature Toggle & 4-Beat Keyboard Inactivity Grace",
+      "details": [
+        "Flipped Camera Gestures (Default): Spreading hands horizontally (Width ↔) now intuitively controls Tempo (Accelerando / Rallentando), while raising and lowering hands (Height ↕) controls Volume / Dynamics (pp to fff)",
+        "Interactive Axes Feature Toggle: Switch effortlessly between '↔ Width: Tempo | ↕ Height: Volume' (Flipped) and '↕ Height: Tempo | ↔ Width: Volume' (Classic) via UI pill or press X key",
+        "4-Beat Keyboard Inactivity Grace: Increased Keyboard Beat Mode inactivity cutoff from 2 to 4 beats, giving conductors room for expressive pauses and rubato without unintended stopping"
+      ]
+    },
     {
       "version": "0.9.2",
       "date": "2026-09-01",

@@ -34,6 +34,8 @@ export type ExperienceState =
 
 export type InputSource = "keyboard" | "camera";
 
+export type CameraAxisMapping = "flipped" | "classic"; // "flipped" = Width is Tempo, Height is Volume (DEFAULT)
+
 export type NoteVisualEvent = {
   type: "noteOn" | "noteOff";
   trackId: string;
@@ -53,6 +55,7 @@ export type UICallbacks = {
   onAccentFlash?: () => void;
   onAccentArmed?: (armed: boolean) => void;
   onInputSourceChange?: (source: InputSource) => void;
+  onCameraAxisMappingChange?: (mapping: CameraAxisMapping) => void;
 };
 
 // ─── ExperienceController ───────────────────────────────────────────────────
@@ -79,8 +82,10 @@ export class ExperienceController {
   // Sustained conductor dynamic level
   private baseDynamicLevel: DynamicLevel = "mf";
 
-  // Camera Dynamics Mode: "spread" (default) or "height"
+  // Camera Dynamics Mode: "spread" (default for classic mapping) or "height" (in flipped mode)
   private cameraDynamicsMode: "spread" | "height" = "spread";
+  // Camera Axis Mapping: "classic" (Width is Dynamics, Height is Tempo - DEFAULT) or "flipped"
+  private cameraAxisMapping: CameraAxisMapping = "classic";
 
   // Overburn decay timer (for ff/fff dynamic)
   private overburnTimer: ReturnType<typeof setTimeout> | null = null;
@@ -292,39 +297,6 @@ export class ExperienceController {
               if (hist.length > this.HAND_Y_HISTORY_LEN) hist.shift();
             }
 
-            // Determine effective tempo-control Y using steady-hand filtering:
-            // If one hand is "beating" (high Y variance) and one is "steady",
-            // use ONLY the steady hand's smoothed mean Y for tempo to prevent beating
-            // motion from modulating speed.
-            let effectiveY: number;
-            if (samples.length === 2) {
-              const stats = samples.map(s => {
-                const hist = this.handYHistory.get(s.handIndex) ?? [s.conductorPoint.y];
-                const mean = hist.reduce((a, b) => a + b, 0) / hist.length;
-                const variance = hist.reduce((a, b) => a + (b - mean) ** 2, 0) / hist.length;
-                return { y: s.conductorPoint.y, mean, variance };
-              });
-
-              const [h0, h1] = stats;
-              // Hand is beating if its Y variance is notably higher than the other (> 2.0x ratio & > 0.0006 abs variance)
-              const h0Beating = h0.variance > 0.0006 && h0.variance > 2.0 * h1.variance;
-              const h1Beating = h1.variance > 0.0006 && h1.variance > 2.0 * h0.variance;
-
-              if (h0Beating && !h1Beating) {
-                // Hand 0 is beating, hand 1 is steady — use hand 1's smooth mean position
-                effectiveY = h1.mean;
-              } else if (h1Beating && !h0Beating) {
-                // Hand 1 is beating, hand 0 is steady — use hand 0's smooth mean position
-                effectiveY = h0.mean;
-              } else {
-                // Both steady or both beating — use average of smooth means
-                effectiveY = (h0.mean + h1.mean) / 2;
-              }
-            } else {
-              const hist = this.handYHistory.get(samples[0].handIndex) ?? [samples[0].conductorPoint.y];
-              effectiveY = hist.reduce((a, b) => a + b, 0) / hist.length;
-            }
-
             // Mode E: Auto-start as soon as user moves or raises hands from resting position
             if (this.state === "ready" || this.state === "paused") {
               const isMovingOrRaised = samples.some(s => {
@@ -338,25 +310,96 @@ export class ExperienceController {
                 this.startPlayback();
               }
             } else if (this.state === "playing") {
-              // Continuous Height Modulation for Accelerando / Rallentando:
-              // Hands comfortably in front of body ~0.40 -> 1.0x intended piece BPM (Dead center of Green Zone)
-              // Raising hands up to 0.85 -> 1.65x intended piece BPM
-              // Lowering hands down to 0.10 -> 0.35x intended piece BPM (Largo)
-              let heightMultiplier = 1.0;
-              const NEUTRAL_Y = 0.40;
-              const DEADBAND = 0.03; // [0.37, 0.43] holds exact middle of green zone
+              let tempoMultiplier = 1.0;
 
-              if (effectiveY > NEUTRAL_Y + DEADBAND) {
-                const norm = Math.min(1.0, (effectiveY - (NEUTRAL_Y + DEADBAND)) / (0.85 - (NEUTRAL_Y + DEADBAND)));
-                heightMultiplier = 1.0 + 0.65 * norm;
-              } else if (effectiveY < NEUTRAL_Y - DEADBAND) {
-                const norm = Math.min(1.0, ((NEUTRAL_Y - DEADBAND) - effectiveY) / ((NEUTRAL_Y - DEADBAND) - 0.10));
-                heightMultiplier = 1.0 - 0.65 * norm;
+              if (this.cameraAxisMapping === "flipped") {
+                // ── FLIPPED (DEFAULT): Horizontal Span (Width) modulates Tempo ──
+                // Spreading hands apart -> Accelerando (up to 1.65x piece BPM)
+                // Bringing hands together -> Rallentando (down to 0.35x piece BPM)
+                if (samples.length >= 2) {
+                  const s0 = samples[0];
+                  const s1 = samples[1];
+                  const centerSpan = Math.abs(s0.conductorPoint.x - s1.conductorPoint.x);
+
+                  // Estimate hand scale from landmarks if available
+                  let avgHandSize = 0.10;
+                  if (s0.landmarks && s1.landmarks && s0.landmarks.length >= 5 && s1.landmarks.length >= 5) {
+                    const xs0 = s0.landmarks.map(p => p.x);
+                    const xs1 = s1.landmarks.map(p => p.x);
+                    const size0 = Math.max(...xs0) - Math.min(...xs0);
+                    const size1 = Math.max(...xs1) - Math.min(...xs1);
+                    avgHandSize = (size0 + size1) / 2;
+                  }
+
+                  const touchingSpan = Math.max(0.04, avgHandSize * 0.95);
+                  const neutralSpan = touchingSpan + 0.18 + avgHandSize * 0.35;
+                  const maxSpan = neutralSpan + 0.26 + avgHandSize * 0.40;
+                  const DEADBAND = 0.03; // Deadband around resting shoulder width
+
+                  if (centerSpan > neutralSpan + DEADBAND) {
+                    const norm = Math.min(1.0, (centerSpan - (neutralSpan + DEADBAND)) / Math.max(0.05, maxSpan - (neutralSpan + DEADBAND)));
+                    tempoMultiplier = 1.0 + 0.65 * norm; // [1.00, 1.65]
+                  } else if (centerSpan < neutralSpan - DEADBAND) {
+                    const norm = Math.min(1.0, ((neutralSpan - DEADBAND) - centerSpan) / Math.max(0.05, (neutralSpan - DEADBAND) - touchingSpan));
+                    tempoMultiplier = 1.0 - 0.65 * norm; // [1.00, 0.35]
+                  } else {
+                    tempoMultiplier = 1.0;
+                  }
+                } else if (samples.length === 1) {
+                  // 1 hand: distance from horizontal center (x=0.50)
+                  const dx = Math.abs(samples[0].conductorPoint.x - 0.50);
+                  if (dx > 0.25) {
+                    tempoMultiplier = 1.0 + 0.65 * Math.min(1.0, (dx - 0.25) / 0.25);
+                  } else if (dx < 0.10) {
+                    tempoMultiplier = 1.0 - 0.65 * Math.min(1.0, (0.10 - dx) / 0.10);
+                  } else {
+                    tempoMultiplier = 1.0;
+                  }
+                }
               } else {
-                heightMultiplier = 1.0;
+                // ── CLASSIC: Vertical Height (Y) modulates Tempo ──
+                // Raising hands up -> Accelerando (up to 1.65x piece BPM)
+                // Lowering hands down -> Rallentando (down to 0.35x piece BPM)
+                let effectiveY: number;
+                if (samples.length === 2) {
+                  const stats = samples.map(s => {
+                    const hist = this.handYHistory.get(s.handIndex) ?? [s.conductorPoint.y];
+                    const mean = hist.reduce((a, b) => a + b, 0) / hist.length;
+                    const variance = hist.reduce((a, b) => a + (b - mean) ** 2, 0) / hist.length;
+                    return { y: s.conductorPoint.y, mean, variance };
+                  });
+
+                  const [h0, h1] = stats;
+                  const h0Beating = h0.variance > 0.0006 && h0.variance > 2.0 * h1.variance;
+                  const h1Beating = h1.variance > 0.0006 && h1.variance > 2.0 * h0.variance;
+
+                  if (h0Beating && !h1Beating) {
+                    effectiveY = h1.mean;
+                  } else if (h1Beating && !h0Beating) {
+                    effectiveY = h0.mean;
+                  } else {
+                    effectiveY = (h0.mean + h1.mean) / 2;
+                  }
+                } else {
+                  const hist = this.handYHistory.get(samples[0].handIndex) ?? [samples[0].conductorPoint.y];
+                  effectiveY = hist.reduce((a, b) => a + b, 0) / hist.length;
+                }
+
+                const NEUTRAL_Y = 0.40;
+                const DEADBAND = 0.03;
+
+                if (effectiveY > NEUTRAL_Y + DEADBAND) {
+                  const norm = Math.min(1.0, (effectiveY - (NEUTRAL_Y + DEADBAND)) / (0.85 - (NEUTRAL_Y + DEADBAND)));
+                  tempoMultiplier = 1.0 + 0.65 * norm;
+                } else if (effectiveY < NEUTRAL_Y - DEADBAND) {
+                  const norm = Math.min(1.0, ((NEUTRAL_Y - DEADBAND) - effectiveY) / ((NEUTRAL_Y - DEADBAND) - 0.10));
+                  tempoMultiplier = 1.0 - 0.65 * norm;
+                } else {
+                  tempoMultiplier = 1.0;
+                }
               }
 
-              const targetBpm = Math.max(40, Math.min(240, this.basePieceBpm * heightMultiplier));
+              const targetBpm = Math.max(40, Math.min(240, this.basePieceBpm * tempoMultiplier));
               const now = performance.now();
               if (this.lastGesturalUpdateMs === 0) this.lastGesturalUpdateMs = now;
               const dt = Math.max(0.005, (now - this.lastGesturalUpdateMs) / 1000);
@@ -392,11 +435,32 @@ export class ExperienceController {
     return this.cameraInput;
   }
 
+  setCameraAxisMapping(mapping: CameraAxisMapping): void {
+    this.cameraAxisMapping = mapping;
+    // In flipped mode (default): Height controls Volume -> cameraDynamicsMode = "height"
+    // In classic mode: Width controls Volume -> cameraDynamicsMode = "spread"
+    const dynamicsMode = mapping === "flipped" ? "height" : "spread";
+    this.setCameraDynamicsMode(dynamicsMode);
+    this.uiCallbacks.onCameraAxisMappingChange?.(mapping);
+  }
+
+  getCameraAxisMapping(): CameraAxisMapping {
+    return this.cameraAxisMapping;
+  }
+
+  toggleCameraAxisMapping(): CameraAxisMapping {
+    const next: CameraAxisMapping = this.cameraAxisMapping === "flipped" ? "classic" : "flipped";
+    this.setCameraAxisMapping(next);
+    return next;
+  }
+
   setCameraDynamicsMode(mode: "spread" | "height"): void {
     this.cameraDynamicsMode = mode;
+    this.cameraAxisMapping = mode === "height" ? "flipped" : "classic";
     if (this.cameraInput) {
       this.cameraInput.setDynamicsMode(mode);
     }
+    this.uiCallbacks.onCameraAxisMappingChange?.(this.cameraAxisMapping);
   }
 
   getCameraDynamicsMode(): "spread" | "height" {
@@ -667,10 +731,10 @@ export class ExperienceController {
       case "beat": {
         const s = event.state;
 
-        // Check inactivity in Keyboard Beat Mode: pause promptly if user stops tapping (within 2 beat pulses)
+        // Check inactivity in Keyboard Beat Mode: pause if user stops tapping (after 4 missed beats)
         if (this.inputSource === "keyboard" && this.clock.getTempoMode() === "inertial" && this.state === "playing") {
           this.keyboardInactivityPulseCount++;
-          if (this.keyboardInactivityPulseCount >= 2) {
+          if (this.keyboardInactivityPulseCount >= 4) {
             this.keyboardInactivityPulseCount = 0;
             this.pausePlayback();
             return;

@@ -415,20 +415,23 @@ html, body {
   text-shadow: 0 0 8px rgba(255, 213, 107, 0.4);
 }
 
-/* ── Vertical Orchestral Dynamic Ladder ───────────────────────────────────── */
+/* ── Horizontal Orchestral Dynamic Ribbon (Below Camera) ───────────────── */
 .dynamic-ladder-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: rgba(14, 18, 26, 0.82);
+  width: 100%;
+  max-width: 720px;
+  background: rgba(14, 18, 26, 0.85);
   border: 1px solid rgba(201, 168, 76, 0.22);
   border-radius: 12px;
-  padding: 8px 6px;
-  backdrop-filter: blur(12px);
+  padding: 10px 14px;
+  backdrop-filter: blur(14px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   user-select: none;
   transition: border-color var(--transition-med), box-shadow var(--transition-med);
-  flex-shrink: 0;
+  box-sizing: border-box;
+  margin: 6px 0 10px;
 }
 
 .dynamic-ladder-container:hover {
@@ -436,37 +439,56 @@ html, body {
   box-shadow: 0 8px 28px rgba(201, 168, 76, 0.18);
 }
 
-
-
 .dynamic-ladder-header {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 6px;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 8px;
   padding-bottom: 4px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  width: 100%;
-  justify-content: center;
 }
 
 .dynamic-icon {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--accent-gold);
+  margin-right: 4px;
 }
 
 .dynamic-title {
   font-family: var(--font-ui);
-  font-size: 0.62rem;
+  font-size: 0.70rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-muted);
-  font-weight: 600;
+  font-weight: 700;
+}
+
+.dynamic-current-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #ffd56b;
+  letter-spacing: 0.04em;
+  background: rgba(255, 213, 107, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 213, 107, 0.25);
+}
+
+.dynamic-ladder-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 8px;
+  position: relative;
 }
 
 .dynamic-ladder {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 6px;
   width: 100%;
 }
 
@@ -474,22 +496,22 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 1;
   gap: 3px;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 6px;
-  padding: 5px 12px;
-  min-width: 52px;
+  padding: 6px 4px;
   cursor: pointer;
   transition: all 0.12s ease-out;
   color: var(--text-muted);
 }
 
 .dynamic-step:hover {
-  background: rgba(201, 168, 76, 0.15);
-  border-color: rgba(201, 168, 76, 0.4);
+  background: rgba(201, 168, 76, 0.18);
+  border-color: rgba(201, 168, 76, 0.45);
   color: var(--text-primary);
-  transform: scale(1.05);
+  transform: translateY(-2px);
 }
 
 .dynamic-symbol {
@@ -507,15 +529,16 @@ html, body {
 
 /* Active Dynamic Step */
 .dynamic-step.active {
-  background: linear-gradient(135deg, rgba(201, 168, 76, 0.38), rgba(255, 213, 107, 0.22));
+  background: linear-gradient(135deg, rgba(201, 168, 76, 0.42), rgba(255, 213, 107, 0.25));
   border-color: var(--accent-gold);
   color: #fff2c4;
-  box-shadow: 0 0 12px rgba(255, 213, 107, 0.35);
-  transform: scale(1.08);
+  box-shadow: 0 0 14px rgba(255, 213, 107, 0.4);
+  transform: translateY(-2px);
 }
 
-/* Overburn (ff) Active State */
-.dynamic-step[data-dynamic="ff"].active {
+/* Overburn (ff/fff) Active State */
+.dynamic-step[data-dynamic="ff"].active,
+.dynamic-step[data-dynamic="fff"].active {
   background: linear-gradient(135deg, rgba(255, 107, 61, 0.45), rgba(255, 180, 0, 0.35));
   border-color: #ff8c42;
   color: #ffffff;
@@ -535,9 +558,9 @@ html, body {
 
 .dynamic-ladder-hint {
   margin-top: 6px;
-  font-size: 0.58rem;
+  font-size: 0.65rem;
   color: var(--text-muted);
-  opacity: 0.75;
+  opacity: 0.85;
   text-align: center;
 }
 
@@ -1194,41 +1217,38 @@ body.debug-mode-active .section-debug-hud {
   z-index: 20;
 }
 
-/* Continuous Analogue Dynamics Track next to discrete ladder buttons */
-.dynamic-ladder-wrap {
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  gap: 8px;
-  position: relative;
-}
-
+/* Continuous Horizontal Analogue Dynamics Track */
 .dynamic-analogue-track {
   position: relative;
-  width: 18px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
+  width: 100%;
+  height: 12px;
+  background: linear-gradient(90deg, #102a45 0%, #17423c 25%, #4a401c 55%, #592e16 80%, #61131a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
   overflow: visible;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+  margin-top: 4px;
+  box-sizing: border-box;
 }
 
 .dynamic-analogue-marker {
   position: absolute;
-  left: -4px;
-  transform: translateY(50%);
+  top: -8px;
+  transform: translateX(-50%);
   display: flex;
+  flex-direction: column;
   align-items: center;
   z-index: 10;
-  transition: bottom 0.08s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: left 0.08s cubic-bezier(0.2, 0.8, 0.2, 1);
   pointer-events: none;
 }
 
 .dynamic-analogue-marker .analogue-pip {
-  font-size: 11px;
+  font-size: 13px;
   color: #ffd56b;
-  text-shadow: 0 0 8px #ffd56b, 0 0 16px rgba(255, 213, 107, 0.8);
+  text-shadow: 0 0 10px #ffd56b, 0 0 20px rgba(255, 213, 107, 0.9);
   font-weight: bold;
+  line-height: 1;
 }
 
 /* ── Conductor Camera Preview Overlay ───────────────────────────── */
@@ -1447,52 +1467,65 @@ body.debug-mode-active .section-debug-hud {
   font-weight: 600;
 }
 
-/* ── Horizontal BPM Speedometer Gauge ────────────────────────────────────────── */
-
-.bpm-gauge-container {
-  width: 100%;
-  max-width: 620px;
-  margin: 8px auto 12px;
-  background: rgba(14, 18, 28, 0.85);
+/* ── Vertical BPM Speedometer Gauge (To the Right of Camera) ───────── */
+.bpm-vertical-gauge {
+  width: 140px;
+  margin: 0;
+  background: rgba(14, 18, 28, 0.88);
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 213, 107, 0.18);
-  border-radius: 12px;
-  padding: 10px 16px 14px;
+  border: 1px solid rgba(255, 213, 107, 0.22);
+  border-radius: 14px;
+  padding: 14px 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  user-select: none;
+  transition: border-color var(--transition-med), box-shadow var(--transition-med);
+}
+
+.bpm-vertical-gauge:hover {
+  border-color: rgba(255, 213, 107, 0.45);
+  box-shadow: 0 8px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(255, 213, 107, 0.15);
 }
 
 .bpm-gauge-header {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  flex-wrap: wrap;
   gap: 6px;
+  width: 100%;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
 }
 
 .bpm-gauge-title {
   font-family: var(--font-ui);
   font-size: 0.70rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   color: var(--text-muted);
   text-transform: uppercase;
 }
 
 .bpm-gauge-legends {
   display: flex;
-  gap: 14px;
-  font-size: 0.80rem;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.75rem;
+  width: 100%;
 }
 
 .bpm-legend-item {
   display: flex;
   align-items: center;
-  gap: 5px;
+  justify-content: space-between;
+  gap: 4px;
   color: var(--text-secondary);
+  font-size: 0.72rem;
 }
 
 .bpm-legend-item strong {
@@ -1509,36 +1542,46 @@ body.debug-mode-active .section-debug-hud {
 }
 
 .bpm-legend-item .dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
+  display: inline-block;
 }
 
 .bpm-legend-item .dot.gold {
   background: #ffd56b;
-  box-shadow: 0 0 8px #ffd56b;
+  box-shadow: 0 0 6px #ffd56b;
 }
 
 .bpm-legend-item .dot.cyan {
   background: #6be7ff;
-  box-shadow: 0 0 8px #6be7ff;
+  box-shadow: 0 0 6px #6be7ff;
 }
 
 .bpm-gauge-track-wrap {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  gap: 12px;
+  flex: 1;
+  width: 100%;
+  min-height: 280px;
+  margin: 10px 0;
+  position: relative;
 }
 
 .bpm-gauge-track {
   position: relative;
-  height: 22px;
-  background: linear-gradient(90deg, #102a45 0%, #17423c 25%, #4a401c 55%, #592e16 80%, #61131a 100%);
+  width: 22px;
+  height: 100%;
+  min-height: 280px;
+  background: linear-gradient(0deg, #102a45 0%, #17423c 25%, #4a401c 55%, #592e16 80%, #61131a 100%);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   overflow: visible;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
-  margin-top: 10px;
+  box-sizing: border-box;
 }
 
 .bpm-zone-bands {
@@ -1547,55 +1590,58 @@ body.debug-mode-active .section-debug-hud {
   left: 0;
   width: 100%;
   height: 100%;
-  display: flex;
   pointer-events: none;
 }
 
-/* Target BPM zone band — shown in Mode E to indicate the ±20 BPM sweet spot */
+/* Target BPM zone band — vertical in Mode E */
 .bpm-green-zone {
   position: absolute;
-  top: 0;
-  height: 100%;
-  background: rgba(100, 230, 120, 0.18);
-  border-left: 1.5px solid rgba(100, 230, 120, 0.55);
-  border-right: 1.5px solid rgba(100, 230, 120, 0.55);
+  left: 0;
+  width: 100%;
+  background: rgba(100, 230, 120, 0.22);
+  border-top: 1.5px solid rgba(100, 230, 120, 0.65);
+  border-bottom: 1.5px solid rgba(100, 230, 120, 0.65);
   border-radius: 3px;
   pointer-events: none;
   z-index: 1;
-  transition: left 0.4s ease, width 0.4s ease;
+  transition: bottom 0.4s ease, height 0.4s ease;
 }
 
 .bpm-zone {
+  position: absolute;
+  left: 0;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 8.5px;
+  font-size: 7.5px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: rgba(255, 255, 255, 0.35);
-  border-right: 1px dashed rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.38);
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+  box-sizing: border-box;
 }
 
-.bpm-zone:last-child {
-  border-right: none;
+.bpm-zone:first-child {
+  border-bottom: none;
 }
 
 .bpm-needle {
   position: absolute;
-  top: -6px;
-  transform: translateX(-50%);
+  left: -7px;
+  transform: translateY(50%);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   pointer-events: none;
   z-index: 10;
-  transition: left 0.08s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: bottom 0.08s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .bpm-needle .needle-pip {
-  width: 10px;
-  height: 34px;
+  width: 36px;
+  height: 10px;
   border-radius: 4px;
   border: 2px solid #ffffff;
   box-sizing: border-box;
@@ -1619,11 +1665,12 @@ body.debug-mode-active .section-debug-hud {
   background: #ffd56b;
   border-color: #ffffff;
   box-shadow: 0 0 14px #ffd56b, 0 0 28px rgba(255, 213, 107, 0.8);
-  width: 12px;
+  height: 12px;
 }
 
 .bpm-needle .needle-label {
   position: absolute;
+  left: 40px;
   font-size: 8px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1633,26 +1680,36 @@ body.debug-mode-active .section-debug-hud {
 
 .bpm-needle.orchestra-needle .needle-label {
   color: #6be7ff;
-  bottom: -15px;
 }
 
 .bpm-needle.indicated-needle .needle-label {
   color: #ffd56b;
-  top: -15px;
 }
 
 .bpm-gauge-ticks {
   position: relative;
-  height: 14px;
-  margin-top: 14px;
+  width: 24px;
+  height: 100%;
 }
 
 .bpm-tick {
   position: absolute;
-  transform: translateX(-50%);
-  font-size: 8.5px;
+  left: 0;
+  transform: translateY(50%);
+  font-size: 8px;
   font-family: 'JetBrains Mono', monospace;
   color: var(--text-muted);
+  line-height: 1;
+}
+
+.bpm-gauge-footer-hint {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 6px;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-align: center;
+  width: 100%;
+  opacity: 0.85;
 }
 
 

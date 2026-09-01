@@ -751,8 +751,8 @@ export class DebugOverlay {
         </label>
       </div>
 
-      <!-- Camera Dynamics Sensing Mode Selector -->
-      <div class="debug-section-header" style="margin-top: 10px;" title="Select which gesture modality drives the orchestral dynamic ladder in Camera Mode">CAMERA DYNAMICS SENSING MODE</div>
+      <!-- Camera Gesture Axes & Dynamics Sensing Mode Selector -->
+      <div class="debug-section-header" style="margin-top: 10px;" title="Select which gesture modality drives speed vs volume in Camera Expressive Mode">CAMERA GESTURE AXES &amp; DYNAMICS</div>
       <div style="
         display: flex;
         flex-direction: column;
@@ -763,13 +763,13 @@ export class DebugOverlay {
         border: 1px solid rgba(255, 213, 107, 0.2);
         margin-top: 4px;
       ">
-        <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Two-Hand Spread / Aperture: Pulling hands apart = Louder (ff/fff). Bringing hands close together = Softer (p/pp). Hand height is completely ignored!">
+        <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Classic Mode (Default): Horizontal Width ↔ controls Dynamics (Volume), Vertical Height ↕ controls Tempo (Speed). Natural and intuitive!">
           <input type="radio" name="dbg-camera-dyn-mode" value="spread" checked style="accent-color:#ffd56b; margin-right:6px;">
-          <span><strong>Two-Hand Spread</strong> (Default: Expanding / Contracting)</span>
+          <span><strong>Classic (Default)</strong>: ↔ Width: Dynamics • ↕ Height: Tempo</span>
         </label>
-        <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Vertical Hand Height: Raising hands high = Louder (ff/fff). Lowering hands down = Softer (p/pp). Hand distance/spread is completely ignored!">
+        <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Flipped Mode (Experimental): Horizontal Width ↔ controls Tempo (Speed), Vertical Height ↕ controls Dynamics (Volume).">
           <input type="radio" name="dbg-camera-dyn-mode" value="height" style="accent-color:#ffd56b; margin-right:6px;">
-          <span><strong>Vertical Hand Height</strong> (Raising / Lowering)</span>
+          <span><strong>Flipped (Experimental)</strong>: ↔ Width: Tempo • ↕ Height: Dynamics</span>
         </label>
       </div>
 

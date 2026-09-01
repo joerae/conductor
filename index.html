@@ -38,50 +38,59 @@
 
       <!-- Stage Performance Area: Hero Camera View + BPM Gauge + Orchestra + Dynamics Ladder -->
       <div class="stage-performance-area" id="stage-main-area">
-        <!-- Center Column: Hero Picture + BPM Speedometer + Musician Silhouette -->
+        <!-- Center Column: Hero Picture + Horizontal Dynamics Ribbon + Musician Silhouette -->
         <div id="stage-center-column" class="stage-center-column">
           <!-- Hero Camera Container (Big Picture of Person in Middle of Screen) -->
           <div id="camera-hero-slot" class="camera-hero-slot"></div>
 
-          <!-- Horizontal BPM Speedometer Gauge (Below the Picture) -->
-          <div id="bpm-gauge-container" class="bpm-gauge-container" title="Tempo Speedometer: Shows your actively indicated conducting BPM vs the orchestra piece playback speed">
-            <div class="bpm-gauge-header">
-              <span class="bpm-gauge-title">TEMPO SPEEDOMETER</span>
-              <div class="bpm-gauge-legends">
-                <span class="bpm-legend-item legend-indicated"><span class="dot gold"></span> You: <strong id="val-indicated-bpm">— BPM</strong></span>
-                <span class="bpm-legend-item legend-orchestra"><span class="dot cyan"></span> Orchestra: <strong id="val-orchestra-bpm">— BPM</strong></span>
+          <!-- Horizontal Orchestral Dynamics Ribbon (Directly Below the Picture) -->
+          <div id="dynamic-ladder-container" class="dynamic-ladder-container dynamic-horizontal-ribbon" title="Orchestral Dynamics: Use ←/→ arrows, mouse wheel, or click to shape dynamic expression">
+            <div class="dynamic-ladder-header">
+              <span class="dynamic-icon">𝄢</span>
+              <span class="dynamic-title">DYNAMICS</span>
+              <span id="dynamic-current-badge" class="dynamic-current-badge">MF (50%)</span>
+            </div>
+            <div class="dynamic-ladder-wrap">
+              <div class="dynamic-ladder" id="dynamic-ladder" role="group" aria-label="Orchestral dynamic levels">
+                <button class="dynamic-step" data-dynamic="pp" title="Pianissimo (Very soft)">
+                  <span class="dynamic-symbol">pp</span>
+                  <span class="accent-badge-icon">&gt;</span>
+                </button>
+                <button class="dynamic-step" data-dynamic="p" title="Piano (Soft)">
+                  <span class="dynamic-symbol">p</span>
+                  <span class="accent-badge-icon">&gt;</span>
+                </button>
+                <button class="dynamic-step" data-dynamic="mp" title="Mezzo-piano (Moderately soft)">
+                  <span class="dynamic-symbol">mp</span>
+                  <span class="accent-badge-icon">&gt;</span>
+                </button>
+                <button class="dynamic-step active" data-dynamic="mf" title="Mezzo-forte (Default)">
+                  <span class="dynamic-symbol">mf</span>
+                  <span class="accent-badge-icon">&gt;</span>
+                </button>
+                <button class="dynamic-step" data-dynamic="f" title="Forte (Loud)">
+                  <span class="dynamic-symbol">f</span>
+                  <span class="accent-badge-icon">&gt;</span>
+                </button>
+                <button class="dynamic-step" data-dynamic="ff" title="Fortissimo (Very Loud)">
+                  <span class="dynamic-symbol">ff</span>
+                  <span class="accent-badge-icon">&gt;</span>
+                </button>
+                <button class="dynamic-step" data-dynamic="fff" title="Fortississimo (Overburn ⚡)">
+                  <span class="dynamic-symbol">fff</span>
+                  <span class="dynamic-sparkle">⚡</span>
+                  <span class="accent-badge-icon">&gt;</span>
+                </button>
+              </div>
+              <!-- Continuous Analogue Dynamics Track & Marker Indicator (Horizontal) -->
+              <div id="dynamic-analogue-track" class="dynamic-analogue-track" title="Continuous Interpolated Dynamic Level (Analogue hand separation)">
+                <div id="dynamic-analogue-marker" class="dynamic-analogue-marker" style="left: 50%;">
+                  <div class="analogue-pip">▲</div>
+                </div>
               </div>
             </div>
-            <div class="bpm-gauge-track-wrap">
-              <div class="bpm-gauge-track">
-                <!-- Green target zone band (±20 BPM around intended piece BPM) — shown in Mode E -->
-                <div id="bpm-green-zone" class="bpm-green-zone" style="display:none;"></div>
-                <div class="bpm-zone-bands">
-                  <span class="bpm-zone" style="left: 0%; width: 22%;">Largo</span>
-                  <span class="bpm-zone" style="left: 22%; width: 22%;">Andante</span>
-                  <span class="bpm-zone" style="left: 44%; width: 22%;">Moderato</span>
-                  <span class="bpm-zone" style="left: 66%; width: 18%;">Allegro</span>
-                  <span class="bpm-zone" style="left: 84%; width: 16%;">Presto</span>
-                </div>
-                <!-- Orchestra Playback Needle (Cyan Beacon) -->
-                <div id="bpm-marker-orchestra" class="bpm-needle orchestra-needle" style="left: 50%;">
-                  <div class="needle-pip"></div>
-                  <div class="needle-label">Piece</div>
-                </div>
-                <!-- Conductor Indicated Needle (Gold Arrow) -->
-                <div id="bpm-marker-indicated" class="bpm-needle indicated-needle" style="left: 50%;">
-                  <div class="needle-pip"></div>
-                  <div class="needle-label">You</div>
-                </div>
-              </div>
-              <div class="bpm-gauge-ticks">
-                <span class="bpm-tick" style="left: 0%;">40</span>
-                <span class="bpm-tick" style="left: 22%;">75</span>
-                <span class="bpm-tick" style="left: 44%;">108</span>
-                <span class="bpm-tick" style="left: 66%;">140</span>
-                <span class="bpm-tick" style="left: 84%;">180</span>
-                <span class="bpm-tick" style="left: 100%;">220</span>
-              </div>
+            <div class="dynamic-ladder-hint">
+              <span>← → Dyn • Click / Scroll to adjust • \ Accent (&gt;)</span>
             </div>
           </div>
 
@@ -172,53 +181,48 @@
           </div>
         </div>
 
-        <!-- Vertical Orchestral Dynamic Ladder (To the Right of the picture) -->
-        <aside id="dynamic-ladder-container" class="dynamic-ladder-container" title="Orchestral Dynamics: Use ↑/↓ arrows, mouse wheel, or click to shape dynamic expression">
-          <div class="dynamic-ladder-header">
-            <span class="dynamic-icon">𝄢</span>
-            <span class="dynamic-title">Dynamics</span>
-          </div>
-          <div class="dynamic-ladder-wrap">
-            <div class="dynamic-ladder" id="dynamic-ladder" role="group" aria-label="Orchestral dynamic levels">
-              <button class="dynamic-step" data-dynamic="fff" title="Fortississimo (Overburn ⚡)">
-                <span class="dynamic-symbol">fff</span>
-                <span class="dynamic-sparkle">⚡</span>
-                <span class="accent-badge-icon">&gt;</span>
-              </button>
-              <button class="dynamic-step" data-dynamic="ff" title="Fortissimo (Very Loud)">
-                <span class="dynamic-symbol">ff</span>
-                <span class="accent-badge-icon">&gt;</span>
-              </button>
-              <button class="dynamic-step" data-dynamic="f" title="Forte (Loud)">
-                <span class="dynamic-symbol">f</span>
-                <span class="accent-badge-icon">&gt;</span>
-              </button>
-              <button class="dynamic-step active" data-dynamic="mf" title="Mezzo-forte (Default)">
-                <span class="dynamic-symbol">mf</span>
-                <span class="accent-badge-icon">&gt;</span>
-              </button>
-              <button class="dynamic-step" data-dynamic="mp" title="Mezzo-piano (Moderately soft)">
-                <span class="dynamic-symbol">mp</span>
-                <span class="accent-badge-icon">&gt;</span>
-              </button>
-              <button class="dynamic-step" data-dynamic="p" title="Piano (Soft)">
-                <span class="dynamic-symbol">p</span>
-                <span class="accent-badge-icon">&gt;</span>
-              </button>
-              <button class="dynamic-step" data-dynamic="pp" title="Pianissimo (Very soft)">
-                <span class="dynamic-symbol">pp</span>
-                <span class="accent-badge-icon">&gt;</span>
-              </button>
+        <!-- Vertical Tempo Speedometer (To the Right of the picture) -->
+        <aside id="bpm-gauge-container" class="bpm-gauge-container bpm-vertical-gauge" title="Tempo Speedometer: Shows your actively indicated conducting BPM vs the orchestra piece playback speed">
+          <div class="bpm-gauge-header">
+            <span class="bpm-gauge-title">TEMPO</span>
+            <div class="bpm-gauge-legends">
+              <span class="bpm-legend-item legend-indicated"><span class="dot gold"></span> You: <strong id="val-indicated-bpm">—</strong></span>
+              <span class="bpm-legend-item legend-orchestra"><span class="dot cyan"></span> Piece: <strong id="val-orchestra-bpm">—</strong></span>
             </div>
-            <!-- Continuous Analogue Dynamics Track & Marker Indicator -->
-            <div id="dynamic-analogue-track" class="dynamic-analogue-track" title="Continuous Interpolated Dynamic Level (Analogue hand separation)">
-              <div id="dynamic-analogue-marker" class="dynamic-analogue-marker" style="bottom: 50%;">
-                <div class="analogue-pip">◀</div>
+          </div>
+          <div class="bpm-gauge-track-wrap">
+            <div class="bpm-gauge-track">
+              <!-- Green target zone band (±20 BPM around intended piece BPM) — shown in Mode E -->
+              <div id="bpm-green-zone" class="bpm-green-zone" style="display:none;"></div>
+              <div class="bpm-zone-bands">
+                <span class="bpm-zone" style="bottom: 84%; height: 16%;">Presto</span>
+                <span class="bpm-zone" style="bottom: 66%; height: 18%;">Allegro</span>
+                <span class="bpm-zone" style="bottom: 44%; height: 22%;">Moderato</span>
+                <span class="bpm-zone" style="bottom: 22%; height: 22%;">Andante</span>
+                <span class="bpm-zone" style="bottom: 0%; height: 22%;">Largo</span>
+              </div>
+              <!-- Orchestra Playback Needle (Cyan Beacon) -->
+              <div id="bpm-marker-orchestra" class="bpm-needle orchestra-needle" style="bottom: 50%;">
+                <div class="needle-pip"></div>
+                <div class="needle-label">Piece</div>
+              </div>
+              <!-- Conductor Indicated Needle (Gold Arrow) -->
+              <div id="bpm-marker-indicated" class="bpm-needle indicated-needle" style="bottom: 50%;">
+                <div class="needle-pip"></div>
+                <div class="needle-label">You</div>
               </div>
             </div>
+            <div class="bpm-gauge-ticks">
+              <span class="bpm-tick" style="bottom: 100%;">220</span>
+              <span class="bpm-tick" style="bottom: 84%;">180</span>
+              <span class="bpm-tick" style="bottom: 66%;">140</span>
+              <span class="bpm-tick" style="bottom: 44%;">108</span>
+              <span class="bpm-tick" style="bottom: 22%;">75</span>
+              <span class="bpm-tick" style="bottom: 0%;">40</span>
+            </div>
           </div>
-          <div class="dynamic-ladder-hint">
-            <span>↑↓ Dyn • → Accent (&gt;)</span>
+          <div class="bpm-gauge-footer-hint">
+            <span>↑↓ Tempo • P Pause</span>
           </div>
         </aside>
       </div>
@@ -241,14 +245,14 @@
         <div id="tempo-mode-selector" class="mode-selector-container">
           <span class="mode-label">Mode:</span>
           <div class="mode-pill-group">
-            <button id="mode-btn-e" class="mode-pill active" data-mode="gestural" title="Expressive Mode (Default): Continuous Gestural Conducting (Raise hands to start, height modulates speed, drop hands to stop)">
+            <button id="mode-btn-e" class="mode-pill active" data-mode="gestural" title="Expressive Mode (Default): Continuous Gestural Conducting (Raise hands to start, height modulates speed, width modulates volume, drop hands to stop)">
               🪄 Expressive
             </button>
             <button id="mode-btn-d" class="mode-pill" data-mode="inertial" title="Beat Mode: Conduct in cut time (1 stroke = 2 beats in Camera, 1 tap = 1 beat in Keyboard). Steer tempo with beats">
               🥁 Beat
             </button>
           </div>
-          <span id="mode-hint-text" class="mode-shortcut-hint">🪄 <strong>Expressive</strong>: Raise hands to start • Height controls tempo (Accelerando / Rallentando) • Drop to stop</span>
+          <span id="mode-hint-text" class="mode-shortcut-hint">🪄 <strong>Expressive (Camera)</strong>: Height ↕ controls Tempo • Width ↔ controls Volume • Drop to stop</span>
         </div>
       </div>
 
@@ -268,7 +272,7 @@
 
       <!-- Footer controls -->
       <footer id="stage-footer">
-        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.9.2</button>
+        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.9.4</button>
         <span class="footer-divider">•</span>
         <span id="debug-hint" class="debug-hint">Press D for debug overlay & A/B DSP</span>
       </footer>

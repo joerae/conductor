@@ -276,6 +276,9 @@ const controller = new ExperienceController({
   onInputSourceChange: (source: InputSource) => {
     updateInputSourceButtons(source);
   },
+  onCameraAxisMappingChange: () => {
+    updateControlHints();
+  },
   onBeat: () => {
     flashBeat();
     swingBaton();
@@ -355,6 +358,7 @@ const spaceKeyHint = document.getElementById("space-key-hint") as HTMLElement;
 function updateControlHints(): void {
   const source = controller.getInputSource();
   const mode = controller.getTempoMode();
+  const mapping = controller.getCameraAxisMapping();
 
   if (inputHintText) {
     inputHintText.innerHTML = source === "camera"
@@ -365,20 +369,24 @@ function updateControlHints(): void {
   if (modeHintText) {
     if (source === "camera") {
       if (mode === "gestural") {
-        modeHintText.innerHTML = `🪄 <strong>Expressive (Camera)</strong>: Raise hands to start • Height modulates tempo • Width modulates volume • Drop to stop`;
+        if (mapping === "flipped") {
+          modeHintText.innerHTML = `🪄 <strong>Expressive (Camera)</strong>: Width ↔ modulates Tempo • Height ↕ modulates Volume • Drop hands to stop`;
+        } else {
+          modeHintText.innerHTML = `🪄 <strong>Expressive (Camera)</strong>: Height ↕ modulates Tempo • Width ↔ modulates Volume • Drop hands to stop`;
+        }
       } else if (mode === "inertial") {
         modeHintText.innerHTML = `🥁 <strong>Beat (Camera Cut Time)</strong>: Conduct strokes in 2 (1 stroke = 2 beats) • Steer tempo with hands • Coast freely`;
       } else if (mode === "autoplay") {
         modeHintText.innerHTML = `⚡ <strong>Autoplay (Debug)</strong>: Playing continuously in tempo`;
       } else {
-        modeHintText.innerHTML = `⚙️ <strong>${mode.toUpperCase()} (Debug)</strong>: Move hands to conduct`;
+        modeHintText.innerHTML = `⚙️ <strong>${String(mode).toUpperCase()} (Debug)</strong>: Move hands to conduct`;
       }
     } else {
       // Keyboard mode
       if (mode === "gestural") {
-        modeHintText.innerHTML = `🪄 <strong>Expressive (Keyboard)</strong>: <strong>↑ / ↓</strong> adjust Volume • <strong>← / →</strong> adjust Target Tempo • <strong>SPACE / P</strong> Play/Pause`;
+        modeHintText.innerHTML = `🪄 <strong>Expressive (Keyboard)</strong>: <strong>↑ / ↓</strong> adjust Target Tempo • <strong>← / →</strong> adjust Volume • <strong>\\</strong> Accent (&gt;) • <strong>SPACE / P</strong> Play/Pause`;
       } else if (mode === "inertial" || mode === "balanced" || mode === "instant") {
-        modeHintText.innerHTML = `🥁 <strong>Beat (Keyboard)</strong>: Tap <strong>SPACE</strong> on every beat (1 tap = 1 beat) • <strong>↑ / ↓</strong> adjust Volume`;
+        modeHintText.innerHTML = `🥁 <strong>Beat (Keyboard)</strong>: Tap <strong>SPACE</strong> on every beat (1 tap = 1 beat) • <strong>← / →</strong> adjust Volume`;
       } else if (mode === "autoplay") {
         modeHintText.innerHTML = `⚡ <strong>Autoplay (Debug)</strong>: Playing continuously in tempo`;
       } else {
@@ -441,7 +449,7 @@ function setMode(mode: TempoMode): void {
 modeBtnE?.addEventListener("click", () => setMode("gestural"));
 modeBtnD?.addEventListener("click", () => setMode("inertial"));
 
-// ── Horizontal BPM Speedometer Gauge ──────────────────────────────────────────
+// ── Vertical BPM Speedometer Gauge (Beside Camera) ───────────────────────────
 
 const markerOrchestra = document.getElementById("bpm-marker-orchestra") as HTMLElement;
 const markerIndicated = document.getElementById("bpm-marker-indicated") as HTMLElement;
@@ -462,28 +470,28 @@ function updateBpmGaugeUI(): void {
   const indicatedBpm = controller.getIndicatedBpm() || orchestraBpm || 0;
 
   if (orchestraBpm > 0) {
-    if (valOrchestraBpm) valOrchestraBpm.textContent = `${orchestraBpm.toFixed(0)} BPM`;
-    if (markerOrchestra) markerOrchestra.style.left = `${bpmToPercent(orchestraBpm)}%`;
+    if (valOrchestraBpm) valOrchestraBpm.textContent = `${orchestraBpm.toFixed(0)}`;
+    if (markerOrchestra) markerOrchestra.style.bottom = `${bpmToPercent(orchestraBpm)}%`;
   } else {
-    if (valOrchestraBpm) valOrchestraBpm.textContent = `— BPM`;
+    if (valOrchestraBpm) valOrchestraBpm.textContent = `—`;
   }
 
   if (indicatedBpm > 0) {
-    if (valIndicatedBpm) valIndicatedBpm.textContent = `${indicatedBpm.toFixed(0)} BPM`;
-    if (markerIndicated) markerIndicated.style.left = `${bpmToPercent(indicatedBpm)}%`;
+    if (valIndicatedBpm) valIndicatedBpm.textContent = `${indicatedBpm.toFixed(0)}`;
+    if (markerIndicated) markerIndicated.style.bottom = `${bpmToPercent(indicatedBpm)}%`;
   } else {
-    if (valIndicatedBpm) valIndicatedBpm.textContent = `— BPM`;
+    if (valIndicatedBpm) valIndicatedBpm.textContent = `—`;
   }
 
-  // BPM Green Zone: show ±20 BPM target band around piece's intended BPM in Mode E
+  // BPM Green Zone: vertical ±20 BPM target band around piece's intended BPM in Mode E
   const greenZone = document.getElementById("bpm-green-zone") as HTMLElement | null;
   if (greenZone) {
     const baseBpm = controller.getBasePieceBpm?.() || 0;
     if (baseBpm > 0) {
       const loPercent = bpmToPercent(baseBpm - 20);
       const hiPercent = bpmToPercent(baseBpm + 20);
-      greenZone.style.left = `${loPercent}%`;
-      greenZone.style.width = `${hiPercent - loPercent}%`;
+      greenZone.style.bottom = `${loPercent}%`;
+      greenZone.style.height = `${hiPercent - loPercent}%`;
       greenZone.style.display = "block";
     } else {
       greenZone.style.display = "none";
@@ -491,10 +499,11 @@ function updateBpmGaugeUI(): void {
   }
 }
 
-// ── Orchestral Dynamics & Vertical Dynamic Ladder ───────────────────────────
+// ── Orchestral Dynamics & Horizontal Dynamic Ribbon ─────────────────────────
 
 const dynamicLadderContainer = document.getElementById("dynamic-ladder-container") as HTMLElement;
 const dynamicSteps = document.querySelectorAll<HTMLButtonElement>(".dynamic-step");
+const dynamicCurrentBadge = document.getElementById("dynamic-current-badge") as HTMLElement | null;
 
 function updateDynamicLadderUI(level: DynamicLevel): void {
   dynamicSteps.forEach(btn => {
@@ -506,6 +515,13 @@ function updateDynamicLadderUI(level: DynamicLevel): void {
     dynamicLadderContainer?.classList.add("overburn");
   } else {
     dynamicLadderContainer?.classList.remove("overburn");
+  }
+
+  // Update dynamic badge
+  if (dynamicCurrentBadge) {
+    const continuousVal = (controller as any).audioEngine?.getContinuousDynamic?.() ?? 0.5;
+    const pct = Math.round(continuousVal * 100);
+    dynamicCurrentBadge.textContent = `${level.toUpperCase()} (${pct}%)`;
   }
 
   // Update stage ambient dynamic classes
@@ -546,7 +562,9 @@ window.addEventListener("wheel", (e) => {
   }
 }, { passive: false });
 
-// Keyboard shortcuts: C (toggle input source), T (toggle Expressive/Beat mode), 1-2 (modes), P (pause), ↑/↓ (dynamics), → (accent burst)
+// Keyboard shortcuts:
+// C (toggle input source), T (toggle Expressive/Beat mode), 1-2 (modes), P (pause)
+// ↑ / ↓ (Tempo in Expressive mode), ← / → (Dynamics in Expressive/Beat mode), \ (Accent burst)
 window.addEventListener("keydown", (e) => {
   if (versionModal.style.display === "flex" || repertoireModal.style.display === "flex") return;
 
@@ -563,30 +581,26 @@ window.addEventListener("keydown", (e) => {
     setMode("inertial");
   } else if (e.code === "KeyP" && !e.repeat) {
     controller.togglePause();
-  } else if (e.code === "ArrowRight" && !e.repeat) {
-    e.preventDefault();
-    if (controller.getTempoMode() === "gestural") {
-      // Mode E: nudge base BPM up +5
-      controller.nudgeGesturalBpm(5);
-    } else {
-      controller.armAccent();
-    }
-  } else if (e.code === "Backslash" && !e.repeat) {
-    // \ always triggers accent (including in Mode E)
-    e.preventDefault();
-    controller.armAccent();
-  } else if (e.code === "ArrowLeft" && !e.repeat) {
-    e.preventDefault();
-    if (controller.getTempoMode() === "gestural") {
-      // Mode E: nudge base BPM down -5
-      controller.nudgeGesturalBpm(-5);
-    }
   } else if (e.code === "ArrowUp") {
+    // Up arrow: increase target Tempo
+    e.preventDefault();
+    controller.nudgeGesturalBpm(5);
+  } else if (e.code === "ArrowDown") {
+    // Down arrow: decrease target Tempo
+    e.preventDefault();
+    controller.nudgeGesturalBpm(-5);
+  } else if (e.code === "ArrowRight") {
+    // Right arrow: step Dynamic louder
     e.preventDefault();
     controller.stepDynamicLevel(1);
-  } else if (e.code === "ArrowDown") {
+  } else if (e.code === "ArrowLeft") {
+    // Left arrow: step Dynamic softer
     e.preventDefault();
     controller.stepDynamicLevel(-1);
+  } else if (e.code === "Backslash" && !e.repeat) {
+    // \ always triggers accent burst
+    e.preventDefault();
+    controller.armAccent();
   }
 });
 
@@ -755,10 +769,19 @@ loadRepertoireCatalog().then(() => {
 
 function updateAnalogueDynamicUI(): void {
   const analogueMarker = document.getElementById("dynamic-analogue-marker") as HTMLElement | null;
+  const dynamicCurrentBadge = document.getElementById("dynamic-current-badge") as HTMLElement | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const continuousVal = (controller as any).audioEngine?.getContinuousDynamic?.() ?? 0.5;
+
   if (analogueMarker) {
-    const continuousVal = (controller as any).audioEngine?.getContinuousDynamic?.() ?? 0.5;
-    // Map continuousVal [0, 1] to vertical percentage [6%, 94%] so marker glides smoothly along track
-    const pct = Math.max(6, Math.min(94, continuousVal * 88 + 6));
-    analogueMarker.style.bottom = `${pct}%`;
+    // Map continuousVal [0, 1] to horizontal percentage [4%, 96%] so marker glides smoothly along track
+    const pct = Math.max(4, Math.min(96, continuousVal * 92 + 4));
+    analogueMarker.style.left = `${pct}%`;
+  }
+
+  if (dynamicCurrentBadge) {
+    const level = controller.getDynamicLevel();
+    const pct = Math.round(continuousVal * 100);
+    dynamicCurrentBadge.textContent = `${level.toUpperCase()} (${pct}%)`;
   }
 }
