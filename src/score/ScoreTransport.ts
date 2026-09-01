@@ -38,6 +38,7 @@ export class ScoreTransport {
 
   private totalBeats: number = 0;
   private beatsPerTap: number = 1;
+  private fermata: boolean = false;
 
   // ── Public API ──────────────────────────────────────────────────────────
 
@@ -47,6 +48,24 @@ export class ScoreTransport {
 
   getBeatsPerTap(): number {
     return this.beatsPerTap;
+  }
+
+  /** Enable or release a musical Fermata (holding current notes without advancing score). */
+  setFermata(active: boolean, currentAudioTime: number): void {
+    if (this.fermata === active) return;
+    this.fermata = active;
+    if (active) {
+      this.cursorBeat = this.beatAtAudioTime(currentAudioTime);
+      this.originBeat = this.cursorBeat;
+      this.originAudioTime = currentAudioTime;
+    } else {
+      this.originBeat = this.cursorBeat;
+      this.originAudioTime = currentAudioTime;
+    }
+  }
+
+  isFermataActive(): boolean {
+    return this.fermata;
   }
 
   /** Load score events from MidiScore. */
@@ -86,11 +105,13 @@ export class ScoreTransport {
     this.periodSec = periodSec / this.beatsPerTap;
     this.cursorBeat = startBeat;
     this.playing = true;
+    this.fermata = false;
   }
 
   /** Stop playback. */
   stop(): void {
     this.playing = false;
+    this.fermata = false;
   }
 
   /** True if the transport is playing. */
@@ -108,6 +129,11 @@ export class ScoreTransport {
    * @param phaseCorrectionSec  Phase adjustment in seconds (optional).
    */
   updatePeriod(currentAudioTime: number, newPeriodSec: number, phaseCorrectionSec: number = 0): void {
+    if (this.fermata) {
+      this.periodSec = newPeriodSec / this.beatsPerTap;
+      this.originAudioTime = currentAudioTime;
+      return;
+    }
     const currentBeat = this.beatAtAudioTime(currentAudioTime);
     this.originBeat = currentBeat;
     this.originAudioTime = currentAudioTime + phaseCorrectionSec;
@@ -121,6 +147,10 @@ export class ScoreTransport {
    */
   advanceTo(audioTime: number): void {
     if (!this.playing) return;
+    if (this.fermata) {
+      this.originAudioTime = audioTime;
+      return;
+    }
     this.cursorBeat = this.beatAtAudioTime(audioTime);
   }
 
@@ -132,6 +162,9 @@ export class ScoreTransport {
    * @param toAudioTime    End of the window (look-ahead horizon).
    */
   eventsInWindow(fromAudioTime: number, toAudioTime: number): ScoreEvent[] {
+    if (this.fermata) {
+      return [];
+    }
     const fromBeat = this.beatAtAudioTime(fromAudioTime);
     const toBeat = this.beatAtAudioTime(toAudioTime);
     // Include boundary margin so opening downbeat notes at originBeat are never missed

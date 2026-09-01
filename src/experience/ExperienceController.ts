@@ -56,6 +56,9 @@ export type UICallbacks = {
   onAccentArmed?: (armed: boolean) => void;
   onInputSourceChange?: (source: InputSource) => void;
   onCameraAxisMappingChange?: (mapping: CameraAxisMapping) => void;
+  onFistCutoffChange?: (isCutoff: boolean) => void;
+  onFermataChange?: (isFermata: boolean) => void;
+  onPartyModeChange?: (isParty: boolean) => void;
 };
 
 // ─── ExperienceController ───────────────────────────────────────────────────
@@ -86,6 +89,12 @@ export class ExperienceController {
   private cameraDynamicsMode: "spread" | "height" = "spread";
   // Camera Axis Mapping: "classic" (Width is Dynamics, Height is Tempo - DEFAULT) or "flipped"
   private cameraAxisMapping: CameraAxisMapping = "classic";
+
+  // Gesture-driven expressive states
+  private isFistCutoff: boolean = false;
+  private isFermata: boolean = false;
+  private isPartyMode: boolean = false;
+  private partyModeTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Overburn decay timer (for ff/fff dynamic)
   private overburnTimer: ReturnType<typeof setTimeout> | null = null;
@@ -288,7 +297,67 @@ export class ExperienceController {
         this.isHandsDown = samples.length === 0;
 
         if (samples.length > 0) {
-          if (this.clock.getTempoMode() === "gestural") {
+          // ── 1. Fist Cutoff: Any hand making a closed fist dramatically pauses music ──
+          const hasFist = samples.some(s => s.gesture === "Closed_Fist");
+          if (hasFist) {
+            if (!this.isFistCutoff) {
+              this.isFistCutoff = true;
+              if (this.state === "playing") {
+                this.pausePlayback(true);
+              } else {
+                this.uiCallbacks.onFistCutoffChange?.(true);
+              }
+            }
+          } else if (this.isFistCutoff) {
+            this.isFistCutoff = false;
+            this.uiCallbacks.onFistCutoffChange?.(false);
+            // Auto-resume playback as soon as fist opens
+            if (this.state === "paused") {
+              this.startPlayback();
+            }
+          }
+
+          // ── 2. Double Peace Signs (✌️ + ✌️): Party Mode + Tutti Fortissimo ──
+          const hasDoublePeace = samples.length >= 2 &&
+            samples[0].gesture === "Victory" &&
+            samples[1].gesture === "Victory";
+
+          if (hasDoublePeace) {
+            if (!this.isPartyMode) {
+              this.isPartyMode = true;
+              this.uiCallbacks.onPartyModeChange?.(true);
+            }
+            if (this.partyModeTimer) {
+              clearTimeout(this.partyModeTimer);
+              this.partyModeTimer = null;
+            }
+            // Immediately ramp dynamic to maximum ff / fff
+            this.audioEngine.setContinuousDynamic(1.0);
+            this.setDynamicLevel("fff", false);
+          } else if (this.isPartyMode && !this.partyModeTimer) {
+            // Lingering celebration cooldown (2.5s)
+            this.partyModeTimer = setTimeout(() => {
+              this.isPartyMode = false;
+              this.partyModeTimer = null;
+              this.uiCallbacks.onPartyModeChange?.(false);
+            }, 2500);
+          }
+
+          // ── 3. Fermata (Open Palm / 5 Fingers Up): Hold current note/chord without advancing ──
+          const hasOpenPalm = samples.some(s => s.gesture === "Open_Palm");
+          if (hasOpenPalm && !hasFist && !hasDoublePeace && this.state === "playing") {
+            if (!this.isFermata) {
+              this.isFermata = true;
+              this.transport.setFermata(true, this.audioEngine.getAudioTime());
+              this.uiCallbacks.onFermataChange?.(true);
+            }
+          } else if (this.isFermata) {
+            this.isFermata = false;
+            this.transport.setFermata(false, this.audioEngine.getAudioTime());
+            this.uiCallbacks.onFermataChange?.(false);
+          }
+
+          if (this.clock.getTempoMode() === "gestural" && !this.isFistCutoff && !this.isFermata) {
             // Update per-hand Y history for steady-vs-beating detection
             for (const s of samples) {
               let hist = this.handYHistory.get(s.handIndex);
@@ -313,7 +382,7 @@ export class ExperienceController {
               let tempoMultiplier = 1.0;
 
               if (this.cameraAxisMapping === "flipped") {
-                // ── FLIPPED (DEFAULT): Horizontal Span (Width) modulates Tempo ──
+                // ── FLIPPED: Horizontal Span (Width) modulates Tempo ──
                 // Spreading hands apart -> Accelerando (up to 1.65x piece BPM)
                 // Bringing hands together -> Rallentando (down to 0.35x piece BPM)
                 if (samples.length >= 2) {
@@ -357,7 +426,7 @@ export class ExperienceController {
                   }
                 }
               } else {
-                // ── CLASSIC: Vertical Height (Y) modulates Tempo ──
+                // ── CLASSIC (DEFAULT): Vertical Height (Y) modulates Tempo ──
                 // Raising hands up -> Accelerando (up to 1.65x piece BPM)
                 // Lowering hands down -> Rallentando (down to 0.35x piece BPM)
                 let effectiveY: number;
@@ -419,6 +488,13 @@ export class ExperienceController {
                 0
               );
             }
+          }
+        } else {
+          // No hands detected on screen
+          if (this.isFermata) {
+            this.isFermata = false;
+            this.transport.setFermata(false, this.audioEngine.getAudioTime());
+            this.uiCallbacks.onFermataChange?.(false);
           }
         }
       });
@@ -495,17 +571,37 @@ export class ExperienceController {
     this.setState("ready");
   }
 
+  pausePlayback(isCutoff: boolean = false): void {
+    if (this.state !== "playing") return;
+    this.pausedBeat = this.transport.getCursorBeat();
+    this.scheduler.stop();
+    this.scheduler.reset();
+    this.transport.stop();
+    this.clock.reset();
+    this.audioEngine.stopAllNotes();
+    this.prepTapCount = 0;
+    this.setState("paused");
+    this.debug.updatePauseState(true);
+    if (isCutoff) {
+      this.uiCallbacks.onFistCutoffChange?.(true);
+    }
+  }
+
+  getIsFistCutoff(): boolean {
+    return this.isFistCutoff;
+  }
+
+  getIsFermata(): boolean {
+    return this.isFermata;
+  }
+
+  getIsPartyMode(): boolean {
+    return this.isPartyMode;
+  }
+
   togglePause(): void {
     if (this.state === "playing") {
-      this.pausedBeat = this.transport.getCursorBeat();
-      this.scheduler.stop();
-      this.scheduler.reset();
-      this.transport.stop();
-      this.clock.reset();
-      this.audioEngine.stopAllNotes();
-      this.prepTapCount = 0;
-      this.setState("paused");
-      this.debug.updatePauseState(true);
+      this.pausePlayback(false);
     } else if (this.state === "paused" || this.state === "ready") {
       this.startPlayback();
       this.debug.updatePauseState(false);
@@ -786,21 +882,6 @@ export class ExperienceController {
         this.pausePlayback();
         break;
     }
-  }
-
-  /**
-   * Pauses the orchestra smoothly at the current beat position, awaiting further conducting input.
-   */
-  pausePlayback(): void {
-    this.pausedBeat = this.transport.getCursorBeat();
-    this.clock.reset();
-    this.scheduler.stop();
-    this.scheduler.reset();
-    this.transport.stop();
-    this.audioEngine.stopAllNotes();
-    this.prepTapCount = 0;
-    this.handsDownPulseCount = 0;
-    this.setState("paused");
   }
 
   // ── State ────────────────────────────────────────────────────────────────

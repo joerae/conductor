@@ -256,11 +256,17 @@ export class CameraPreviewOverlay {
       ctx.save();
       ctx.font = "600 11px Inter, sans-serif";
       ctx.fillStyle = "rgba(10, 12, 18, 0.75)";
-      const labelText = `${isLeft ? "Left" : "Right"} (${Math.round(sample.confidence * 100)}%)`;
+      
+      let gestureBadge = "";
+      if (sample.gesture === "Closed_Fist") gestureBadge = " • ✊ Fist";
+      else if (sample.gesture === "Open_Palm") gestureBadge = " • 𝄐 Fermata";
+      else if (sample.gesture === "Victory") gestureBadge = " • ✌️ Peace";
+
+      const labelText = `${isLeft ? "Left" : "Right"} (${Math.round(sample.confidence * 100)}%)${gestureBadge}`;
       const textWidth = ctx.measureText(labelText).width;
       ctx.fillRect(labelX - textWidth / 2 - 4, labelY - 11, textWidth + 8, 15);
 
-      ctx.fillStyle = primaryColor;
+      ctx.fillStyle = sample.gesture === "Closed_Fist" ? "#ff6b6b" : sample.gesture === "Victory" ? "#6be7ff" : primaryColor;
       ctx.textAlign = "center";
       ctx.fillText(labelText, labelX, labelY);
       ctx.restore();

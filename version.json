@@ -1,9 +1,20 @@
 {
-  "version": "0.9.5",
+  "version": "0.10.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.10.0",
+      "date": "2026-09-01",
+      "summary": "Gesture-Driven Expressive Conducting: Dramatic Fist Cutoff & Resume, 5-Finger Open Palm Fermata Note Hold, and Double Peace Sign Party Mode & Tutti Fortissimo",
+      "details": [
+        "Dramatic Fist Cutoff & Auto-Resume: Forming a closed fist instantly triggers a dramatic orchestral pause/cutoff; reopening your fist seamlessly resumes piece playback right from where it paused",
+        "5-Finger Open Palm Fermata: Holding up an open hand with all 5 fingers spread enters a musical Fermata (𝄐), freezing the score transport to sustain and hold the current note/chord until the gesture is released",
+        "Double Peace Signs Party Mode (✌️✌️): Flashing peace signs on both hands activates Party Mode with vibrant animated rainbow disco stage lighting and instant tutti fortissimo (fff) orchestral power",
+        "Live Expressive Gesture Banners: High-contrast stage overlays and camera canvas badges provide real-time visual feedback for Fist Cutoffs, Fermatas, and Party Mode celebrations"
+      ]
+    },
     {
       "version": "0.9.5",
       "date": "2026-09-01",

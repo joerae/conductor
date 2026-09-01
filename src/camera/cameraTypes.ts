@@ -26,6 +26,17 @@ export type Handedness = "left" | "right";
 
 export type ConductingPointType = "wrist" | "indexTip" | "weightedBlend";
 
+export type HandGesture =
+  | "none"
+  | "Closed_Fist"
+  | "Open_Palm"
+  | "Victory"
+  | "Pointing_Up"
+  | "Thumb_Up"
+  | "Thumb_Down"
+  | "ILoveYou"
+  | "Unrecognized";
+
 export interface HandSample {
   /** Timestamp in milliseconds from performance.now(). */
   timestampMs: number;
@@ -41,6 +52,10 @@ export interface HandSample {
   conductingPoint: NormalizedPoint;
   /** Primary conducting point in conductor space (y: 0=bottom, 1=top). */
   conductorPoint: ConductorPoint;
+  /** Recognized hand gesture (e.g. Closed_Fist, Open_Palm, Victory). */
+  gesture?: HandGesture;
+  /** Recognition score for the gesture [0, 1]. */
+  gestureScore?: number;
 }
 
 export interface DynamicsObservation {
@@ -70,6 +85,8 @@ export interface HandTelemetryDetail {
   handedness: Handedness;
   confidence: number;
   conductorPoint: ConductorPoint;
+  gesture?: HandGesture;
+  gestureScore?: number;
 }
 
 export interface CameraTelemetry {
@@ -207,4 +224,69 @@ export function toConductorSpace(point: NormalizedPoint): ConductorPoint {
     y: Math.max(0, Math.min(1, 1.0 - point.y)),
     z: point.z,
   };
+}
+
+/**
+ * Geometric heuristic classifier that determines hand gesture directly from 21 landmarks.
+ * Accurately detects:
+ *   - "Thumb_Down": 4 fingers curled in, thumb extended downward.
+ *   - "Thumb_Up": 4 fingers curled in, thumb extended upward.
+ *   - "ILoveYou": Thumb, Index, and Pinky extended, Middle & Ring curled (🤟).
+ *   - "Victory": Index & Middle extended, Ring & Pinky curled (peace sign ✌️).
+ *   - "Closed_Fist": All fingers curled in.
+ *   - "Open_Palm": All 5 fingers extended.
+ */
+export function classifyHandGestureFromLandmarks(landmarks: HandLandmark[]): HandGesture {
+  if (!landmarks || landmarks.length < 21) return "none";
+
+  const wrist = landmarks[HAND_LANDMARK_INDICES.WRIST];
+  if (!wrist) return "none";
+
+  const distToWrist = (idx: number) => {
+    const p = landmarks[idx];
+    if (!p) return 0;
+    const dx = p.x - wrist.x;
+    const dy = p.y - wrist.y;
+    return Math.hypot(dx, dy);
+  };
+
+  // Finger extension: distance from wrist to TIP vs distance from wrist to PIP
+  const isThumbExt = distToWrist(HAND_LANDMARK_INDICES.THUMB_TIP) > distToWrist(HAND_LANDMARK_INDICES.THUMB_MCP) * 1.10;
+  const isIndexExt = distToWrist(HAND_LANDMARK_INDICES.INDEX_FINGER_TIP) > distToWrist(HAND_LANDMARK_INDICES.INDEX_FINGER_PIP) * 1.15;
+  const isMiddleExt = distToWrist(HAND_LANDMARK_INDICES.MIDDLE_FINGER_TIP) > distToWrist(HAND_LANDMARK_INDICES.MIDDLE_FINGER_PIP) * 1.15;
+  const isRingExt = distToWrist(HAND_LANDMARK_INDICES.RING_FINGER_TIP) > distToWrist(HAND_LANDMARK_INDICES.RING_FINGER_PIP) * 1.15;
+  const isPinkyExt = distToWrist(HAND_LANDMARK_INDICES.PINKY_TIP) > distToWrist(HAND_LANDMARK_INDICES.PINKY_PIP) * 1.15;
+
+  const thumbTip = landmarks[HAND_LANDMARK_INDICES.THUMB_TIP];
+  const thumbMcp = landmarks[HAND_LANDMARK_INDICES.THUMB_MCP];
+
+  // 1. ILoveYou (🤟): Thumb, Index, Pinky extended; Middle, Ring curled
+  if (isThumbExt && isIndexExt && isPinkyExt && !isMiddleExt && !isRingExt) {
+    return "ILoveYou";
+  }
+
+  // 2. Victory / Peace Sign (✌️): Index & Middle extended; Ring & Pinky curled
+  if (isIndexExt && isMiddleExt && !isRingExt && !isPinkyExt) {
+    return "Victory";
+  }
+
+  // 3. Four main fingers curled in
+  if (!isIndexExt && !isMiddleExt && !isRingExt && !isPinkyExt) {
+    if (isThumbExt && thumbTip && thumbMcp) {
+      // In image space, y = 0 is top, y = 1 is bottom
+      if (thumbTip.y < thumbMcp.y - 0.035) {
+        return "Thumb_Up";
+      } else if (thumbTip.y > thumbMcp.y + 0.035) {
+        return "Thumb_Down";
+      }
+    }
+    return "Closed_Fist";
+  }
+
+  // 4. Open Palm: All 4 main fingers extended
+  if (isIndexExt && isMiddleExt && isRingExt && isPinkyExt) {
+    return "Open_Palm";
+  }
+
+  return "none";
 }

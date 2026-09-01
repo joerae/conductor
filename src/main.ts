@@ -64,7 +64,7 @@ function getPromptText(state: ExperienceState, pausedBeat: number, inputSource: 
         case "preparing":
           return "Hands raised — starting orchestra…";
         case "playing":
-          return "Orchestra playing! Raise/lower hands for tempo. ← → nudge target. Drop hands to stop.";
+          return "Playing! ✊ Fist for dramatic cutoff • 🖐 5 fingers for Fermata • ✌️✌️ Peace for Party!";
         case "paused":
           return `Orchestra paused at beat ${pausedBeat.toFixed(1)}. Raise hands to resume.`;
         case "completed":
@@ -278,6 +278,52 @@ const controller = new ExperienceController({
   },
   onCameraAxisMappingChange: () => {
     updateControlHints();
+  },
+  onFistCutoffChange: (isCutoff: boolean) => {
+    const banner = document.getElementById("gesture-banner");
+    const icon = document.getElementById("gesture-banner-icon");
+    const text = document.getElementById("gesture-banner-text");
+    if (banner && icon && text) {
+      if (isCutoff) {
+        banner.className = "gesture-banner cutoff";
+        icon.textContent = "✊";
+        text.textContent = "DRAMATIC CUTOFF • Open fist to resume";
+        banner.style.display = "flex";
+        promptEl.textContent = "✊ Dramatic Cutoff! Open your fist to resume playback.";
+      } else {
+        banner.style.display = "none";
+        promptEl.textContent = getPromptText(controller.getState(), controller.getPausedBeat(), controller.getInputSource());
+      }
+    }
+  },
+  onFermataChange: (isFermata: boolean) => {
+    const banner = document.getElementById("gesture-banner");
+    const icon = document.getElementById("gesture-banner-icon");
+    const text = document.getElementById("gesture-banner-text");
+    if (banner && icon && text) {
+      if (isFermata) {
+        banner.className = "gesture-banner fermata";
+        icon.textContent = "𝄐";
+        text.textContent = "FERMATA • Holding note";
+        banner.style.display = "flex";
+        promptEl.textContent = "𝄐 Fermata active — sustaining note! Lower or relax hand to continue.";
+      } else {
+        banner.style.display = "none";
+        promptEl.textContent = getPromptText(controller.getState(), controller.getPausedBeat(), controller.getInputSource());
+      }
+    }
+  },
+  onPartyModeChange: (isParty: boolean) => {
+    const partyBanner = document.getElementById("party-banner");
+    if (isParty) {
+      stageEl.classList.add("party-mode-active");
+      if (partyBanner) partyBanner.style.display = "flex";
+      promptEl.textContent = "✌️✌️ Party Mode! Tutti Fortissimo (fff) celebrating with the orchestra!";
+    } else {
+      stageEl.classList.remove("party-mode-active");
+      if (partyBanner) partyBanner.style.display = "none";
+      promptEl.textContent = getPromptText(controller.getState(), controller.getPausedBeat(), controller.getInputSource());
+    }
   },
   onBeat: () => {
     flashBeat();

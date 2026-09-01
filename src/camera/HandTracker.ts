@@ -15,11 +15,13 @@ import type {
   Handedness,
   HandLandmark,
   HandTelemetryDetail,
+  HandGesture,
 } from "./cameraTypes";
 import {
   DEFAULT_CAMERA_CONFIG,
   extractConductingPoint,
   toConductorSpace,
+  classifyHandGestureFromLandmarks,
 } from "./cameraTypes";
 
 export type HandTrackerCallback = (
@@ -178,6 +180,28 @@ export class HandTracker {
               );
               const conductorPoint = toConductorSpace(conductingPoint);
 
+              // Extract gesture from MediaPipe GestureRecognizer or robust geometric classifier
+              let gesture: HandGesture = "none";
+              let gestureScore = 0.8;
+
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const anyResult = result as any;
+              if (anyResult.gestures && anyResult.gestures[idx] && anyResult.gestures[idx][0]) {
+                const gCat = anyResult.gestures[idx][0];
+                if (gCat.categoryName && gCat.categoryName !== "Unrecognized") {
+                  gesture = gCat.categoryName as HandGesture;
+                  gestureScore = gCat.score ?? 0.8;
+                }
+              }
+
+              if (gesture === "none" || gesture === "Unrecognized") {
+                const geomGesture = classifyHandGestureFromLandmarks(landmarks);
+                if (geomGesture !== "none") {
+                  gesture = geomGesture;
+                  gestureScore = 0.9;
+                }
+              }
+
               const sample: HandSample = {
                 timestampMs: now,
                 handIndex: idx,
@@ -186,6 +210,8 @@ export class HandTracker {
                 landmarks,
                 conductingPoint,
                 conductorPoint,
+                gesture,
+                gestureScore,
               };
 
               handSamples.push(sample);
@@ -193,6 +219,8 @@ export class HandTracker {
                 handedness,
                 confidence,
                 conductorPoint,
+                gesture,
+                gestureScore,
               });
             });
           }
