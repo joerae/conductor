@@ -57,8 +57,8 @@ function createMockSample(options: {
   };
 }
 
-describe("InstrumentFocusController", () => {
-  it("enters focus mode when Pointing_Up is held for >280ms", () => {
+describe("InstrumentFocusController (Spotlight Mode)", () => {
+  it("enters spotlight mode when Pointing_Up is held for >180ms", () => {
     const controller = new InstrumentFocusController();
     const sample = createMockSample({ gesture: "Pointing_Up" });
 
@@ -66,118 +66,89 @@ describe("InstrumentFocusController", () => {
     controller.update([sample], MOCK_SECTIONS, 1000);
     expect(controller.isFocusModeActive()).toBe(false);
 
-    // T = 150ms: Still holding
-    controller.update([sample], MOCK_SECTIONS, 1150);
+    // T = 100ms: Still holding
+    controller.update([sample], MOCK_SECTIONS, 1100);
     expect(controller.isFocusModeActive()).toBe(false);
 
-    // T = 300ms: Held > 280ms -> focus mode active!
-    controller.update([sample], MOCK_SECTIONS, 1300);
+    // T = 200ms: Held > 180ms -> spotlight mode active!
+    controller.update([sample], MOCK_SECTIONS, 1200);
     expect(controller.isFocusModeActive()).toBe(true);
-    expect(controller.getState()).toBe("hovering");
     expect(controller.shouldSuppressBeats()).toBe(true);
     expect(controller.shouldSuppressGlobalDynamics()).toBe(true);
   });
 
-  it("does not enter focus mode if pointing is released before threshold", () => {
+  it("does not enter spotlight mode if pointing is released before threshold", () => {
     const controller = new InstrumentFocusController();
     const pointingSample = createMockSample({ gesture: "Pointing_Up" });
     const idleSample = createMockSample({ gesture: "none" });
 
     controller.update([pointingSample], MOCK_SECTIONS, 1000);
-    controller.update([idleSample], MOCK_SECTIONS, 1100);
-    controller.update([idleSample], MOCK_SECTIONS, 1350);
+    controller.update([idleSample], MOCK_SECTIONS, 1080);
+    controller.update([idleSample], MOCK_SECTIONS, 1250);
 
     expect(controller.isFocusModeActive()).toBe(false);
   });
 
-  it("hovers over the nearest section when pointing", () => {
+  it("directly spotlights the nearest section when pointing at it", () => {
+    const onGrab = vi.fn();
     const onHover = vi.fn();
-    const controller = new InstrumentFocusController({ onHoverChange: onHover });
+    const controller = new InstrumentFocusController({ onGrabChange: onGrab, onHoverChange: onHover });
 
-    // Enter focus mode
+    // Pointing at leftmost section (violin1): mirrored screenX = 1 - 0.80 = 0.20
     const pointingLeft = createMockSample({
       gesture: "Pointing_Up",
-      indexTip: { x: 0.80, y: 0.20 }, // Mirrored screenX = 1 - 0.80 = 0.20 (near left section: violin1)
+      indexTip: { x: 0.80, y: 0.20 },
     });
 
     controller.update([pointingLeft], MOCK_SECTIONS, 1000);
-    controller.update([pointingLeft], MOCK_SECTIONS, 1300); // Focus mode activated
-    controller.update([pointingLeft], MOCK_SECTIONS, 1400); // Stable hover
+    controller.update([pointingLeft], MOCK_SECTIONS, 1200); // Activated
+    controller.update([pointingLeft], MOCK_SECTIONS, 1280); // Debounce confirmed
 
-    expect(controller.getHoveredSectionId()).toBe("violin1");
-    expect(onHover).toHaveBeenCalledWith("violin1");
-  });
-
-  it("grabs a section when pinch is detected on pointing hand", () => {
-    const onGrab = vi.fn();
-    const controller = new InstrumentFocusController({ onGrabChange: onGrab });
-
-    // Enter focus mode and hover
-    const pointing = createMockSample({
-      gesture: "Pointing_Up",
-      indexTip: { x: 0.80, y: 0.20 },
-      thumbTip: { x: 0.70, y: 0.35 }, // open pinch
-    });
-
-    controller.update([pointing], MOCK_SECTIONS, 1000);
-    controller.update([pointing], MOCK_SECTIONS, 1300);
-    controller.update([pointing], MOCK_SECTIONS, 1400);
-    expect(controller.getHoveredSectionId()).toBe("violin1");
-
-    // Pinch closed: thumb tip close to index tip
-    const pinching = createMockSample({
-      gesture: "Pointing_Up",
-      indexTip: { x: 0.80, y: 0.20 },
-      thumbTip: { x: 0.805, y: 0.205 }, // pinch dist ~0.007 / handScale 0.20 = 0.035 (< 0.40)
-    });
-
-    controller.update([pinching], MOCK_SECTIONS, 1450);
-    expect(controller.getState()).toBe("grabbed");
     expect(controller.getGrabbedSectionId()).toBe("violin1");
+    expect(controller.getHoveredSectionId()).toBe("violin1");
+    expect(controller.getSectionFocus()).toBe(1.0);
     expect(onGrab).toHaveBeenCalledWith("violin1");
   });
 
-  it("modulates section focus continuously based on two-hand separation", () => {
-    const onFocus = vi.fn();
-    const controller = new InstrumentFocusController({ onFocusAmountChange: onFocus });
+  it("switches spotlight when pointing finger shifts to another section", () => {
+    const onGrab = vi.fn();
+    const controller = new InstrumentFocusController({ onGrabChange: onGrab });
 
-    // Enter and grab
-    const hand0 = createMockSample({
-      handIndex: 0,
+    // 1. Point at violin1 (screenX = 0.20)
+    const pointingLeft = createMockSample({
       gesture: "Pointing_Up",
       indexTip: { x: 0.80, y: 0.20 },
-      thumbTip: { x: 0.805, y: 0.205 },
-      conductorX: 0.20,
     });
-    const hand1 = createMockSample({
-      handIndex: 1,
-      conductorX: 0.75, // Wide separation (0.75 - 0.20 = 0.55 span)
+    controller.update([pointingLeft], MOCK_SECTIONS, 1000);
+    controller.update([pointingLeft], MOCK_SECTIONS, 1200);
+    controller.update([pointingLeft], MOCK_SECTIONS, 1280);
+    expect(controller.getGrabbedSectionId()).toBe("violin1");
+
+    // 2. Shift finger to rightmost section (cello/bass): mirrored screenX = 1 - 0.20 = 0.80
+    const pointingRight = createMockSample({
+      gesture: "Pointing_Up",
+      indexTip: { x: 0.20, y: 0.20 },
     });
+    controller.update([pointingRight], MOCK_SECTIONS, 1300);
+    controller.update([pointingRight], MOCK_SECTIONS, 1380); // Shift confirmed
 
-    controller.update([hand0, hand1], MOCK_SECTIONS, 1000);
-    controller.update([hand0, hand1], MOCK_SECTIONS, 1300);
-    controller.update([hand0, hand1], MOCK_SECTIONS, 1400);
-
-    // Grabbed and manipulating
-    controller.update([hand0, hand1], MOCK_SECTIONS, 1500);
-    controller.update([hand0, hand1], MOCK_SECTIONS, 1550);
-
-    expect(controller.getSectionFocus()).toBeGreaterThan(0.0);
-    expect(onFocus).toHaveBeenCalled();
+    expect(controller.getGrabbedSectionId()).toBe("cello");
+    expect(onGrab).toHaveBeenCalledWith("cello");
   });
 
-  it("exits focus mode gracefully when interaction stops", () => {
+  it("exits spotlight mode gracefully and restores balance when pointing stops", () => {
     const controller = new InstrumentFocusController();
     const pointing = createMockSample({ gesture: "Pointing_Up" });
 
     controller.update([pointing], MOCK_SECTIONS, 1000);
-    controller.update([pointing], MOCK_SECTIONS, 1300);
+    controller.update([pointing], MOCK_SECTIONS, 1200);
     expect(controller.isFocusModeActive()).toBe(true);
 
-    // Idle for > 600ms
-    controller.update([], MOCK_SECTIONS, 2000);
+    // Idle for > 350ms
+    controller.update([], MOCK_SECTIONS, 1600);
     expect(controller.isFocusModeActive()).toBe(false);
     expect(controller.getState()).toBe("idle");
+    expect(controller.getGrabbedSectionId()).toBe(null);
     expect(controller.getSectionFocus()).toBe(0.0);
   });
 });

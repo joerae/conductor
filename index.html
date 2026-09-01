@@ -45,11 +45,11 @@
         <span class="party-emoji">🎉✨</span>
       </div>
 
-      <!-- Instrument Focus Mode Banner -->
+      <!-- Instrument Spotlight Mode Banner -->
       <div id="focus-banner" class="focus-banner" style="display: none;">
         <span class="focus-banner-icon">✨</span>
-        <span id="focus-banner-text" class="focus-banner-text">INSTRUMENT FOCUS MODE</span>
-        <span id="focus-banner-badge" class="focus-banner-badge">POINT &amp; PINCH</span>
+        <span id="focus-banner-text" class="focus-banner-text">INSTRUMENT SPOTLIGHT</span>
+        <span id="focus-banner-badge" class="focus-banner-badge">POINT TO SPOTLIGHT</span>
       </div>
 
       <!-- Piece info & Repertoire button -->
@@ -65,60 +65,9 @@
 
       <!-- Stage Performance Area: Hero Camera View + BPM Gauge + Orchestra + Dynamics Ladder -->
       <div class="stage-performance-area" id="stage-main-area">
-        <!-- Center Column: Hero Picture + Horizontal Dynamics Ribbon + Musician Silhouette -->
+        <!-- Center Column: Musician Silhouette (Top) + Hero Camera (Middle) + Dynamics Ribbon (Bottom) -->
         <div id="stage-center-column" class="stage-center-column">
-          <!-- Hero Camera Container (Big Picture of Person in Middle of Screen) -->
-          <div id="camera-hero-slot" class="camera-hero-slot"></div>
-
-          <!-- Horizontal Orchestral Dynamics Ribbon (Directly Below the Picture) -->
-          <div id="dynamic-ladder-container" class="dynamic-ladder-container dynamic-horizontal-ribbon" title="Orchestral Dynamics: Use ←/→ arrows, mouse wheel, or click to shape dynamic expression">
-            <div class="dynamic-ladder-header">
-              <span class="dynamic-icon">𝄢</span>
-              <span class="dynamic-title">DYNAMICS</span>
-              <span id="dynamic-current-badge" class="dynamic-current-badge">MF (50%)</span>
-            </div>
-            <div class="dynamic-ladder-wrap">
-              <div class="dynamic-ladder" id="dynamic-ladder" role="group" aria-label="Orchestral dynamic levels">
-                <button class="dynamic-step" data-dynamic="pp" title="Pianissimo (Very soft)">
-                  <span class="dynamic-symbol">pp</span>
-                  <span class="accent-badge-icon">&gt;</span>
-                </button>
-                <button class="dynamic-step" data-dynamic="p" title="Piano (Soft)">
-                  <span class="dynamic-symbol">p</span>
-                  <span class="accent-badge-icon">&gt;</span>
-                </button>
-                <button class="dynamic-step" data-dynamic="mp" title="Mezzo-piano (Moderately soft)">
-                  <span class="dynamic-symbol">mp</span>
-                  <span class="accent-badge-icon">&gt;</span>
-                </button>
-                <button class="dynamic-step active" data-dynamic="mf" title="Mezzo-forte (Default)">
-                  <span class="dynamic-symbol">mf</span>
-                  <span class="accent-badge-icon">&gt;</span>
-                </button>
-                <button class="dynamic-step" data-dynamic="f" title="Forte (Loud)">
-                  <span class="dynamic-symbol">f</span>
-                  <span class="accent-badge-icon">&gt;</span>
-                </button>
-                <button class="dynamic-step" data-dynamic="ff" title="Fortissimo (Very Loud)">
-                  <span class="dynamic-symbol">ff</span>
-                  <span class="accent-badge-icon">&gt;</span>
-                </button>
-                <button class="dynamic-step" data-dynamic="fff" title="Fortississimo (Overburn ⚡)">
-                  <span class="dynamic-symbol">fff</span>
-                  <span class="dynamic-sparkle">⚡</span>
-                  <span class="accent-badge-icon">&gt;</span>
-                </button>
-              </div>
-              <!-- Continuous Analogue Dynamics Track & Marker Indicator (Horizontal) -->
-              <div id="dynamic-analogue-track" class="dynamic-analogue-track" title="Continuous Interpolated Dynamic Level (Analogue hand separation)">
-                <div id="dynamic-analogue-marker" class="dynamic-analogue-marker" style="left: 50%;">
-                  <div class="analogue-pip">▲</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Orchestra silhouette with instrument sections -->
+          <!-- Orchestra silhouette with instrument sections (Positioned above the camera) -->
           <div id="orchestra-silhouette" aria-hidden="true">
             <svg viewBox="0 0 1000 230" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
               <defs>
@@ -202,6 +151,57 @@
               <!-- Stage floor -->
               <rect x="20" y="214" width="960" height="4" rx="2" class="stage-floor" />
             </svg>
+          </div>
+
+          <!-- Hero Camera Container (Big Picture of Person in Middle of Screen) -->
+          <div id="camera-hero-slot" class="camera-hero-slot"></div>
+
+          <!-- Horizontal Orchestral Dynamics Ribbon (Directly Below the Picture) -->
+          <div id="dynamic-ladder-container" class="dynamic-ladder-container dynamic-horizontal-ribbon" title="Orchestral Dynamics: Use ←/→ arrows, mouse wheel, or click to shape dynamic expression">
+            <div class="dynamic-ladder-header">
+              <span class="dynamic-icon">𝄢</span>
+              <span class="dynamic-title">DYNAMICS</span>
+              <span id="dynamic-current-badge" class="dynamic-current-badge">MF (50%)</span>
+            </div>
+            <div class="dynamic-ladder-wrap">
+              <div class="dynamic-ladder" id="dynamic-ladder" role="group" aria-label="Orchestral dynamic levels">
+                <button class="dynamic-step" data-dynamic="pp" title="Pianissimo (Very soft)">
+                  <span class="dynamic-symbol">pp</span>
+                  <span class="accent-badge-icon">&gt;</span>
+                </button>
+                <button class="dynamic-step" data-dynamic="p" title="Piano (Soft)">
+                  <span class="dynamic-symbol">p</span>
+                  <span class="accent-badge-icon">&gt;</span>
+                </button>
+                <button class="dynamic-step" data-dynamic="mp" title="Mezzo-piano (Moderately soft)">
+                  <span class="dynamic-symbol">mp</span>
+                  <span class="accent-badge-icon">&gt;</span>
+                </button>
+                <button class="dynamic-step active" data-dynamic="mf" title="Mezzo-forte (Default)">
+                  <span class="dynamic-symbol">mf</span>
+                  <span class="accent-badge-icon">&gt;</span>
+                </button>
+                <button class="dynamic-step" data-dynamic="f" title="Forte (Loud)">
+                  <span class="dynamic-symbol">f</span>
+                  <span class="accent-badge-icon">&gt;</span>
+                </button>
+                <button class="dynamic-step" data-dynamic="ff" title="Fortissimo (Very Loud)">
+                  <span class="dynamic-symbol">ff</span>
+                  <span class="accent-badge-icon">&gt;</span>
+                </button>
+                <button class="dynamic-step" data-dynamic="fff" title="Fortississimo (Overburn ⚡)">
+                  <span class="dynamic-symbol">fff</span>
+                  <span class="dynamic-sparkle">⚡</span>
+                  <span class="accent-badge-icon">&gt;</span>
+                </button>
+              </div>
+              <!-- Continuous Analogue Dynamics Track & Marker Indicator (Horizontal) -->
+              <div id="dynamic-analogue-track" class="dynamic-analogue-track" title="Continuous Interpolated Dynamic Level (Analogue hand separation)">
+                <div id="dynamic-analogue-marker" class="dynamic-analogue-marker" style="left: 50%;">
+                  <div class="analogue-pip">▲</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -294,7 +294,7 @@
 
       <!-- Footer controls -->
       <footer id="stage-footer">
-        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.16.0</button>
+        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.17.0</button>
         <span class="footer-divider">•</span>
         <span id="debug-hint" class="debug-hint">Press D for debug overlay & A/B DSP</span>
       </footer>

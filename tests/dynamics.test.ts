@@ -166,25 +166,38 @@ describe("DSP Bypass Defaults & Macro Ratio Control", () => {
   });
 });
 
-describe("AudioEngine Section Focus Mixing", () => {
-  it("calculates correct foreground boost and background reduction multipliers", () => {
+describe("AudioEngine Section Focus & Spatial Stereo DSP", () => {
+  const MOCK_SECTIONS = [
+    { id: "violin1", name: "Violin I", channels: [0], programs: [48] },
+    { id: "violin2", name: "Violin II", channels: [3], programs: [48] },
+    { id: "viola", name: "Viola", channels: [1], programs: [48] },
+    { id: "cello", name: "Cello / Bass", channels: [2], programs: [48] },
+  ];
+
+  it("calculates natural stereo seating pan positions across the ensemble", () => {
+    const engine = new AudioEngine();
+    engine.setDefaultSectionPanning(MOCK_SECTIONS);
+
+    // 4 sections spread from -0.68 to +0.68
+    expect(engine.getChannelPan(0)).toBeCloseTo(-0.68); // Violin I (Left)
+    expect(engine.getChannelPan(3)).toBeCloseTo(-0.23); // Violin II (Center-Left)
+    expect(engine.getChannelPan(1)).toBeCloseTo(0.23);  // Viola (Center-Right)
+    expect(engine.getChannelPan(2)).toBeCloseTo(0.68);  // Cello/Bass (Right)
+  });
+
+  it("calculates correct spotlight forte boost and piano background reduction multipliers", () => {
     const engine = new AudioEngine();
     // Default: no focus active
     expect(engine.getChannelFocusMultiplier(0)).toBe(1.0);
     expect(engine.getChannelFocusMultiplier(1)).toBe(1.0);
 
-    // Focus channel 0 with focus 0.5
-    engine.setSectionFocus([0], 0.5);
-    expect(engine.getFocusAmount()).toBeCloseTo(0.5);
-    expect(engine.getChannelFocusMultiplier(0)).toBeCloseTo(1.175);
-    expect(engine.getChannelFocusMultiplier(1)).toBeCloseTo(0.725);
-
-    // Focus channel 0 with max focus 1.0
+    // Spotlight channel 0 with full focus 1.0 (forte vs piano)
     engine.setSectionFocus([0], 1.0);
-    expect(engine.getChannelFocusMultiplier(0)).toBeCloseTo(1.35);
-    expect(engine.getChannelFocusMultiplier(1)).toBeCloseTo(0.45);
+    expect(engine.getFocusAmount()).toBeCloseTo(1.0);
+    expect(engine.getChannelFocusMultiplier(0)).toBeCloseTo(1.40); // Forte (+2.9 dB)
+    expect(engine.getChannelFocusMultiplier(1)).toBeCloseTo(0.42); // Piano (-7.5 dB)
 
-    // Reset focus
+    // Reset spotlight
     engine.setSectionFocus(null, 0);
     expect(engine.getChannelFocusMultiplier(0)).toBe(1.0);
     expect(engine.getChannelFocusMultiplier(1)).toBe(1.0);

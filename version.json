@@ -1,9 +1,21 @@
 {
-  "version": "0.16.0",
+  "version": "0.17.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.17.0",
+      "date": "2026-09-02",
+      "summary": "Spotlight Mode & Spatial Stereo DSP: Pointing Spotlight, Above-Camera Seating, Center Stage Pull & Stereo Dispersal",
+      "details": [
+        "Above-Camera Seating Layout: Instrument sections now reside naturally above the webcam view by default, smoothly gliding downward into direct reach when Spotlight Mode is activated",
+        "Direct Pointing Spotlight: Replaced multi-step pinch gesture with instant, fluid Pointing Spotlight — pointing at any section immediately spotlights it forward into forte (f) tier while backgrounding other sections in piano (p)",
+        "Natural Stereo Spatial Panorama: Each orchestral section is panned across the stereo field corresponding directly to its UI seating arrangement (Violin I on the left through Cello/Bass on the right)",
+        "Center Stage Focus Pull & Dispersal: When an instrument is spotlighted, its spatial pan glides smoothly to center stage with intimate dry presence while the rest of the orchestra disperses outward to the stereo sides",
+        "Quick & Forgiving Dynamic Recovery: Releasing the pointing gesture smoothly restores natural ensemble balance and spatial seating over 200–350ms"
+      ]
+    },
     {
       "version": "0.16.0",
       "date": "2026-09-01",

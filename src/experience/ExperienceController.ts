@@ -245,6 +245,7 @@ export class ExperienceController {
       if (this.cameraInput) {
         this.cameraInput.setSections(piece.sections);
       }
+      this.audioEngine.setDefaultSectionPanning(piece.sections);
       this.audioEngine.setSectionFocus(null, 0);
 
       if (this.inputSource === "camera") {

@@ -435,31 +435,45 @@ export class CameraPreviewOverlay {
         ctx.shadowBlur = 8;
         ctx.fill();
 
-        // If grabbed: Draw radiant tether beam & energy ripples
-        if (focusTelemetry.state === "grabbed") {
-          // Shimmering tether beam shooting towards top of frame (into orchestra section)
-          const grad = ctx.createLinearGradient(fx, fy, fx, 0);
-          grad.addColorStop(0, "rgba(255, 213, 107, 0.95)");
-          grad.addColorStop(1, "rgba(255, 255, 255, 0.35)");
+        // If spotlight active: Draw radiant upward spotlight cone & energy beam
+        if (focusTelemetry.state === "grabbed" || focusTelemetry.state === "hovering") {
+          // Shimmering conical spotlight beam shooting towards top of frame into orchestra section
+          ctx.save();
+          const beamGrad = ctx.createLinearGradient(fx, fy, fx, 0);
+          beamGrad.addColorStop(0, "rgba(255, 213, 107, 0.75)");
+          beamGrad.addColorStop(0.4, "rgba(255, 230, 150, 0.35)");
+          beamGrad.addColorStop(1, "rgba(255, 255, 255, 0.08)");
 
+          ctx.beginPath();
+          ctx.moveTo(fx - 10, fy);
+          ctx.lineTo(fx - 36, 0);
+          ctx.lineTo(fx + 36, 0);
+          ctx.lineTo(fx + 10, fy);
+          ctx.closePath();
+          ctx.fillStyle = beamGrad;
+          ctx.shadowColor = "#ffd56b";
+          ctx.shadowBlur = 22;
+          ctx.fill();
+
+          // Central radiant core laser beam
           ctx.beginPath();
           ctx.moveTo(fx, fy);
           ctx.lineTo(fx, 0);
-          ctx.strokeStyle = grad;
-          ctx.lineWidth = 3 + focusTelemetry.sectionFocus * 5;
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+          ctx.lineWidth = 3.5;
           ctx.shadowColor = "#ffd56b";
-          ctx.shadowBlur = 18;
+          ctx.shadowBlur = 14;
           ctx.stroke();
 
-          // Concentric focus expansion rings
-          const expRadius = 16 + focusTelemetry.sectionFocus * 45;
+          // Concentric spotlight halo rings
           ctx.beginPath();
-          ctx.arc(fx, fy, expRadius, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(255, 213, 107, ${0.45 + focusTelemetry.sectionFocus * 0.5})`;
+          ctx.arc(fx, fy, 22 + pulse * 6, 0, Math.PI * 2);
+          ctx.strokeStyle = "rgba(255, 213, 107, 0.85)";
           ctx.lineWidth = 2.5;
           ctx.shadowColor = "#ffd56b";
           ctx.shadowBlur = 12;
           ctx.stroke();
+          ctx.restore();
         }
         ctx.restore();
       }

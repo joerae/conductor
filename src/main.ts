@@ -346,7 +346,7 @@ const controller = new ExperienceController({
     if (telemetry.isActive) {
       stageEl.classList.add("focus-mode-active");
 
-      // Background non-selected sections when one is grabbed
+      // Background non-selected sections when one is spotlighted
       if (telemetry.grabbedSectionId) {
         stageEl.classList.add("has-grabbed-section");
         focusBanner?.classList.add("grabbed");
@@ -362,51 +362,43 @@ const controller = new ExperienceController({
         el.classList.remove("focus-hover", "focus-grabbed");
       });
 
-      // Highlight hovered section
-      if (telemetry.hoveredSectionId) {
+      // Highlight spotlighted section & update dynamic label
+      if (telemetry.grabbedSectionId) {
+        const grabbedEl = document.getElementById(`section-${telemetry.grabbedSectionId}`);
+        if (grabbedEl) {
+          grabbedEl.classList.add("focus-grabbed", "focus-hover");
+          const labelEl = grabbedEl.querySelector(".section-label");
+          const sec = currentPiece?.sections.find(s => s.id === telemetry.grabbedSectionId);
+          if (labelEl && sec) {
+            labelEl.textContent = `${sec.name} • SPOTLIGHT (f)`;
+          }
+        }
+      } else if (telemetry.hoveredSectionId) {
         const hoveredEl = document.getElementById(`section-${telemetry.hoveredSectionId}`);
         if (hoveredEl) {
           hoveredEl.classList.add("focus-hover");
         }
       }
 
-      // Highlight grabbed section & display focus percentage
-      if (telemetry.grabbedSectionId) {
-        const grabbedEl = document.getElementById(`section-${telemetry.grabbedSectionId}`);
-        if (grabbedEl) {
-          grabbedEl.classList.add("focus-grabbed");
-          const labelEl = grabbedEl.querySelector(".section-label");
-          const sec = currentPiece?.sections.find(s => s.id === telemetry.grabbedSectionId);
-          const percent = Math.round(telemetry.sectionFocus * 100);
-          if (labelEl && sec) {
-            labelEl.textContent = `${sec.name} • ${percent}%`;
-          }
-        }
-      } else {
-        // Restore normal section labels
-        currentPiece?.sections.forEach(sec => {
+      // Restore normal labels for non-grabbed sections
+      currentPiece?.sections.forEach(sec => {
+        if (sec.id !== telemetry.grabbedSectionId) {
           const el = document.getElementById(`section-${sec.id}`);
           const labelEl = el?.querySelector(".section-label");
           if (labelEl) labelEl.textContent = sec.name;
-        });
-      }
+        }
+      });
 
       // Update prompts & banner badges
-      if (telemetry.state === "grabbed" && telemetry.grabbedSectionId) {
+      if (telemetry.grabbedSectionId) {
         const sec = currentPiece?.sections.find(s => s.id === telemetry.grabbedSectionId);
-        const percent = Math.round(telemetry.sectionFocus * 100);
-        if (focusText) focusText.textContent = `FOCUS: ${sec?.name || "SECTION"}`;
-        if (focusBadge) focusBadge.textContent = `${percent}% FOCUS`;
-        promptEl.textContent = `✨ Section Focus: ${sec?.name} (${percent}%) • Spread hands to bring forward, bring together to balance`;
-      } else if (telemetry.hoveredSectionId) {
-        const sec = currentPiece?.sections.find(s => s.id === telemetry.hoveredSectionId);
-        if (focusText) focusText.textContent = `HOVERING: ${sec?.name || "SECTION"}`;
-        if (focusBadge) focusBadge.textContent = "PINCH TO GRAB";
-        promptEl.textContent = `👉 Hovering ${sec?.name} • Pinch index finger + thumb together to grab!`;
+        if (focusText) focusText.textContent = `SPOTLIGHT: ${sec?.name || "SECTION"}`;
+        if (focusBadge) focusBadge.textContent = "CENTER STAGE • FORTE (f)";
+        promptEl.textContent = `✨ Spotlight: ${sec?.name} (Forte / Center Stage) • Point at another section or lower hand to restore ensemble balance`;
       } else {
-        if (focusText) focusText.textContent = "INSTRUMENT FOCUS MODE";
-        if (focusBadge) focusBadge.textContent = "POINT TO HOVER";
-        promptEl.textContent = "🪄 Instrument Focus Mode • Point index finger at an orchestra section to hover";
+        if (focusText) focusText.textContent = "INSTRUMENT SPOTLIGHT";
+        if (focusBadge) focusBadge.textContent = "AIM AT SECTION";
+        promptEl.textContent = "🪄 Instrument Spotlight • Point your index finger at any section to bring it forward in the mix";
       }
     } else {
       stageEl.classList.remove("focus-mode-active", "has-grabbed-section");

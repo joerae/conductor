@@ -11,10 +11,7 @@
  */
 
 import type { HandSample } from "./cameraTypes";
-import {
-  HAND_LANDMARK_INDICES,
-  getNormalizedPinchDistance,
-} from "./cameraTypes";
+import { HAND_LANDMARK_INDICES } from "./cameraTypes";
 import type { PieceSection } from "../score/repertoire";
 
 export type FocusModeState = "idle" | "pointing" | "hovering" | "grabbed";
@@ -52,11 +49,9 @@ export class InstrumentFocusController {
   private pointerScreenPoint: { x: number; y: number } | null = null;
   private currentPinchRatio = 1.0;
 
-  private readonly ENTER_HOLD_MS = 280; // ~280ms held pointing to enter
-  private readonly HOVER_STABLE_MS = 80;  // 80ms stable target to prevent flicker
-  private readonly EXIT_IDLE_MS = 600;   // 600ms no pointing/pinch to exit gracefully
-  private readonly PINCH_GRAB_THRESHOLD = 0.40;
-  private readonly PINCH_RELEASE_THRESHOLD = 0.58;
+  private readonly ENTER_HOLD_MS = 180; // ~180ms intentional pointing hold to enter spotlight mode
+  private readonly HOVER_STABLE_MS = 60;  // 60ms debounce for instantaneous, crisp section spotlight
+  private readonly EXIT_IDLE_MS = 350;   // 350ms quick & forgiving release after pointing stops
 
   private callbacks: FocusCallbacks;
 
@@ -130,7 +125,7 @@ export class InstrumentFocusController {
   }
 
   /**
-   * Updates focus state for the current video frame.
+   * Updates spotlight focus state for the current video frame.
    *
    * @param samples Tracked hand samples from HandTracker
    * @param sections PieceSection definitions for current piece
@@ -161,29 +156,13 @@ export class InstrumentFocusController {
       }
     }
 
-    // If currently grabbed, also allow the grabbed hand to continue pinch even if gesture changes from Pointing_Up to pinch
-    let isPinching = false;
-    let pinchHand: HandSample | null = null;
-
-    for (const s of samples) {
-      const pinchDist = getNormalizedPinchDistance(s.landmarks);
-      if (pinchDist < this.PINCH_GRAB_THRESHOLD || (this.grabbedSectionId && pinchDist < this.PINCH_RELEASE_THRESHOLD)) {
-        isPinching = true;
-        pinchHand = s;
-        this.currentPinchRatio = pinchDist;
-        break;
-      }
-    }
-
-    const activeHand = pointingSample || (this.grabbedSectionId ? pinchHand : null);
-
-    // ── Phase A: Entering Focus Mode ─────────────────────────────────────────
+    // ── Phase A: Entering Spotlight Mode ─────────────────────────────────────
     if (!this.isActive) {
       if (pointingSample) {
         if (this.pointingStartTime === 0) {
           this.pointingStartTime = now;
         } else if (now - this.pointingStartTime >= this.ENTER_HOLD_MS) {
-          // Stable pointing held long enough -> enter Focus Mode
+          // Stable pointing held -> enter Spotlight Focus Mode
           this.isActive = true;
           this.state = "hovering";
           this.lastActiveInteractionTime = now;
@@ -198,86 +177,47 @@ export class InstrumentFocusController {
       }
     }
 
-    // ── Active in Focus Mode ──────────────────────────────────────────────────
-    if (activeHand) {
+    // ── Active in Spotlight Mode ──────────────────────────────────────────────
+    if (pointingSample) {
       this.lastActiveInteractionTime = now;
-      this.pointingHandIndex = activeHand.handIndex;
+      this.pointingHandIndex = pointingSample.handIndex;
 
       // Extract index fingertip in screen space (mirrored)
-      const indexTip = activeHand.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP] || activeHand.conductingPoint;
+      const indexTip = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP] || pointingSample.conductingPoint;
       const screenX = mirror ? (1.0 - indexTip.x) : indexTip.x;
       const screenY = indexTip.y;
       this.pointerScreenPoint = { x: screenX, y: screenY };
 
-      // ── Phase B: Fingertip Hover & Nearest Section Selection ────────────────
-      if (!this.grabbedSectionId) {
-        const closestSection = this.findClosestSection(screenX, screenY, sections);
+      // ── Phase B: Direct Pointing Spotlight ──────────────────────────────────
+      const closestSection = this.findClosestSection(screenX, screenY, sections);
 
-        if (closestSection && closestSection !== this.candidateHoverSectionId) {
-          this.candidateHoverSectionId = closestSection;
-          this.candidateHoverStartTime = now;
+      if (closestSection && closestSection !== this.candidateHoverSectionId) {
+        this.candidateHoverSectionId = closestSection;
+        this.candidateHoverStartTime = now;
+      }
+
+      // Fast, stable debounce
+      if (
+        this.candidateHoverSectionId &&
+        (now - this.candidateHoverStartTime >= this.HOVER_STABLE_MS || !this.hoveredSectionId) &&
+        this.hoveredSectionId !== this.candidateHoverSectionId
+      ) {
+        const prevGrabbed = this.grabbedSectionId;
+        this.hoveredSectionId = this.candidateHoverSectionId;
+        this.grabbedSectionId = this.candidateHoverSectionId;
+        this.sectionFocus = 1.0;
+        this.state = "grabbed";
+
+        if (prevGrabbed && prevGrabbed !== this.grabbedSectionId) {
+          this.callbacks.onFocusAmountChange?.(prevGrabbed, 0.0);
         }
-
-        // Apply stable hover debounce
-        if (
-          this.candidateHoverSectionId &&
-          now - this.candidateHoverStartTime >= this.HOVER_STABLE_MS &&
-          this.hoveredSectionId !== this.candidateHoverSectionId
-        ) {
-          this.hoveredSectionId = this.candidateHoverSectionId;
-          this.callbacks.onHoverChange?.(this.hoveredSectionId);
-          this.emitTelemetry();
-        }
-
-        // ── Phase C: Pinch to Grab Section ───────────────────────────────────
-        if (this.hoveredSectionId && isPinching) {
-          this.grabbedSectionId = this.hoveredSectionId;
-          this.state = "grabbed";
-          this.callbacks.onGrabChange?.(this.grabbedSectionId);
-          this.emitTelemetry();
-        }
-      } else {
-        // ── Phase D: Section Grabbed & Two-Hand Focus Manipulation ─────────────
-        if (!isPinching) {
-          // Release grab when pinch opened
-          const prevGrabbed = this.grabbedSectionId;
-          this.grabbedSectionId = null;
-          this.state = "hovering";
-          if (prevGrabbed) {
-            this.callbacks.onFocusAmountChange?.(prevGrabbed, 0.0);
-          }
-          this.callbacks.onGrabChange?.(null);
-          this.emitTelemetry();
-        } else {
-          // Continuously compute two-hand separation
-          let rawFocus = 0.0;
-
-          if (samples.length >= 2) {
-            const s0 = samples[0];
-            const s1 = samples[1];
-            // Compute horizontal span between the two hands in conductor space
-            const handSpan = Math.abs(s0.conductorPoint.x - s1.conductorPoint.x);
-
-            // Neutral span: hands close together (~0.18) -> focus 0.0
-            // Expanded span: hands wide apart (~0.62) -> focus 1.0
-            const MIN_SPAN = 0.18;
-            const MAX_SPAN = 0.62;
-            const norm = (handSpan - MIN_SPAN) / (MAX_SPAN - MIN_SPAN);
-            rawFocus = Math.max(0.0, Math.min(1.0, norm));
-          } else {
-            // Single-hand fallback: distance of pointer from neutral center
-            const distFromCenter = Math.abs(screenX - 0.5);
-            rawFocus = Math.max(0.0, Math.min(1.0, (distFromCenter - 0.08) / 0.36));
-          }
-
-          // Smooth focus modulation (exponential moving average)
-          this.sectionFocus = this.sectionFocus * 0.78 + rawFocus * 0.22;
-          this.callbacks.onFocusAmountChange?.(this.grabbedSectionId, this.sectionFocus);
-          this.emitTelemetry();
-        }
+        this.callbacks.onHoverChange?.(this.hoveredSectionId);
+        this.callbacks.onGrabChange?.(this.grabbedSectionId);
+        this.callbacks.onFocusAmountChange?.(this.grabbedSectionId, 1.0);
+        this.emitTelemetry();
       }
     } else {
-      // No active hand pointing or pinching
+      // Pointing gesture ended
       if (now - this.lastActiveInteractionTime > this.EXIT_IDLE_MS) {
         this.exitFocusMode();
       }

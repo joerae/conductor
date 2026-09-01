@@ -27,6 +27,7 @@ import type {
   DynamicsTelemetry,
   VelocityDecomposition,
 } from "./dynamicsTypes";
+import type { PieceSection } from "../score/repertoire";
 
 // ─── Tuning constants ───────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ interface WebAudioFontPlayerInstance {
   ) => { cancel: () => void };
 }
 
-// ─── Active Voice ──────────────────────────────────────────────────────────
+// ─── Active Voice & Spatial Channel Buses ──────────────────────────────────
 
 interface ActiveVoice {
   noteId: string;
@@ -81,6 +82,15 @@ interface ActiveVoice {
   gainNode: GainNode;
   envelope: { cancel: () => void };
   targetVolume: number;
+}
+
+export interface ChannelBus {
+  channel: number;
+  inputGain: GainNode;
+  panner: StereoPannerNode | null;
+  presenceFilter: BiquadFilterNode | null;
+  defaultPan: number;
+  currentPan: number;
 }
 
 /**
@@ -114,6 +124,10 @@ export class AudioEngine {
   private reverbGain: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
   private masterVolume: number = 0.60;
+
+  // Spatial Stereo Buses & Seating Arrangement
+  private channelBuses: Map<number, ChannelBus> = new Map();
+  private channelDefaultPans: Map<number, number> = new Map();
 
   // Dynamics & DSP State
   private dynamicLevel: DynamicLevel = "mf";
@@ -465,11 +479,97 @@ export class AudioEngine {
   }
 
   /**
-   * Sets continuous section focus.
+   * Configures natural stereo seating pan positions for each section across the stage.
+   * Section 0 (leftmost) is panned left (-0.68), moving across to the rightmost section (+0.68).
+   */
+  setDefaultSectionPanning(sections: PieceSection[]): void {
+    const count = sections.length;
+    if (count === 0) return;
+
+    sections.forEach((sec, idx) => {
+      let pan = 0.0;
+      if (count === 1) {
+        pan = 0.0;
+      } else {
+        pan = -0.68 + (idx / (count - 1)) * 1.36;
+      }
+      pan = Math.round(pan * 100) / 100;
+
+      for (const ch of sec.channels) {
+        this.channelDefaultPans.set(ch, pan);
+        const bus = this.channelBuses.get(ch);
+        if (bus) {
+          bus.defaultPan = pan;
+          bus.currentPan = pan;
+          if (bus.panner && this.ctx) {
+            bus.panner.pan.setTargetAtTime(pan, this.ctx.currentTime, 0.08);
+          }
+        }
+      }
+    });
+  }
+
+  getChannelPan(channel: number): number {
+    const bus = this.channelBuses.get(channel);
+    return bus ? bus.currentPan : (this.channelDefaultPans.get(channel) ?? 0.0);
+  }
+
+  getOrCreateChannelBus(channel: number): ChannelBus | null {
+    if (!this.ctx) return null;
+    let bus = this.channelBuses.get(channel);
+    if (!bus) {
+      const ctx = this.ctx;
+      const inputGain = ctx.createGain();
+      inputGain.gain.value = 1.0;
+
+      let panner: StereoPannerNode | null = null;
+      const defaultPan = this.channelDefaultPans.get(channel) ?? 0.0;
+      if (typeof ctx.createStereoPanner === "function") {
+        panner = ctx.createStereoPanner();
+        panner.pan.setValueAtTime(defaultPan, ctx.currentTime);
+      }
+
+      let presenceFilter: BiquadFilterNode | null = null;
+      if (typeof ctx.createBiquadFilter === "function") {
+        presenceFilter = ctx.createBiquadFilter();
+        presenceFilter.type = "highshelf";
+        presenceFilter.frequency.value = 3800;
+        presenceFilter.gain.value = 0.0;
+      }
+
+      // Chain: inputGain -> presenceFilter -> panner -> masterGain
+      if (presenceFilter && panner) {
+        inputGain.connect(presenceFilter);
+        presenceFilter.connect(panner);
+        panner.connect(this.masterGain || ctx.destination);
+      } else if (panner) {
+        inputGain.connect(panner);
+        panner.connect(this.masterGain || ctx.destination);
+      } else {
+        inputGain.connect(this.masterGain || ctx.destination);
+      }
+
+      bus = {
+        channel,
+        inputGain,
+        panner,
+        presenceFilter,
+        defaultPan,
+        currentPan: defaultPan,
+      };
+      this.channelBuses.set(channel, bus);
+    }
+    return bus;
+  }
+
+  /**
+   * Sets continuous section focus / spotlight.
    * When focusAmount > 0 and focusedChannels is provided:
-   * - Focused channels gain is boosted moderately (up to 1.35x, ~+2.6dB)
-   * - Other channels are gently backgrounded (down to 0.45x, ~-7dB)
-   * - All active ringing voices are smoothly transitioned in real-time
+   * - Spotlighted section: Volume boosted to forte tier (~1.40x, +2.9dB),
+   *   stereo pan pulls smoothly to center stage (0.0), and presence opens up (+2.5dB).
+   * - Other sections: Backgrounded to piano tier (~0.42x, -7.5dB),
+   *   stereo pan disperses outward to the stereo sides (up to ±0.92), and presence softens.
+   * - All active ringing voices and channel sub-buses transition in real time.
    */
   setSectionFocus(focusedChannels: number[] | null, focusAmount: number): void {
     const clamped = Math.max(0.0, Math.min(1.0, focusAmount));
@@ -484,14 +584,50 @@ export class AudioEngine {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
 
-    // Smoothly transition all active voices in real time
+    // 1. Smoothly transition all active voices in real time
     for (const voice of this.activeVoices.values()) {
       const mult = this.getChannelFocusMultiplier(voice.channel);
       const targetGain = Math.max(0.0001, voice.targetVolume * mult);
       try {
-        voice.gainNode.gain.setTargetAtTime(targetGain, now, 0.05);
+        voice.gainNode.gain.setTargetAtTime(targetGain, now, 0.04);
       } catch {
-        // Ignore audio node scheduling error
+        // Ignore scheduling errors
+      }
+    }
+
+    // 2. Spatial Stereo DSP: Spotlight center pull + other sections disperse outward
+    if (this.focusedChannels && this.focusAmount > 0.001) {
+      for (const [ch, bus] of this.channelBuses.entries()) {
+        if (!bus.panner) continue;
+        if (this.focusedChannels.has(ch)) {
+          // Spotlighted section: Pulls to center (0.0) with enhanced presence
+          bus.panner.pan.setTargetAtTime(0.0, now, 0.06);
+          bus.currentPan = 0.0;
+          if (bus.presenceFilter) {
+            bus.presenceFilter.gain.setTargetAtTime(2.5 * this.focusAmount, now, 0.06);
+          }
+        } else {
+          // Other sections: Disperse outward into wide stereo panorama
+          const defPan = bus.defaultPan;
+          const dir = defPan === 0 ? (ch % 2 === 0 ? -1 : 1) : Math.sign(defPan);
+          const dispersedPan = dir * Math.min(0.92, Math.max(0.65, Math.abs(defPan) * 1.35));
+          bus.panner.pan.setTargetAtTime(dispersedPan, now, 0.06);
+          bus.currentPan = dispersedPan;
+          if (bus.presenceFilter) {
+            bus.presenceFilter.gain.setTargetAtTime(-2.0 * this.focusAmount, now, 0.06);
+          }
+        }
+      }
+    } else {
+      // Reset all channels to natural default seating pan and neutral presence
+      for (const bus of this.channelBuses.values()) {
+        if (bus.panner) {
+          bus.panner.pan.setTargetAtTime(bus.defaultPan, now, 0.10);
+          bus.currentPan = bus.defaultPan;
+        }
+        if (bus.presenceFilter) {
+          bus.presenceFilter.gain.setTargetAtTime(0.0, now, 0.10);
+        }
       }
     }
   }
@@ -499,11 +635,11 @@ export class AudioEngine {
   getChannelFocusMultiplier(channel: number): number {
     if (!this.focusedChannels || this.focusAmount <= 0.001) return 1.0;
     if (this.focusedChannels.has(channel)) {
-      // Moderate foreground boost: 1.0 -> 1.35 (+2.6 dB)
-      return 1.0 + 0.35 * this.focusAmount;
+      // Forte foreground boost: 1.0 -> 1.40 (+2.9 dB)
+      return 1.0 + 0.40 * this.focusAmount;
     } else {
-      // Gentle background reduction: 1.0 -> 0.45 (-7 dB)
-      return 1.0 - 0.55 * this.focusAmount;
+      // Piano background reduction: 1.0 -> 0.42 (-7.5 dB)
+      return 1.0 - 0.58 * this.focusAmount;
     }
   }
 
@@ -749,11 +885,12 @@ export class AudioEngine {
       ? dynamicPreset.attackTimeSec
       : 0.006;
 
-    // Create dedicated GainNode for this voice connected to master bus
+    // Create dedicated GainNode for this voice connected to dedicated channel spatial sub-bus
     const gainNode = ctx.createGain();
     gainNode.gain.setValueAtTime(0, audioTime);
     gainNode.gain.linearRampToValueAtTime(volume, audioTime + attackTime);
-    gainNode.connect(this.masterGain || ctx.destination);
+    const bus = this.getOrCreateChannelBus(channel);
+    gainNode.connect(bus ? bus.inputGain : (this.masterGain || ctx.destination));
 
     // Queue note with open duration (managed by scheduleNoteOff)
     const envelope = this.player.queueWaveTable(
