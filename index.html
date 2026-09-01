@@ -216,6 +216,8 @@
         </div>
         <div class="bpm-gauge-track-wrap">
           <div class="bpm-gauge-track">
+            <!-- Green target zone band (±20 BPM around intended piece BPM) — shown in Mode E -->
+            <div id="bpm-green-zone" class="bpm-green-zone" style="display:none;"></div>
             <div class="bpm-zone-bands">
               <span class="bpm-zone" style="left: 0%; width: 22%;">Largo</span>
               <span class="bpm-zone" style="left: 22%; width: 22%;">Andante</span>
@@ -261,7 +263,7 @@
 
       <!-- Footer controls -->
       <footer id="stage-footer">
-        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.4.0</button>
+        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.7.0</button>
         <span class="footer-divider">•</span>
         <span id="debug-hint" class="debug-hint">Press D for debug overlay & A/B DSP</span>
       </footer>

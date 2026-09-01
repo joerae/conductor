@@ -64,7 +64,7 @@ function getPromptText(state: ExperienceState, pausedBeat: number, inputSource: 
         case "preparing":
           return "Hands raised — starting orchestra…";
         case "playing":
-          return "Orchestra playing! Raise/lower hands together for accelerando/rallentando. Drop hands to stop.";
+          return "Orchestra playing! Raise/lower hands for tempo. ← → nudge target. Drop hands to stop.";
         case "paused":
           return `Orchestra paused at beat ${pausedBeat.toFixed(1)}. Raise hands to resume.`;
         case "completed":
@@ -396,6 +396,21 @@ function updateBpmGaugeUI(): void {
   } else {
     if (valIndicatedBpm) valIndicatedBpm.textContent = `— BPM`;
   }
+
+  // BPM Green Zone: show ±20 BPM target band around piece's intended BPM in Mode E
+  const greenZone = document.getElementById("bpm-green-zone") as HTMLElement | null;
+  if (greenZone) {
+    const baseBpm = controller.getBasePieceBpm?.() || 0;
+    if (baseBpm > 0 && controller.getTempoMode() === "gestural") {
+      const loPercent = bpmToPercent(baseBpm - 20);
+      const hiPercent = bpmToPercent(baseBpm + 20);
+      greenZone.style.left = `${loPercent}%`;
+      greenZone.style.width = `${hiPercent - loPercent}%`;
+      greenZone.style.display = "block";
+    } else {
+      greenZone.style.display = "none";
+    }
+  }
 }
 
 // ── Orchestral Dynamics & Vertical Dynamic Ladder ───────────────────────────
@@ -479,7 +494,22 @@ window.addEventListener("keydown", (e) => {
     controller.togglePause();
   } else if (e.code === "ArrowRight" && !e.repeat) {
     e.preventDefault();
+    if (controller.getTempoMode() === "gestural") {
+      // Mode E: nudge base BPM up +5
+      controller.nudgeGesturalBpm(5);
+    } else {
+      controller.armAccent();
+    }
+  } else if (e.code === "Backslash" && !e.repeat) {
+    // \ always triggers accent (including in Mode E)
+    e.preventDefault();
     controller.armAccent();
+  } else if (e.code === "ArrowLeft" && !e.repeat) {
+    e.preventDefault();
+    if (controller.getTempoMode() === "gestural") {
+      // Mode E: nudge base BPM down -5
+      controller.nudgeGesturalBpm(-5);
+    }
   } else if (e.code === "ArrowUp") {
     e.preventDefault();
     controller.stepDynamicLevel(1);

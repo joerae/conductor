@@ -86,6 +86,7 @@ export class ExperienceController {
   private overburnTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Hands-down inactivity tracking (pauses within 2 beats in Mode E, 6 beats in Mode D)
+  // In Mode E: only true when hands are completely off-screen (samples.length === 0)
   private isHandsDown: boolean = false;
   private handsDownPulseCount: number = 0;
 
@@ -93,6 +94,11 @@ export class ExperienceController {
   private basePieceBpm: number = 140;
   private currentGesturalBpm: number = 140;
   private lastGesturalUpdateMs: number = 0;
+
+  // Per-hand recent Y history for detecting "beating" vs "steady" hands (Mode E)
+  // Ring buffer: last N y-values per hand index
+  private readonly HAND_Y_HISTORY_LEN = 12; // ~400ms at 30fps
+  private handYHistory: Map<number, number[]> = new Map();
 
   constructor(callbacks: UICallbacks) {
     this.uiCallbacks = callbacks;
@@ -226,7 +232,12 @@ export class ExperienceController {
         // Wire camera dynamics directly into existing orchestral dynamic ladder & AudioEngine
         this.cameraInput.onDynamics(dyn => {
           if (this.inputSource === "camera") {
-            this.setDynamicLevel(dyn.level);
+            // Use continuous 0-1 value for smooth interpolated DSP; discrete level is derived internally
+            this.audioEngine.setContinuousDynamic(dyn.value);
+            const snappedLevel = this.audioEngine.getDynamicLevel();
+            this.baseDynamicLevel = snappedLevel;
+            this.uiCallbacks.onDynamicChange?.(snappedLevel);
+            this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
           }
         });
         // Wire camera telemetry into debug overlay
@@ -237,30 +248,66 @@ export class ExperienceController {
         this.cameraInput.onBeat(obs => this.handleBeatObservation(obs));
         // Wire sample tracking for hands-down detection & Mode E continuous height tempo
         this.cameraInput.onSamples(samples => {
-          if (samples.length === 0) {
-            this.isHandsDown = true;
-          } else {
-            const avgY = samples.reduce((acc, s) => acc + s.conductorPoint.y, 0) / samples.length;
-            const allRestingLow = avgY < 0.22;
-            this.isHandsDown = allRestingLow;
+          // In Mode E: only pause when hands are completely off-screen.
+          // Low hand position = rallentando, NOT a stop signal.
+          this.isHandsDown = samples.length === 0;
 
+          if (samples.length > 0) {
             if (this.clock.getTempoMode() === "gestural") {
-              // Mode E: Continuous Gestural Conducting
-              if (!allRestingLow && (this.state === "ready" || this.state === "paused") && avgY >= 0.25) {
-                // Auto-start when hands are raised
+              // Update per-hand Y history for steady-vs-beating detection
+              for (const s of samples) {
+                let hist = this.handYHistory.get(s.handIndex);
+                if (!hist) { hist = []; this.handYHistory.set(s.handIndex, hist); }
+                hist.push(s.conductorPoint.y);
+                if (hist.length > this.HAND_Y_HISTORY_LEN) hist.shift();
+              }
+
+              // Determine effective tempo-control Y using steady-hand logic:
+              // If one hand is "beating" (high Y variance) and one is "steady",
+              // use ONLY the steady hand's Y for accelerando to prevent the beating
+              // motion from modulating tempo.
+              let effectiveY: number;
+              if (samples.length === 2) {
+                const variances = samples.map(s => {
+                  const hist = this.handYHistory.get(s.handIndex) ?? [s.conductorPoint.y];
+                  const mean = hist.reduce((a, b) => a + b, 0) / hist.length;
+                  const v = hist.reduce((a, b) => a + (b - mean) ** 2, 0) / hist.length;
+                  return { y: s.conductorPoint.y, variance: v };
+                });
+                const BEAT_VARIANCE_THRESHOLD = 0.0035; // ~0.06 std-dev in normalised coords
+                const [h0, h1] = variances;
+                const h0Beating = h0.variance > BEAT_VARIANCE_THRESHOLD;
+                const h1Beating = h1.variance > BEAT_VARIANCE_THRESHOLD;
+                if (h0Beating && !h1Beating) {
+                  // Hand 0 is beating, hand 1 is steady — use hand 1 for tempo
+                  effectiveY = h1.y;
+                } else if (h1Beating && !h0Beating) {
+                  // Hand 1 is beating, hand 0 is steady — use hand 0 for tempo
+                  effectiveY = h0.y;
+                } else {
+                  // Both steady or both beating — use average
+                  effectiveY = (h0.y + h1.y) / 2;
+                }
+              } else {
+                effectiveY = samples[0].conductorPoint.y;
+              }
+
+              // Mode E: Auto-start when any hand appears
+              if (this.state === "ready" || this.state === "paused") {
                 this.startPlayback();
-              } else if (this.state === "playing" && !allRestingLow) {
+              } else if (this.state === "playing") {
                 // Continuous Height Modulation for Accelerando / Rallentando:
-                // Neutral height is 0.50 -> 1.0x intended piece BPM
-                // Raising hands up to 0.85 -> 1.65x intended piece BPM
-                // Lowering hands down to 0.25 -> 0.60x intended piece BPM
+                // Neutral height ~0.50 -> 1.0x intended piece BPM
+                // Raised up to 0.85 -> 1.65x intended piece BPM
+                // Lowered down to y=0.10 -> 0.35x intended piece BPM (Largo territory while still visible)
                 let heightMultiplier = 1.0;
-                if (avgY >= 0.50) {
-                  const norm = Math.min(1.0, (avgY - 0.50) / 0.35);
+                if (effectiveY >= 0.50) {
+                  const norm = Math.min(1.0, (effectiveY - 0.50) / 0.35);
                   heightMultiplier = 1.0 + 0.65 * norm;
                 } else {
-                  const norm = Math.min(1.0, (0.50 - avgY) / 0.25);
-                  heightMultiplier = 1.0 - 0.40 * norm;
+                  // Expanded low-end: full rallentando (0.35x) reached at y=0.10
+                  const norm = Math.min(1.0, (0.50 - effectiveY) / 0.40);
+                  heightMultiplier = 1.0 - 0.65 * norm;
                 }
 
                 const targetBpm = Math.max(40, Math.min(240, this.basePieceBpm * heightMultiplier));
@@ -443,7 +490,7 @@ export class ExperienceController {
 
   // ── Beat observation handler ─────────────────────────────────────────────
 
-  private beatSoundEnabled = true;
+  private beatSoundEnabled = false; // Off by default — VFX flash still fires on beat
   private lastBeatObservationMs = -1;
   private indicatedBpm = 0;
 
@@ -457,6 +504,24 @@ export class ExperienceController {
 
   getIndicatedBpm(): number {
     return this.indicatedBpm > 0 ? this.indicatedBpm : this.clock.getState().bpm;
+  }
+
+  getBasePieceBpm(): number {
+    return this.basePieceBpm;
+  }
+
+  /**
+   * Nudge the Mode E gestural base BPM by deltaBpm.
+   * This shifts the "neutral height" reference point so the whole accelerando
+   * range shifts up or down. Clamped to [30, 240].
+   */
+  nudgeGesturalBpm(deltaBpm: number): void {
+    this.basePieceBpm = Math.max(30, Math.min(240, this.basePieceBpm + deltaBpm));
+    // Immediately apply to current gestural BPM with a gentle nudge
+    this.currentGesturalBpm = Math.max(30, Math.min(240, this.currentGesturalBpm + deltaBpm));
+    this.clock.setBpm(this.currentGesturalBpm);
+    this.indicatedBpm = Math.round(this.currentGesturalBpm);
+    this.transport.updatePeriod(this.audioEngine.getAudioTime(), 60 / this.currentGesturalBpm, 0);
   }
 
   private async handleBeatObservation(obs: {
@@ -525,10 +590,15 @@ export class ExperienceController {
     const nextBeatAudioTime = this.clock.predictNextBeatAudioTime();
     const piece = this.getCurrentPiece();
 
+    // Apply lead-in offset: shift first score event forward by N silent beats.
+    // This gives the orchestra an anticipation beat before note 0 (e.g. Beethoven 5 pickup).
+    const leadInBeats = piece.leadInBeats ?? 0;
+    const startAudioTime = nextBeatAudioTime + leadInBeats * periodSec;
+
     // Start or resume from pausedBeat
     const startBeat = this.pausedBeat;
     const beatsPerTap = this.clock.getTempoMode() === "inertial" ? 2 : (piece.beatsPerTap || 1);
-    this.transport.start(startBeat, nextBeatAudioTime, periodSec, beatsPerTap);
+    this.transport.start(startBeat, startAudioTime, periodSec, beatsPerTap);
     this.scheduler.start();
     this.setState("playing");
 

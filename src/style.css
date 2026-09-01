@@ -1424,6 +1424,20 @@ body.debug-mode-active .section-debug-hud {
   pointer-events: none;
 }
 
+/* Target BPM zone band — shown in Mode E to indicate the ±20 BPM sweet spot */
+.bpm-green-zone {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(100, 230, 120, 0.18);
+  border-left: 1.5px solid rgba(100, 230, 120, 0.55);
+  border-right: 1.5px solid rgba(100, 230, 120, 0.55);
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 1;
+  transition: left 0.4s ease, width 0.4s ease;
+}
+
 .bpm-zone {
   display: flex;
   align-items: center;

@@ -29,6 +29,8 @@ export interface PieceDefinition {
   layout: "chamber_strings" | "full_orchestra";
   description: string;
   sections: PieceSection[];
+  /** Number of silent beats to count off before score starts (e.g. 1 for Beethoven 5 pickup). */
+  leadInBeats?: number;
 }
 
 export const REPERTOIRE: PieceDefinition[] = [
@@ -69,6 +71,7 @@ export const REPERTOIRE: PieceDefinition[] = [
     conductMode: "Cut Time / Alla Breve (1 tap = 2 beats / 1 bar)",
     layout: "full_orchestra",
     description: "The most famous four-note motif in music history. Conducted in cut time (1 tap = 2 beats / 1 bar of 2/4) at ~108 half notes/min.",
+    leadInBeats: 1,
     sections: [
       { id: "woodwinds", name: "Flute & Oboe", channels: [0, 1], programs: [73, 68], trackNames: ["FLUTE", "OBOE"] },
       { id: "reeds", name: "Clarinet & Bassoon", channels: [2, 3], programs: [71, 70], trackNames: ["CLARINET", "BASSOON"] },

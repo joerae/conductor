@@ -740,7 +740,7 @@ export class DebugOverlay {
         margin-top: 4px;
       ">
         <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Play an instant orchestral crash cymbal cue the exact millisecond a beat is detected from the camera or keyboard">
-          <input type="checkbox" id="dbg-beat-sound-cb" checked style="accent-color:#ffd56b; margin-right:6px;">
+          <input type="checkbox" id="dbg-beat-sound-cb" style="accent-color:#ffd56b; margin-right:6px;">
           <span><strong>🥁 Make Sound on Beat</strong> (Instant Cymbal Cue)</span>
         </label>
       </div>

@@ -16,10 +16,10 @@
 import { programToWebAudioFontVar, WEBAUDIOFONT_SCRIPTS } from "./instruments";
 import {
   DYNAMIC_PRESETS,
+  DYNAMIC_ORDER,
   DEFAULT_DSP_BYPASS_FLAGS,
   DEFAULT_SCORE_MACRO_RATIO,
   scaleVelocity,
-  decomposeVelocity,
 } from "./dynamicsTypes";
 import type {
   DynamicLevel,
@@ -117,6 +117,7 @@ export class AudioEngine {
 
   // Dynamics & DSP State
   private dynamicLevel: DynamicLevel = "mf";
+  private continuousDynamic: number = 0.5; // 0=pp, 1=fff
   private dspBypassFlags: DSPBypassFlags = { ...DEFAULT_DSP_BYPASS_FLAGS };
   private scoreMacroRatio: number = DEFAULT_SCORE_MACRO_RATIO;
 
@@ -156,11 +157,31 @@ export class AudioEngine {
 
   setDynamicLevel(level: DynamicLevel): void {
     this.dynamicLevel = level;
+    // Snap continuousDynamic to this level's position on the 0–1 scale
+    const idx = DYNAMIC_ORDER.indexOf(level);
+    this.continuousDynamic = idx >= 0 ? idx / (DYNAMIC_ORDER.length - 1) : 0.5;
     this.applyDynamicPreset();
   }
 
   getDynamicLevel(): DynamicLevel {
     return this.dynamicLevel;
+  }
+
+  /**
+   * Apply continuous dynamics from a 0–1 value (0=pp, 1=fff).
+   * Interpolates all DSP parameters smoothly between the 7 preset breakpoints.
+   * Updates the displayed discrete level for UI display without hard-snapping DSP.
+   */
+  setContinuousDynamic(value: number): void {
+    this.continuousDynamic = Math.max(0, Math.min(1, value));
+    // Update the displayed level by snapping to nearest (for UI ladder)
+    const idx = Math.round(this.continuousDynamic * (DYNAMIC_ORDER.length - 1));
+    this.dynamicLevel = DYNAMIC_ORDER[idx];
+    this.applyContinuousPreset(this.continuousDynamic);
+  }
+
+  getContinuousDynamic(): number {
+    return this.continuousDynamic;
   }
 
   setDSPBypassFlags(flags: Partial<DSPBypassFlags>): void {
@@ -252,41 +273,85 @@ export class AudioEngine {
   }
 
   computeEffectiveVelocity(rawVelocity: number): number {
+    if (!this.dspBypassFlags.velocityScaling || rawVelocity <= 0) return rawVelocity;
     const factor = this.ctx ? this.getAccentFactor(this.ctx.currentTime) : 0;
-    return scaleVelocity(
-      rawVelocity,
-      this.dynamicLevel,
-      this.dspBypassFlags.velocityScaling,
-      this.dspBypassFlags.scoreCompression,
-      this.scoreMacroRatio,
-      factor
-    );
+    const accentFactor = typeof factor === "number" ? Math.max(0, Math.min(1, factor)) : 0;
+
+    // Compress score macro dynamics
+    const baseVelocity = this.dspBypassFlags.scoreCompression
+      ? 72 + (rawVelocity - 72) * this.scoreMacroRatio
+      : rawVelocity;
+
+    // Apply continuously interpolated velocity multiplier
+    const velMult = this.getContinuousVelocityMultiplier();
+    let scaled = Math.round(baseVelocity * velMult);
+
+    // Accent transient punch
+    if (accentFactor > 0) {
+      scaled = Math.round(scaled * (1 + 0.35 * accentFactor) + 30 * accentFactor);
+    }
+    return Math.max(10, Math.min(127, scaled));
   }
 
   decomposeNoteVelocity(rawVelocity: number): VelocityDecomposition {
     const factor = this.ctx ? this.getAccentFactor(this.ctx.currentTime) : 0;
-    return decomposeVelocity(
-      rawVelocity,
-      this.dynamicLevel,
-      this.dspBypassFlags.velocityScaling,
-      this.dspBypassFlags.scoreCompression,
-      this.scoreMacroRatio,
-      factor
-    );
+    // Use snap-level for decompose telemetry display; continuous multiplier for actual output
+    const velMult = this.getContinuousVelocityMultiplier();
+    const baseVelocity = this.dspBypassFlags.scoreCompression
+      ? 72 + (rawVelocity - 72) * this.scoreMacroRatio
+      : rawVelocity;
+    const accentFactor = typeof factor === "number" ? Math.max(0, Math.min(1, factor)) : 0;
+    let final = Math.round(baseVelocity * velMult);
+    if (accentFactor > 0) {
+      final = Math.round(final * (1 + 0.35 * accentFactor) + 30 * accentFactor);
+    }
+    final = Math.max(10, Math.min(127, final));
+    return {
+      raw: rawVelocity,
+      macro: Math.round(baseVelocity),
+      macroDelta: Math.round(baseVelocity) - rawVelocity,
+      macroRatio: this.scoreMacroRatio,
+      dynMultiplier: velMult,
+      dynamicLevel: this.dynamicLevel,
+      final,
+      macroEnabled: this.dspBypassFlags.scoreCompression,
+      velScalingEnabled: this.dspBypassFlags.velocityScaling,
+      isAccented: accentFactor > 0.05,
+    };
   }
 
   getDynamicsTelemetry(): DynamicsTelemetry {
-    const preset = DYNAMIC_PRESETS[this.dynamicLevel] || DYNAMIC_PRESETS.mf;
+    // Interpolate displayed telemetry values from continuous position
+    const N = DYNAMIC_ORDER.length - 1;
+    const scaled = this.continuousDynamic * N;
+    const lo = Math.max(0, Math.floor(scaled));
+    const hi = Math.min(N, lo + 1);
+    const t = scaled - lo;
+    const pLo = DYNAMIC_PRESETS[DYNAMIC_ORDER[lo]];
+    const pHi = DYNAMIC_PRESETS[DYNAMIC_ORDER[hi]];
+    const lerp = (a: number, b: number) => a + (b - a) * t;
+
     return {
       level: this.dynamicLevel,
-      velocityMultiplier: this.dspBypassFlags.velocityScaling ? preset.velocityMultiplier : 1.0,
-      filterCutoffHz: this.dspBypassFlags.timbreFilter ? preset.filterCutoffHz : 20000,
-      highShelfGainDb: this.dspBypassFlags.timbreFilter ? preset.highShelfGainDb : 0.0,
-      reverbWet: this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.0,
-      attackTimeSec: this.dspBypassFlags.attackEnvelope ? preset.attackTimeSec : 0.006,
+      velocityMultiplier: this.dspBypassFlags.velocityScaling ? lerp(pLo.velocityMultiplier, pHi.velocityMultiplier) : 1.0,
+      filterCutoffHz: this.dspBypassFlags.timbreFilter ? lerp(pLo.filterCutoffHz, pHi.filterCutoffHz) : 20000,
+      highShelfGainDb: this.dspBypassFlags.timbreFilter ? lerp(pLo.highShelfGainDb, pHi.highShelfGainDb) : 0.0,
+      reverbWet: this.dspBypassFlags.reverbScaling ? lerp(pLo.reverbWet, pHi.reverbWet) : 0.0,
+      attackTimeSec: this.dspBypassFlags.attackEnvelope ? lerp(pLo.attackTimeSec, pHi.attackTimeSec) : 0.006,
       macroRatio: this.scoreMacroRatio,
       bypassFlags: { ...this.dspBypassFlags },
     };
+  }
+
+  /** Returns the interpolated velocity multiplier for the current continuous dynamic value. */
+  private getContinuousVelocityMultiplier(): number {
+    const N = DYNAMIC_ORDER.length - 1;
+    const scaled = this.continuousDynamic * N;
+    const lo = Math.max(0, Math.floor(scaled));
+    const hi = Math.min(N, lo + 1);
+    const t = scaled - lo;
+    return DYNAMIC_PRESETS[DYNAMIC_ORDER[lo]].velocityMultiplier * (1 - t)
+         + DYNAMIC_PRESETS[DYNAMIC_ORDER[hi]].velocityMultiplier * t;
   }
 
   private applyDynamicPreset(): void {
@@ -312,6 +377,53 @@ export class AudioEngine {
     }
 
     // 3. Safety Peak Limiter (Transparent protection against 0dBFS DAC clipping)
+    if (this.limiter) {
+      if (this.dspBypassFlags.safetyLimiter) {
+        this.limiter.threshold.setTargetAtTime(-1.0, now, 0.01);
+        this.limiter.ratio.setTargetAtTime(20.0, now, 0.01);
+      } else {
+        this.limiter.threshold.setTargetAtTime(0.0, now, 0.01);
+        this.limiter.ratio.setTargetAtTime(1.0, now, 0.01);
+      }
+    }
+  }
+
+  /**
+   * Interpolates all DSP parameters continuously between the 7 preset breakpoints.
+   * `value` is [0, 1]: 0 = pp, 1/6 = p, 2/6 = mp, 3/6 = mf, 4/6 = f, 5/6 = ff, 1 = fff.
+   */
+  private applyContinuousPreset(value: number): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const timeConstant = 0.055; // ~55ms smooth for continuous hand control
+
+    const N = DYNAMIC_ORDER.length - 1; // 6 segments
+    const scaled = value * N;
+    const lo = Math.max(0, Math.floor(scaled));
+    const hi = Math.min(N, lo + 1);
+    const t = scaled - lo; // fractional position within segment [0, 1]
+
+    const presetLo = DYNAMIC_PRESETS[DYNAMIC_ORDER[lo]];
+    const presetHi = DYNAMIC_PRESETS[DYNAMIC_ORDER[hi]];
+
+    // Linearly interpolate each DSP parameter
+    const lerp = (a: number, b: number) => a + (b - a) * t;
+    const filterCutoff = lerp(presetLo.filterCutoffHz, presetHi.filterCutoffHz);
+    const shelfGain    = lerp(presetLo.highShelfGainDb, presetHi.highShelfGainDb);
+    const reverbWet    = lerp(presetLo.reverbWet, presetHi.reverbWet);
+
+    if (this.lowPassFilter) {
+      const target = this.dspBypassFlags.timbreFilter ? filterCutoff : 20000;
+      this.lowPassFilter.frequency.setTargetAtTime(target, now, timeConstant);
+    }
+    if (this.highShelfFilter) {
+      const target = this.dspBypassFlags.timbreFilter ? shelfGain : 0.0;
+      this.highShelfFilter.gain.setTargetAtTime(target, now, timeConstant);
+    }
+    if (this.reverbGain) {
+      const target = this.dspBypassFlags.reverbScaling ? reverbWet : 0.0;
+      this.reverbGain.gain.setTargetAtTime(target, now, timeConstant);
+    }
     if (this.limiter) {
       if (this.dspBypassFlags.safetyLimiter) {
         this.limiter.threshold.setTargetAtTime(-1.0, now, 0.01);

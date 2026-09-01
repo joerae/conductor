@@ -1,9 +1,26 @@
 {
-  "version": "0.6.0",
+  "version": "0.7.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.7.0",
+      "date": "2026-09-01",
+      "summary": "Mode E (Gestural Conducting): Continuous Accelerando, Hands-Up Auto-Start, Finger Beating, Interpolated Dynamics, Lead-In Beat, Cursor Key Tempo Nudge, BPM Green Zone",
+      "details": [
+        "Mode E — Gestural Conducting: Raising hands starts the orchestra; dropping them off-screen stops it within 2 beats. Low hands = rallentando (Largo reachable at y=0.10), raised hands = accelerando (up to 1.65× base BPM)",
+        "Finger Beating: When one hand is steady and the other is actively beating time, only the steady hand governs tempo — the beating hand does not modulate accelerando",
+        "Interpolated Continuous Dynamics: Hand separation now feeds a 0–1 continuous value into AudioEngine, smoothly interpolating LPF cutoff, high-shelf gain, reverb wet, and velocity multiplier between the 7 preset breakpoints (pp to fff) with no discrete step",
+        "Beethoven 5 Lead-In Beat: One silent beat of anticipation before the orchestra plays its first note, timed precisely to the established conducting tempo",
+        "Cursor Key Tempo Nudge (Mode E): ← / → keys shift the base BPM ±5 BPM; \ always triggers accent in all modes",
+        "BPM Green Zone: Soft translucent green band on the tempo speedometer gauge shows ±20 BPM around the piece's intended BPM in Mode E",
+        "Hands-Down Threshold Fix: Mode E only pauses when hands are fully off-screen, not just held low — allows conducting at Largo speed without accidentally pausing",
+        "Beat Sound Off by Default: Instant cymbal cue now defaults to off; VFX beat flash still fires. Toggle in Debug Overlay (D key)",
+        "Clock Mode D (Inertial): Simplified to coast indefinitely at established tempo, clear history after gaps, gentle phase re-anchor on resume — no more tempo drift from long inter-beat intervals",
+        "Mode D / Mode E Hands-Down Pause: Pauses after 6 beats of fully-absent hands in Mode D, 2 beats in Mode E"
+      ]
+    },
     {
       "version": "0.6.0",
       "date": "2026-09-01",
