@@ -7,18 +7,112 @@
   "year": 1808,
   "midiFile": "5th-Symphony-Part-1.mid",
   "defaultBpm": 108,
-  "timeSignature": "2/4",
-  "beatsPerTap": 2,
-  "conductMode": "Cut Time / Alla Breve (1 tap = 2 beats / 1 bar)",
+  "timeSignature": "4/4",
+  "beatsPerTap": 1,
+  "conductMode": "Normal (1 tap = 4 beats / 1 bar)",
   "layout": "full_orchestra",
-  "description": "The most famous four-note motif in music history. Conducted in cut time (1 tap = 2 beats / 1 bar of 2/4) at ~108 half notes/min.",
+  "description": "The most famous four-note motif in music history.",
   "sections": [
-    { "id": "woodwinds", "name": "Flute & Oboe", "channels": [0, 1], "programs": [73, 68], "trackNames": ["FLUTE", "OBOE"] },
-    { "id": "reeds", "name": "Clarinet & Bassoon", "channels": [2, 3], "programs": [71, 70], "trackNames": ["CLARINET", "BASSOON"] },
-    { "id": "horns", "name": "French Horn", "channels": [4], "programs": [60], "trackNames": ["FR.HORN"] },
-    { "id": "trumpets", "name": "Trumpet", "channels": [5], "programs": [56], "trackNames": ["TRUMPET"] },
-    { "id": "timpani", "name": "Timpani", "channels": [6], "programs": [47], "trackNames": ["TIMPANI"] },
-    { "id": "strings-upper", "name": "Violins & Viola", "channels": [7, 8], "programs": [48], "trackNames": ["STRINGS"] },
-    { "id": "strings-lower", "name": "Cello & Contrabass", "channels": [10, 11], "programs": [48, 43], "trackNames": ["STRINGS", "CONTRABASS"] }
+    {
+      "id": "woodwinds",
+      "name": "Flute & Oboe",
+      "channels": [
+        0,
+        1
+      ],
+      "programs": [
+        73,
+        68
+      ],
+      "trackNames": [
+        "FLUTE",
+        "OBOE"
+      ]
+    },
+    {
+      "id": "reeds",
+      "name": "Clarinet & Bassoon",
+      "channels": [
+        2,
+        3
+      ],
+      "programs": [
+        71,
+        70
+      ],
+      "trackNames": [
+        "CLARINET",
+        "BASSOON"
+      ]
+    },
+    {
+      "id": "horns",
+      "name": "French Horn",
+      "channels": [
+        4
+      ],
+      "programs": [
+        60
+      ],
+      "trackNames": [
+        "FR.HORN"
+      ]
+    },
+    {
+      "id": "trumpets",
+      "name": "Trumpet",
+      "channels": [
+        5
+      ],
+      "programs": [
+        56
+      ],
+      "trackNames": [
+        "TRUMPET"
+      ]
+    },
+    {
+      "id": "timpani",
+      "name": "Timpani",
+      "channels": [
+        6
+      ],
+      "programs": [
+        47
+      ],
+      "trackNames": [
+        "TIMPANI"
+      ]
+    },
+    {
+      "id": "strings-upper",
+      "name": "Violins & Viola",
+      "channels": [
+        7,
+        8
+      ],
+      "programs": [
+        48
+      ],
+      "trackNames": [
+        "STRINGS"
+      ]
+    },
+    {
+      "id": "strings-lower",
+      "name": "Cello & Contrabass",
+      "channels": [
+        10,
+        11
+      ],
+      "programs": [
+        48,
+        43
+      ],
+      "trackNames": [
+        "STRINGS",
+        "CONTRABASS"
+      ]
+    }
   ]
 }
