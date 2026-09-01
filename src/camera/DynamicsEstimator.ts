@@ -169,13 +169,47 @@ export class DynamicsEstimator {
     if (this.config.mode === "spread") {
       // ── MODE 1: EXPANSION / CONTRACTION (SPREAD) ─────────────────────────
       if (samples.length >= 2) {
-        // Pure horizontal span between conducting points
-        const span = Math.abs(samples[0].conductorPoint.x - samples[1].conductorPoint.x);
+        const s0 = samples[0];
+        const s1 = samples[1];
+
+        // 1. Calculate physical hand scale (size on screen) from 21 landmarks
+        let handSize0 = 0.10;
+        let handSize1 = 0.10;
+        let minX0 = s0.conductorPoint.x, maxX0 = s0.conductorPoint.x;
+        let minX1 = s1.conductorPoint.x, maxX1 = s1.conductorPoint.x;
+
+        if (s0.landmarks && s0.landmarks.length >= 10) {
+          const xs = s0.landmarks.map(p => p.x);
+          minX0 = Math.min(...xs);
+          maxX0 = Math.max(...xs);
+          const ys = s0.landmarks.map(p => p.y);
+          handSize0 = Math.max(maxX0 - minX0, Math.max(...ys) - Math.min(...ys));
+        }
+        if (s1.landmarks && s1.landmarks.length >= 10) {
+          const xs = s1.landmarks.map(p => p.x);
+          minX1 = Math.min(...xs);
+          maxX1 = Math.max(...xs);
+          const ys = s1.landmarks.map(p => p.y);
+          handSize1 = Math.max(maxX1 - minX1, Math.max(...ys) - Math.min(...ys));
+        }
+
+        const avgHandSize = (handSize0 + handSize1) / 2;
+
+        // 2. Identify left vs right hand horizontally
+        const isS0Left = (minX0 + maxX0) / 2 <= (minX1 + maxX1) / 2;
+        const leftHandMaxX = isS0Left ? maxX0 : maxX1;
+        const rightHandMinX = isS0Left ? minX1 : minX0;
+
+        // 3. Compute inner edge-to-edge gap (distance between hands' closest edges)
+        const innerGap = rightHandMinX - leftHandMaxX;
+
+        // 4. Center-to-center horizontal span
+        const centerSpan = Math.abs(s0.conductorPoint.x - s1.conductorPoint.x);
 
         // Track rate of change of hand separation (span velocity)
         if (this.lastSpan >= 0 && this.lastSpanTimestampMs > 0) {
           const dt = Math.max(0.005, (timestampMs - this.lastSpanTimestampMs) / 1000);
-          const rawSpanVelocity = Math.abs(span - this.lastSpan) / dt;
+          const rawSpanVelocity = Math.abs(centerSpan - this.lastSpan) / dt;
           const velAlpha = 1 - Math.exp(-dt / 0.05); // fast responsiveness (~50ms time constant)
           this.smoothedSpanVelocity = this.smoothedSpanVelocity + velAlpha * (rawSpanVelocity - this.smoothedSpanVelocity);
 
@@ -193,23 +227,32 @@ export class DynamicsEstimator {
           }
         }
 
-        this.lastSpan = span;
+        this.lastSpan = centerSpan;
         this.lastSpanTimestampMs = timestampMs;
 
-        if (span <= this.config.neutralSpan) {
-          // Contracting gesture: bringing hands closer together drops smoothly to pp
-          const spanRange = Math.max(0.05, this.config.neutralSpan - this.config.minSpan);
-          const ratio = Math.max(0, Math.min(1, (span - this.config.minSpan) / spanRange));
+        // 5. Adaptive thresholds scaled to user's distance & hand size on camera:
+        // When hands touch, center-to-center span is ~avgHandSize * 0.95.
+        const touchingSpan = Math.max(0.04, avgHandSize * 0.95);
+        const effectiveNeutralSpan = touchingSpan + 0.18 + avgHandSize * 0.35;
+        const effectiveMaxSpan = effectiveNeutralSpan + 0.26 + avgHandSize * 0.40;
+
+        if (innerGap <= 0.02 || centerSpan <= touchingSpan) {
+          // Hands touching or very close together -> reliably reach pp (0.00 - 0.08)
+          targetValue = 0.00;
+        } else if (centerSpan <= effectiveNeutralSpan) {
+          // Contracting gesture: bringing hands closer together drops smoothly through mp -> p -> pp
+          const spanRange = Math.max(0.05, effectiveNeutralSpan - touchingSpan);
+          const ratio = Math.max(0, Math.min(1, (centerSpan - touchingSpan) / spanRange));
           targetValue = 0.50 * ratio; // [0.00, 0.50]
         } else {
-          // Expanding gesture: pulling hands apart climbs smoothly to fff
-          const spanRange = Math.max(0.05, this.config.maxSpan - this.config.neutralSpan);
-          const ratio = Math.max(0, Math.min(1, (span - this.config.neutralSpan) / spanRange));
+          // Expanding gesture: pulling hands apart climbs smoothly through f -> ff -> fff
+          const spanRange = Math.max(0.05, effectiveMaxSpan - effectiveNeutralSpan);
+          const ratio = Math.max(0, Math.min(1, (centerSpan - effectiveNeutralSpan) / spanRange));
           targetValue = 0.50 + 0.50 * ratio; // [0.50, 1.00]
         }
 
-        reportingY = (samples[0].conductorPoint.y + samples[1].conductorPoint.y) / 2;
-        confidence = Math.min(1.0, (samples[0].confidence + samples[1].confidence) / 1.6);
+        reportingY = (s0.conductorPoint.y + s1.conductorPoint.y) / 2;
+        confidence = Math.min(1.0, (s0.confidence + s1.confidence) / 1.6);
         this.lastVisibleTimestampMs = timestampMs;
       } else if (samples.length === 1) {
         // 1 hand visible in spread mode: hold current dynamics

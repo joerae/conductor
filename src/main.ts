@@ -109,17 +109,35 @@ function getPromptText(state: ExperienceState, pausedBeat: number, inputSource: 
     }
   }
 
+  // Keyboard input source
+  if (tempoMode === "gestural") {
+    switch (state) {
+      case "loading":
+        return "Preparing the orchestra and instruments…";
+      case "ready":
+        return "Keyboard active. Press SPACE or P to begin, ← / → for tempo, ↑ / ↓ for volume.";
+      case "preparing":
+        return "Starting orchestra…";
+      case "playing":
+        return "Playing! Use ← / → for tempo (accelerando/rallentando), ↑ / ↓ for volume, P to pause.";
+      case "paused":
+        return `Orchestra paused at beat ${pausedBeat.toFixed(1)}. Press SPACE or P to resume.`;
+      case "completed":
+        return "Bravo! Masterpiece concluded. Press SPACE to conduct again.";
+    }
+  }
+
   switch (state) {
     case "loading":
       return "Preparing the orchestra and instruments…";
     case "ready":
-      return "Tap SPACE twice to set the pulse.";
+      return "Tap SPACE twice to set the pulse (1 tap = 1 beat).";
     case "preparing":
       return pausedBeat > 0
         ? `Tap SPACE once more to resume from beat ${pausedBeat.toFixed(1)}…`
         : "Good — tap SPACE once more to begin…";
     case "playing":
-      return "Orchestra is playing. Keep tapping SPACE to conduct the tempo.";
+      return "Orchestra is playing. Tap SPACE to steer the tempo (1 tap = 1 beat).";
     case "paused":
       return `Orchestra paused at beat ${pausedBeat.toFixed(1)}. Tap SPACE twice to resume from here.`;
     case "completed":
@@ -233,14 +251,14 @@ const controller = new ExperienceController({
     const pausedBeat = controller.getPausedBeat();
     promptEl.textContent = getPromptText(state, pausedBeat, controller.getInputSource());
 
-    const showControls = (state === "playing" || state === "paused" || state === "completed");
-    restartBtn.style.display = showControls ? "inline-block" : "none";
-    switchPieceBtn.style.display = showControls ? "inline-block" : "none";
+    const showControls = state !== "loading";
+    restartBtn.style.display = showControls ? "inline-flex" : "none";
+    switchPieceBtn.style.display = showControls ? "inline-flex" : "none";
 
     if (state === "completed") {
-      restartBtn.textContent = "↺ Conduct Again";
+      restartBtn.innerHTML = "↺ Conduct Again";
     } else {
-      restartBtn.textContent = "↺ Restart from Top";
+      restartBtn.innerHTML = "↺ Restart from Top";
     }
 
     if (debugHintEl) {
@@ -290,8 +308,8 @@ const controller = new ExperienceController({
         section.classList.add("playing");
         if (targetEgg) targetEgg.classList.add("playing");
 
-        // Update Section Velocity Debug HUD (stays visible until next note updates it)
-        const sectionKey = section.id || section.dataset.sectionId || "section";
+        // Record history for debug HUD
+        const sectionKey = section.dataset.sectionId || "sec";
         let history = sectionVelocityHistory.get(sectionKey);
         if (!history) {
           history = [];
@@ -331,7 +349,47 @@ const controller = new ExperienceController({
 
 const inputBtnKeyboard = document.getElementById("input-btn-keyboard") as HTMLButtonElement;
 const inputBtnCamera = document.getElementById("input-btn-camera") as HTMLButtonElement;
+const inputHintText = document.getElementById("input-hint-text") as HTMLElement;
 const spaceKeyHint = document.getElementById("space-key-hint") as HTMLElement;
+
+function updateControlHints(): void {
+  const source = controller.getInputSource();
+  const mode = controller.getTempoMode();
+
+  if (inputHintText) {
+    inputHintText.innerHTML = source === "camera"
+      ? `Press <strong>C</strong> for Keyboard`
+      : `Press <strong>C</strong> for Camera`;
+  }
+
+  if (modeHintText) {
+    if (source === "camera") {
+      if (mode === "gestural") {
+        modeHintText.innerHTML = `🪄 <strong>Expressive (Camera)</strong>: Raise hands to start • Height modulates tempo • Width modulates volume • Drop to stop`;
+      } else if (mode === "inertial") {
+        modeHintText.innerHTML = `🥁 <strong>Beat (Camera Cut Time)</strong>: Conduct strokes in 2 (1 stroke = 2 beats) • Steer tempo with hands • Coast freely`;
+      } else if (mode === "autoplay") {
+        modeHintText.innerHTML = `⚡ <strong>Autoplay (Debug)</strong>: Playing continuously in tempo`;
+      } else {
+        modeHintText.innerHTML = `⚙️ <strong>${mode.toUpperCase()} (Debug)</strong>: Move hands to conduct`;
+      }
+    } else {
+      // Keyboard mode
+      if (mode === "gestural") {
+        modeHintText.innerHTML = `🪄 <strong>Expressive (Keyboard)</strong>: <strong>↑ / ↓</strong> adjust Volume • <strong>← / →</strong> adjust Target Tempo • <strong>SPACE / P</strong> Play/Pause`;
+      } else if (mode === "inertial" || mode === "balanced" || mode === "instant") {
+        modeHintText.innerHTML = `🥁 <strong>Beat (Keyboard)</strong>: Tap <strong>SPACE</strong> on every beat (1 tap = 1 beat) • <strong>↑ / ↓</strong> adjust Volume`;
+      } else if (mode === "autoplay") {
+        modeHintText.innerHTML = `⚡ <strong>Autoplay (Debug)</strong>: Playing continuously in tempo`;
+      } else {
+        modeHintText.innerHTML = `⚙️ <strong>${String(mode).toUpperCase()} (Debug)</strong>: Tap SPACE to conduct`;
+      }
+    }
+  }
+
+  const pausedBeat = controller.getPausedBeat();
+  promptEl.textContent = getPromptText(controller.getState(), pausedBeat, source);
+}
 
 function updateInputSourceButtons(source: InputSource): void {
   inputBtnKeyboard?.classList.toggle("active", source === "keyboard");
@@ -347,8 +405,7 @@ function updateInputSourceButtons(source: InputSource): void {
     }
   }
 
-  const pausedBeat = controller.getPausedBeat();
-  promptEl.textContent = getPromptText(controller.getState(), pausedBeat, source);
+  updateControlHints();
 }
 
 async function setInputSource(source: InputSource): Promise<void> {
@@ -373,21 +430,7 @@ const modeHintText = document.getElementById("mode-hint-text") as HTMLElement;
 function updateModeButtons(mode: TempoMode): void {
   modeBtnE?.classList.toggle("active", mode === "gestural");
   modeBtnD?.classList.toggle("active", mode === "inertial");
-
-  if (modeHintText) {
-    if (mode === "gestural") {
-      modeHintText.innerHTML = `🪄 <strong>Expressive</strong>: Raise hands to start • Height controls tempo (Accelerando / Rallentando) • Drop to stop`;
-    } else if (mode === "inertial") {
-      modeHintText.innerHTML = `🥁 <strong>Beat (Cut Time)</strong>: Conduct strokes in 2 (1 stroke = 2 beats) • Steer tempo with your hands • Coast freely`;
-    } else if (mode === "autoplay") {
-      modeHintText.innerHTML = `⚡ <strong>Autoplay (Debug)</strong>: Playing continuously in tempo`;
-    } else {
-      modeHintText.innerHTML = `⚙️ <strong>${mode.toUpperCase()} (Debug)</strong>: Tap to conduct`;
-    }
-  }
-
-  const pausedBeat = controller.getPausedBeat();
-  promptEl.textContent = getPromptText(controller.getState(), pausedBeat, controller.getInputSource());
+  updateControlHints();
 }
 
 function setMode(mode: TempoMode): void {

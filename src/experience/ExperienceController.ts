@@ -203,7 +203,7 @@ export class ExperienceController {
         ),
       ]);
       this.transport.setEvents(this.midiScore.getEvents(), this.midiScore.getMetadata().totalBeats);
-      const beatsPerTap = this.clock.getTempoMode() === "inertial" ? 2 : (piece.beatsPerTap || 1);
+      const beatsPerTap = this.getEffectiveBeatsPerTap();
       this.clock.setBeatsPerTap(beatsPerTap);
       this.transport.setBeatsPerTap(beatsPerTap);
 
@@ -242,14 +242,16 @@ export class ExperienceController {
     } else {
       if (source === this.inputSource && !this.cameraInput) return;
       this.inputSource = "keyboard";
-      if (this.clock.getTempoMode() === "inertial" || this.clock.getTempoMode() === "gestural") {
-        this.setTempoMode("balanced");
-      }
       if (this.cameraInput) {
         this.cameraInput.stop();
       }
     }
 
+    this.updateBeatsPerTap();
+    const currentBpm = this.clock.getState().bpm || this.basePieceBpm;
+    if (this.clock.getTempoMode() === "inertial") {
+      this.clock.setPeriodMs((60000 / currentBpm) * this.getEffectiveBeatsPerTap());
+    }
     this.uiCallbacks.onInputSourceChange?.(this.inputSource);
   }
 
@@ -525,6 +527,7 @@ export class ExperienceController {
   private beatSoundEnabled = false; // Off by default — VFX flash still fires on beat
   private lastBeatObservationMs = -1;
   private indicatedBpm = 0;
+  private keyboardInactivityPulseCount = 0;
 
   setBeatSoundEnabled(enabled: boolean): void {
     this.beatSoundEnabled = enabled;
@@ -564,6 +567,9 @@ export class ExperienceController {
     // Resume AudioContext on first tap if suspended (requires user gesture)
     await this.audioEngine.resume();
 
+    // Reset inactivity counters
+    this.keyboardInactivityPulseCount = 0;
+
     // In Mode E, beating hands triggers instant cymbal cue and visual pulse, but height governs tempo
     if (this.clock.getTempoMode() === "gestural") {
       if (this.beatSoundEnabled) {
@@ -572,13 +578,17 @@ export class ExperienceController {
       this.debug.updateTapAccepted();
       this.uiCallbacks.onBeat();
       this.clock.acceptObservation(obs);
+
+      // In Expressive Mode: Tapping SPACE or pressing key while ready/paused immediately starts/resumes playback!
+      if (this.state === "ready" || this.state === "paused") {
+        this.startPlayback();
+      }
       return;
     }
 
     // Compute indicated instantaneous BPM with light smoothing (accounting for cut time in Mode D)
     const now = obs.timestampMs;
-    const piece = this.getCurrentPiece();
-    const beatsPerTap = this.clock.getTempoMode() === "inertial" ? 2 : (piece?.beatsPerTap || 1);
+    const beatsPerTap = this.getEffectiveBeatsPerTap();
     if (this.lastBeatObservationMs > 0) {
       const dtMs = now - this.lastBeatObservationMs;
       if (dtMs >= 100 && dtMs <= 3000) {
@@ -605,7 +615,7 @@ export class ExperienceController {
     // Feed observation to clock
     this.clock.acceptObservation(obs);
 
-    // After second tap: clock has calibrated period, start/resume playback
+    // After second tap: clock has calibrated period, start/resume playback with 1-beat lookahead
     if (this.prepTapCount === 2 && this.state === "preparing") {
       this.startPlayback();
     }
@@ -623,18 +633,18 @@ export class ExperienceController {
     const periodSec = clockState.periodMs / 1000;
     const nextBeatAudioTime = this.clock.predictNextBeatAudioTime();
     const audioNow = this.audioEngine.getAudioTime();
-    const piece = this.getCurrentPiece();
 
-    // In Mode E (Gestural): Start IMMEDIATELY on hand gesture, zero lead-in delay
+    // In Beat Mode: 2 prep taps establish tempo (1, 2). Music begins 1 beat later on nextBeatAudioTime
+    // with pristine audio attack and zero dropped opening notes.
+    // In Gestural Mode: Starts immediately with 60ms audio buffer lead time.
     const isGestural = this.clock.getTempoMode() === "gestural";
-    const leadInBeats = isGestural ? 0 : (piece.leadInBeats ?? 0);
     const startAudioTime = isGestural
-      ? Math.max(audioNow + 0.03, nextBeatAudioTime)
-      : nextBeatAudioTime + leadInBeats * periodSec;
+      ? audioNow + 0.06
+      : (nextBeatAudioTime > audioNow + 0.05 ? nextBeatAudioTime : audioNow + periodSec);
 
     // Start or resume from pausedBeat
     const startBeat = this.pausedBeat;
-    const beatsPerTap = this.clock.getTempoMode() === "inertial" ? 2 : (piece.beatsPerTap || 1);
+    const beatsPerTap = this.getEffectiveBeatsPerTap();
     this.transport.start(startBeat, startAudioTime, periodSec, beatsPerTap);
     this.scheduler.start();
     this.setState("playing");
@@ -656,6 +666,18 @@ export class ExperienceController {
     switch (event.type) {
       case "beat": {
         const s = event.state;
+
+        // Check inactivity in Keyboard Beat Mode: pause promptly if user stops tapping (within 2 beat pulses)
+        if (this.inputSource === "keyboard" && this.clock.getTempoMode() === "inertial" && this.state === "playing") {
+          this.keyboardInactivityPulseCount++;
+          if (this.keyboardInactivityPulseCount >= 2) {
+            this.keyboardInactivityPulseCount = 0;
+            this.pausePlayback();
+            return;
+          }
+        } else {
+          this.keyboardInactivityPulseCount = 0;
+        }
 
         // Check hands-down inactivity in camera mode:
         // In Mode E: pause within 2 beats of dropping hands
@@ -728,13 +750,17 @@ export class ExperienceController {
     return this.state;
   }
 
+  updateBeatsPerTap(): void {
+    const beatsPerTap = this.getEffectiveBeatsPerTap();
+    this.clock.setBeatsPerTap(beatsPerTap);
+    this.transport.setBeatsPerTap(beatsPerTap);
+  }
+
   setTempoMode(mode: TempoMode): void {
     this.clock.setTempoMode(mode);
     this.debug.updateTempoMode(mode);
-    const piece = this.getCurrentPiece();
-    const beatsPerTap = mode === "inertial" ? 2 : (piece?.beatsPerTap || 1);
-    this.clock.setBeatsPerTap(beatsPerTap);
-    this.transport.setBeatsPerTap(beatsPerTap);
+    this.updateBeatsPerTap();
+    const beatsPerTap = this.getEffectiveBeatsPerTap();
 
     if (mode === "gestural") {
       this.clock.setPeriodMs(60000 / this.basePieceBpm);
@@ -752,6 +778,11 @@ export class ExperienceController {
   }
 
   getEffectiveBeatsPerTap(): number {
+    // In Keyboard mode, conductor taps every single quarter note beat (1 tap = 1 beat)
+    if (this.inputSource === "keyboard") {
+      return 1;
+    }
+    // In Camera mode, Beat Mode (inertial) conducts in cut time (1 stroke = 2 beats)
     const piece = this.getCurrentPiece();
     return this.clock.getTempoMode() === "inertial" ? 2 : (piece?.beatsPerTap || 1);
   }

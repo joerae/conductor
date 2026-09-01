@@ -1,9 +1,41 @@
 {
-  "version": "0.8.0",
+  "version": "0.9.2",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.9.2",
+      "date": "2026-09-01",
+      "summary": "Hand-Scale Adaptive Camera Dynamics (P/PP Close-Up), Instant Keyboard Inactivity Halt & 1-Beat Lead-In Audio Timing",
+      "details": [
+        "Hand-Scale Adaptive Camera Dynamics: Computes physical hand size and inner edge-to-edge gap from all 21 hand landmarks, ensuring bringing hands together reliably reaches pp and p dynamics regardless of camera distance or hand scale",
+        "Prompt Keyboard Inactivity Halt: In Keyboard Beat Mode, playback pauses promptly within 2 missed beat pulses as soon as the conductor stops tapping",
+        "1-Beat Lead-In Audio Scheduling: Two preparatory taps establish the pulse (Beat 1, Beat 2), and the orchestra enters on Beat 3 with a full beat lookahead window, guaranteeing 100% audio attack fidelity on opening notes"
+      ]
+    },
+    {
+      "version": "0.9.1",
+      "date": "2026-09-01",
+      "summary": "Fix Keyboard Beat Mode Speed Sync, Immediate Audio Playback on Downbeat & Spacebar Start in Expressive Mode",
+      "details": [
+        "Keyboard Beat Mode Speed & Audio Fix: Synchronized beatsPerTap across score transport, clock state, and instant BPM estimator in Keyboard mode so tapping matches score tempo 1:1 (eliminating the half-speed mismatch) and audio plays immediately on the 2nd tap",
+        "Spacebar Playback Trigger in Expressive Mode: Pressing SPACE now immediately launches/resumes playback in Expressive Mode (in addition to P)",
+        "Downbeat Instant Playback: Opening downbeat notes now trigger immediately upon the establishing tap without artificial latency"
+      ]
+    },
+    {
+      "version": "0.9.0",
+      "date": "2026-09-01",
+      "summary": "Keyboard Mode Enhancements, Emerald Green Ambient Dynamics, High-Contrast Stage Action Buttons & Spacious Orchestra Layout",
+      "details": [
+        "Keyboard Mode & Explicit 1-Beat Tapping: Input mode renamed to 'Keyboard'. In Keyboard Mode, taps always advance 1 quarter-note beat per tap (1 tap = 1 beat), while cut-time doubling (1 stroke = 2 beats) is exclusively reserved for Camera hand conducting",
+        "Dynamic Contextual Controls Explanations: Hint bars now dynamically explain the controls for all combinations of Keyboard/Camera and Expressive/Beat modes (including ↑/↓ for volume, ←/→ for target tempo accelerando/rallentando, and SPACE for beats)",
+        "Emerald/Forest Green Ambient Dynamics Ambiance: The stage background lighting now smoothly glows emerald green during mf and mp, complementing the deep blue at pp/p and fiery crimson at ff/fff",
+        "High-Contrast Stage Action Buttons: 'Restart from Top' and 'Switch Piece' buttons restyled in vibrant gold/glass accents and remain permanently accessible during rehearsal and performance",
+        "Spacious Orchestra Stage Layout: Expanded orchestra stage to 1000px width with 140px pitch between all 7 Beethoven 5th sections, eliminating all instrument and label overlapping"
+      ]
+    },
     {
       "version": "0.8.0",
       "date": "2026-09-01",

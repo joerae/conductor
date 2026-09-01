@@ -248,4 +248,24 @@ describe("ConductorClock Mode D (Coasting & Consistent Tempo Steering)", () => {
     expect(clock.getState().bpm).toBeCloseTo(160, 0);
     expect(clock.getState().periodMs).toBeCloseTo((60000 / 160) * 2, 1); // 750ms
   });
+
+  it("accurately calculates score BPM when conducting every beat in Keyboard Mode (beatsPerTap = 1)", () => {
+    let audioTime = 0.0;
+    const clock = new ConductorClock({
+      getAudioTime: () => audioTime,
+      initialMode: "inertial",
+    });
+
+    clock.setBeatsPerTap(1);
+    expect(clock.getBeatsPerTap()).toBe(1);
+
+    // Conductor taps at 428.57ms interval (1 tap = 1 beat for 140 BPM piece)
+    clock.acceptObservation({ source: "keyboard", timestampMs: 1000, confidence: 1.0 });
+    audioTime = 0.42857;
+    clock.acceptObservation({ source: "keyboard", timestampMs: 1428.57, confidence: 1.0 });
+
+    const state = clock.getState();
+    expect(state.periodMs).toBeCloseTo(428.57, 1);
+    expect(state.bpm).toBeCloseTo(140, 0);
+  });
 });

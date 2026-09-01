@@ -322,7 +322,7 @@ export class ConductorClock {
 
       // Consecutive observation (no gap):
       const candidateInterval = elapsedMs;
-      const candidateBpm = 60000 / candidateInterval;
+      const candidateBpm = (60000 / candidateInterval) * this.beatsPerTap;
 
       if (candidateBpm < BPM_MIN || candidateBpm > BPM_MAX) {
         this.emit({ type: "rejected", reason: "out_of_range", timestampMs: nowMs });

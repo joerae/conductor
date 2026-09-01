@@ -228,14 +228,14 @@
         <div id="input-source-selector" class="mode-selector-container">
           <span class="mode-label">Input:</span>
           <div class="mode-pill-group">
-            <button id="input-btn-keyboard" class="mode-pill" data-input-source="keyboard" title="Keyboard mode: Tap SPACE bar to conduct">
-              ⌨️ Space Bar
+            <button id="input-btn-keyboard" class="mode-pill" data-input-source="keyboard" title="Keyboard mode: Conduct using keyboard shortcuts and spacebar">
+              ⌨️ Keyboard
             </button>
             <button id="input-btn-camera" class="mode-pill active" data-input-source="camera" title="Camera mode: Conduct with hand gestures in front of webcam">
               📷 Camera
             </button>
           </div>
-          <span class="mode-shortcut-hint">Press <strong>C</strong> to switch</span>
+          <span id="input-hint-text" class="mode-shortcut-hint">Press <strong>C</strong> to switch</span>
         </div>
 
         <div id="tempo-mode-selector" class="mode-selector-container">
@@ -244,7 +244,7 @@
             <button id="mode-btn-e" class="mode-pill active" data-mode="gestural" title="Expressive Mode (Default): Continuous Gestural Conducting (Raise hands to start, height modulates speed, drop hands to stop)">
               🪄 Expressive
             </button>
-            <button id="mode-btn-d" class="mode-pill" data-mode="inertial" title="Beat Mode: Conduct in cut time (1 stroke = 2 beats). Steer tempo with beats and release without stopping">
+            <button id="mode-btn-d" class="mode-pill" data-mode="inertial" title="Beat Mode: Conduct in cut time (1 stroke = 2 beats in Camera, 1 tap = 1 beat in Keyboard). Steer tempo with beats">
               🥁 Beat
             </button>
           </div>
@@ -260,15 +260,15 @@
         </div>
       </div>
 
-      <!-- Stage Action Controls -->
+      <!-- Stage Action Controls (Always accessible, high contrast) -->
       <div id="stage-actions">
-        <button id="restart-btn" style="display:none" aria-label="Restart piece">↺ Restart from Top</button>
-        <button id="repertoire-switch-btn" style="display:none" aria-label="Choose another piece">🎵 Switch Piece</button>
+        <button id="restart-btn" class="stage-action-btn" aria-label="Restart piece">↺ Restart from Top</button>
+        <button id="repertoire-switch-btn" class="stage-action-btn" aria-label="Choose another piece">🎵 Switch Piece</button>
       </div>
 
       <!-- Footer controls -->
       <footer id="stage-footer">
-        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.8.0</button>
+        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.9.2</button>
         <span class="footer-divider">•</span>
         <span id="debug-hint" class="debug-hint">Press D for debug overlay & A/B DSP</span>
       </footer>

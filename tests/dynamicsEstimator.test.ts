@@ -65,6 +65,67 @@ describe("DynamicsEstimator (Two Switchable Modes: Spread vs Height)", () => {
       expect(obs.level).toBe("pp");
     });
 
+    it("reliably reaches pp when user is close to camera with large hands touching", () => {
+      const estimator = new DynamicsEstimator({ mode: "spread", timeConstantMs: 120 });
+      let t = 1000;
+      // Large hands on screen (~0.18 width each):
+      // Left hand spans x: 0.32 -> 0.50 (center 0.41)
+      // Right hand spans x: 0.50 -> 0.68 (center 0.59)
+      // They touch at x=0.50 (centerSpan = 0.18, innerGap = 0.00)
+      const leftHand: HandSample = {
+        timestampMs: 1000,
+        handIndex: 0,
+        handedness: "left",
+        confidence: 0.95,
+        landmarks: [
+          { x: 0.32, y: 0.5 },
+          { x: 0.41, y: 0.4 },
+          { x: 0.50, y: 0.5 },
+          { x: 0.41, y: 0.6 },
+          { x: 0.35, y: 0.5 },
+          { x: 0.45, y: 0.5 },
+          { x: 0.40, y: 0.5 },
+          { x: 0.42, y: 0.5 },
+          { x: 0.43, y: 0.5 },
+          { x: 0.44, y: 0.5 },
+        ],
+        conductingPoint: { x: 0.41, y: 0.5 },
+        conductorPoint: { x: 0.41, y: 0.5 },
+      };
+
+      const rightHand: HandSample = {
+        timestampMs: 1000,
+        handIndex: 1,
+        handedness: "right",
+        confidence: 0.95,
+        landmarks: [
+          { x: 0.50, y: 0.5 },
+          { x: 0.59, y: 0.4 },
+          { x: 0.68, y: 0.5 },
+          { x: 0.59, y: 0.6 },
+          { x: 0.55, y: 0.5 },
+          { x: 0.65, y: 0.5 },
+          { x: 0.60, y: 0.5 },
+          { x: 0.62, y: 0.5 },
+          { x: 0.63, y: 0.5 },
+          { x: 0.64, y: 0.5 },
+        ],
+        conductingPoint: { x: 0.59, y: 0.5 },
+        conductorPoint: { x: 0.59, y: 0.5 },
+      };
+
+      const closeBigHands = [leftHand, rightHand];
+      let obs = estimator.update(closeBigHands, t);
+      for (let i = 0; i < 20; i++) {
+        t += 50;
+        obs = estimator.update(closeBigHands, t);
+      }
+
+      expect(obs.handCount).toBe(2);
+      expect(obs.value).toBeLessThanOrEqual(0.08);
+      expect(obs.level).toBe("pp");
+    });
+
     it("detects active dynamics shaping during rapid hand separation change and settles with hysteresis", () => {
       const estimator = new DynamicsEstimator({
         mode: "spread",
