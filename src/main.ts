@@ -612,13 +612,13 @@ function updateBpmGaugeUI(): void {
     if (valIndicatedBpm) valIndicatedBpm.textContent = `—`;
   }
 
-  // BPM Green Zone: vertical ±20 BPM target band around piece's intended BPM in Mode E
+  // BPM Green Zone: vertical ±20 BPM target band anchored to piece's nominal intended BPM
   const greenZone = document.getElementById("bpm-green-zone") as HTMLElement | null;
   if (greenZone) {
-    const baseBpm = controller.getBasePieceBpm?.() || 0;
-    if (baseBpm > 0) {
-      const loPercent = bpmToPercent(baseBpm - 20);
-      const hiPercent = bpmToPercent(baseBpm + 20);
+    const nominalBpm = controller.getNominalPieceBpm?.() || controller.getBasePieceBpm?.() || 0;
+    if (nominalBpm > 0) {
+      const loPercent = bpmToPercent(nominalBpm - 20);
+      const hiPercent = bpmToPercent(nominalBpm + 20);
       greenZone.style.bottom = `${loPercent}%`;
       greenZone.style.height = `${hiPercent - loPercent}%`;
       greenZone.style.display = "block";

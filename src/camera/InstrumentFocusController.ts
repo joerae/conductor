@@ -188,17 +188,17 @@ export class InstrumentFocusController {
       const screenY = indexTip.y;
       this.pointerScreenPoint = { x: screenX, y: screenY };
 
-      // ── Phase B: Direct Pointing Spotlight ──────────────────────────────────
-      const closestSection = this.findClosestSection(screenX, screenY, sections);
+      // ── Phase B: Free Ray Cast & Section Intersection ─────────────────────────
+      const closestSection = this.findClosestSection(screenX, screenY, pointingSample, sections, mirror);
 
-      if (closestSection && closestSection !== this.candidateHoverSectionId) {
+      if (closestSection !== this.candidateHoverSectionId) {
         this.candidateHoverSectionId = closestSection;
         this.candidateHoverStartTime = now;
       }
 
-      // Fast, stable debounce
+      // Fast, stable debounce for section intersection
       if (
-        this.candidateHoverSectionId &&
+        this.candidateHoverSectionId !== null &&
         (now - this.candidateHoverStartTime >= this.HOVER_STABLE_MS || !this.hoveredSectionId) &&
         this.hoveredSectionId !== this.candidateHoverSectionId
       ) {
@@ -215,6 +215,20 @@ export class InstrumentFocusController {
         this.callbacks.onGrabChange?.(this.grabbedSectionId);
         this.callbacks.onFocusAmountChange?.(this.grabbedSectionId, 1.0);
         this.emitTelemetry();
+      } else if (this.candidateHoverSectionId === null && this.grabbedSectionId !== null) {
+        // Ray pointing into open space: freely aim without locking onto a section
+        const prevGrabbed = this.grabbedSectionId;
+        this.hoveredSectionId = null;
+        this.grabbedSectionId = null;
+        this.sectionFocus = 0.0;
+        this.state = "hovering";
+
+        if (prevGrabbed) {
+          this.callbacks.onFocusAmountChange?.(prevGrabbed, 0.0);
+        }
+        this.callbacks.onHoverChange?.(null);
+        this.callbacks.onGrabChange?.(null);
+        this.emitTelemetry();
       }
     } else {
       // Pointing gesture ended
@@ -227,42 +241,52 @@ export class InstrumentFocusController {
   }
 
   /**
-   * Forgivingly maps pointer (screenX, screenY) to the nearest piece section.
+   * Casts a ray from the pointing fingertip in the direction of the finger and detects section intersection.
    */
   private findClosestSection(
     screenX: number,
     screenY: number,
-    sections: PieceSection[]
+    sample: HandSample,
+    sections: PieceSection[],
+    mirror: boolean = true
   ): string | null {
     if (sections.length === 0) return null;
 
-    // Distribute sections across the top horizontal arc of the camera view [0.10, 0.90]
+    // Calculate pointing ray direction from PIP/MCP to TIP
+    const pip = sample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] || sample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
+
+    let projectedX = screenX;
+    if (pip) {
+      const pipX = mirror ? (1.0 - pip.x) : pip.x;
+      const pipY = pip.y;
+      const dirX = screenX - pipX;
+      const dirY = screenY - pipY;
+      const len = Math.hypot(dirX, dirY);
+      if (len > 0.001 && dirY < -0.01) {
+        // Project ray to the orchestra row (Y = 0.0)
+        const t = screenY / (-dirY);
+        projectedX = screenX + dirX * t;
+      }
+    }
+
+    // Check which section the ray intersects
     const count = sections.length;
+    const secWidth = 0.76 / count;
     let closestId: string | null = null;
-    let minDistance = Infinity;
+    let minDiff = Infinity;
 
     sections.forEach((sec, idx) => {
-      // Target position for section center in normalized screen space
       const targetX = 0.12 + ((idx + 0.5) / count) * 0.76;
-      const targetY = 0.22; // Upper area of camera frame
+      const diff = Math.abs(projectedX - targetX);
 
-      // Horizontal distance has primary weight; vertical distance has secondary weight
-      const dx = screenX - targetX;
-      const dy = (screenY - targetY) * 0.75;
-      const dist = Math.hypot(dx, dy);
-
-      if (dist < minDistance) {
-        minDistance = dist;
+      // Ray must intersect within the section's active span
+      if (diff <= secWidth * 0.62 && diff < minDiff) {
+        minDiff = diff;
         closestId = sec.id;
       }
     });
 
-    // Generous hit threshold: within 0.45 distance
-    if (minDistance <= 0.45) {
-      return closestId;
-    }
-
-    return null;
+    return closestId;
   }
 
   private exitFocusMode(): void {

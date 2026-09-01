@@ -146,6 +146,24 @@
             </svg>
           </div>
 
+          <!-- Stage Spotlight Laser Ray Overlay (Connects pointing finger out of camera box to orchestra) -->
+          <svg id="stage-spotlight-ray-overlay" class="stage-spotlight-ray-overlay" aria-hidden="true">
+            <defs>
+              <linearGradient id="spotlight-ray-gradient" x1="0%" y1="100%" x2="0%" y2="0%">
+                <stop offset="0%" stop-color="#ffd56b" stop-opacity="0.95" />
+                <stop offset="30%" stop-color="#ffe696" stop-opacity="0.80" />
+                <stop offset="85%" stop-color="#ffffff" stop-opacity="0.90" />
+                <stop offset="100%" stop-color="#ffd56b" stop-opacity="0.95" />
+              </linearGradient>
+            </defs>
+            <line id="spotlight-stage-outer-ray" x1="0" y1="0" x2="0" y2="0" stroke="rgba(255, 213, 107, 0.40)" stroke-width="7" stroke-linecap="round" />
+            <line id="spotlight-stage-ray" x1="0" y1="0" x2="0" y2="0" stroke="url(#spotlight-ray-gradient)" stroke-width="3" stroke-linecap="round" />
+            <line id="spotlight-stage-core" x1="0" y1="0" x2="0" y2="0" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" />
+            <circle id="spotlight-stage-target-glow" cx="0" cy="0" r="18" fill="rgba(255, 213, 107, 0.35)" />
+            <circle id="spotlight-stage-target-ring" cx="0" cy="0" r="10" fill="none" stroke="#ffd56b" stroke-width="2" />
+            <circle id="spotlight-stage-target-pip" cx="0" cy="0" r="4" fill="#ffffff" />
+          </svg>
+
           <!-- Hero Camera Container (Big Picture of Person in Middle of Screen) -->
           <div id="camera-hero-slot" class="camera-hero-slot"></div>
 
@@ -287,7 +305,7 @@
 
       <!-- Footer controls -->
       <footer id="stage-footer">
-        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.18.0</button>
+        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.20.0</button>
         <span class="footer-divider">•</span>
         <span id="debug-hint" class="debug-hint">Press D for debug overlay & A/B DSP</span>
       </footer>

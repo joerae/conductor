@@ -109,6 +109,7 @@ export class ExperienceController {
   private handsDownPulseCount: number = 0;
 
   // Mode E: Gestural Conducting (Intended BPM base + continuous height accelerando)
+  private nominalPieceBpm: number = 140;
   private basePieceBpm: number = 140;
   private currentGesturalBpm: number = 140;
   private lastGesturalUpdateMs: number = 0;
@@ -230,8 +231,9 @@ export class ExperienceController {
 
       // Save baseline piece BPM for gestural tempo modulation
       const meta = this.midiScore.getMetadata();
-      this.basePieceBpm = meta?.embeddedBpm || piece.defaultBpm || 140;
-      this.currentGesturalBpm = this.basePieceBpm;
+      this.nominalPieceBpm = meta?.embeddedBpm || piece.defaultBpm || 140;
+      this.basePieceBpm = this.nominalPieceBpm;
+      this.currentGesturalBpm = this.nominalPieceBpm;
       if (this.clock.getTempoMode() === "inertial") {
         this.clock.setPeriodMs((60000 / this.basePieceBpm) * beatsPerTap);
       } else {
@@ -291,6 +293,21 @@ export class ExperienceController {
       const piece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
       if (piece) {
         this.cameraInput.setSections(piece.sections);
+      }
+
+      // Wire camera error fallback to keyboard mode
+      this.cameraInput.onStateChange((state, err) => {
+        if (state === "error") {
+          console.warn("Camera failed to load, gracefully falling back to keyboard mode:", err);
+          this.setInputSource("keyboard");
+        }
+      });
+
+      try {
+        await this.cameraInput.start();
+      } catch (err) {
+        console.warn("Failed to start camera, falling back to keyboard mode:", err);
+        this.setInputSource("keyboard");
       }
 
       // Wire camera dynamics directly into existing orchestral dynamic ladder & AudioEngine
@@ -384,16 +401,10 @@ export class ExperienceController {
               if (hist.length > this.HAND_Y_HISTORY_LEN) hist.shift();
             }
 
-            // Mode E: Auto-start as soon as user moves or raises hands from resting position
+            // Mode E: Auto-start instantly as soon as user raises hands in front of camera
             if (this.state === "ready" || this.state === "paused") {
-              const isMovingOrRaised = samples.some(s => {
-                const hist = this.handYHistory.get(s.handIndex);
-                if (!hist || hist.length < 2) return s.conductorPoint.y >= 0.20;
-                const dy = Math.abs(s.conductorPoint.y - hist[0]);
-                return s.conductorPoint.y >= 0.22 || dy > 0.02;
-              });
-
-              if (isMovingOrRaised) {
+              const isRaised = samples.some(s => s.conductorPoint.y >= 0.10);
+              if (isRaised) {
                 this.startPlayback();
               }
             } else if (this.state === "playing") {
@@ -736,14 +747,15 @@ export class ExperienceController {
     return this.basePieceBpm;
   }
 
+  getNominalPieceBpm(): number {
+    return this.nominalPieceBpm;
+  }
+
   /**
-   * Nudge the Mode E gestural base BPM by deltaBpm.
-   * This shifts the "neutral height" reference point so the whole accelerando
-   * range shifts up or down. Clamped to [30, 240].
+   * Nudge the Mode E gestural live BPM by deltaBpm.
+   * Modulates current live conducting tempo while preserving the piece's fixed target nominal reference sweet spot.
    */
   nudgeGesturalBpm(deltaBpm: number): void {
-    this.basePieceBpm = Math.max(30, Math.min(240, this.basePieceBpm + deltaBpm));
-    // Immediately apply to current gestural BPM with a gentle nudge
     this.currentGesturalBpm = Math.max(30, Math.min(240, this.currentGesturalBpm + deltaBpm));
     this.clock.setBpm(this.currentGesturalBpm);
     this.indicatedBpm = Math.round(this.currentGesturalBpm);

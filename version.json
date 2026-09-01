@@ -1,9 +1,31 @@
 {
-  "version": "0.18.0",
+  "version": "0.20.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.20.0",
+      "date": "2026-09-02",
+      "summary": "Free Ray-Cast Targeting, Instant Gestural Start, Auto Keyboard Fallback & Fixed Sweet-Spot Gauge",
+      "details": [
+        "True Fingertip Ray-Casting & Free Aim: Fixed mirrored screen coordinates so the laser shoots directly from the conductor's physical fingertip. The laser ray now moves freely anywhere across the stage and selectively spotlights an instrument only when the beam actively intersects it",
+        "Instant Hands-Raised Gestural Start: Raising hands on camera now immediately starts the orchestra playback in Mode E (Expressive) without long delays or waiting for multiple beat taps",
+        "Camera Error Fallback to Keyboard: If camera permission is denied, a webcam is not detected, or MediaPipe fails to load, Conductor gracefully and automatically falls back to Keyboard mode",
+        "Anchored Target Sweet-Spot BPM Band: Fixed the green target zone on the tempo gauge to remain static at the piece's nominal intended tempo (e.g. 140 BPM for Mozart), while your current tempo indicator pill moves freely up and down"
+      ]
+    },
+    {
+      "version": "0.19.0",
+      "date": "2026-09-02",
+      "summary": "Angled Stage Laser Ray, Video Compositing Bypass & Halved Background Reduction",
+      "details": [
+        "Full-Stage Angled Laser Ray: An ultra-fast SVG laser ray shoots in real-time from the conductor's pointing index fingertip, angling across the camera frame border and connecting directly to the targeted orchestra instruments above",
+        "Video Compositing Bypass in Spotlight Mode: Hides the webcam video texture completely in focus mode so glowing hands float on a dark celestial stage, eliminating video composite overhead for maximum framerate",
+        "GPU-Accelerated Party & Love Modes: Replaced expensive 100vw multi-radial-gradient repaints with GPU hue-rotate & opacity transforms, eliminating stutters in Party Mode (✌️✌️) and Love Mode (🤟)",
+        "Halved Background Instrument Fading: Softened the background reduction by 50% — non-spotlighted instruments remain musical and clearly audible at 0.72x (-2.8dB) and visually bright at 0.55 opacity"
+      ]
+    },
     {
       "version": "0.18.0",
       "date": "2026-09-02",

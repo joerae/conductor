@@ -607,14 +607,14 @@ export class AudioEngine {
             bus.presenceFilter.gain.setTargetAtTime(2.5 * this.focusAmount, now, 0.06);
           }
         } else {
-          // Other sections: Disperse outward into wide stereo panorama
+          // Other sections: Gently widen in stereo panorama
           const defPan = bus.defaultPan;
           const dir = defPan === 0 ? (ch % 2 === 0 ? -1 : 1) : Math.sign(defPan);
-          const dispersedPan = dir * Math.min(0.92, Math.max(0.65, Math.abs(defPan) * 1.35));
+          const dispersedPan = dir * Math.min(0.85, Math.max(0.40, Math.abs(defPan) * 1.18));
           bus.panner.pan.setTargetAtTime(dispersedPan, now, 0.06);
           bus.currentPan = dispersedPan;
           if (bus.presenceFilter) {
-            bus.presenceFilter.gain.setTargetAtTime(-2.0 * this.focusAmount, now, 0.06);
+            bus.presenceFilter.gain.setTargetAtTime(-1.0 * this.focusAmount, now, 0.06);
           }
         }
       }
@@ -635,11 +635,11 @@ export class AudioEngine {
   getChannelFocusMultiplier(channel: number): number {
     if (!this.focusedChannels || this.focusAmount <= 0.001) return 1.0;
     if (this.focusedChannels.has(channel)) {
-      // Forte foreground boost: 1.0 -> 1.40 (+2.9 dB)
-      return 1.0 + 0.40 * this.focusAmount;
+      // Forte foreground boost: 1.0 -> 1.35 (+2.6 dB)
+      return 1.0 + 0.35 * this.focusAmount;
     } else {
-      // Piano background reduction: 1.0 -> 0.42 (-7.5 dB)
-      return 1.0 - 0.58 * this.focusAmount;
+      // Gentle background reduction (halved): 1.0 -> 0.72 (-2.8 dB)
+      return 1.0 - 0.28 * this.focusAmount;
     }
   }
 

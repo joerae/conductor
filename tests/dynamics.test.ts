@@ -185,17 +185,17 @@ describe("AudioEngine Section Focus & Spatial Stereo DSP", () => {
     expect(engine.getChannelPan(2)).toBeCloseTo(0.68);  // Cello/Bass (Right)
   });
 
-  it("calculates correct spotlight forte boost and piano background reduction multipliers", () => {
+  it("calculates correct spotlight forte boost and gentle background reduction multipliers", () => {
     const engine = new AudioEngine();
     // Default: no focus active
     expect(engine.getChannelFocusMultiplier(0)).toBe(1.0);
     expect(engine.getChannelFocusMultiplier(1)).toBe(1.0);
 
-    // Spotlight channel 0 with full focus 1.0 (forte vs piano)
+    // Spotlight channel 0 with full focus 1.0 (forte vs gentle background)
     engine.setSectionFocus([0], 1.0);
     expect(engine.getFocusAmount()).toBeCloseTo(1.0);
-    expect(engine.getChannelFocusMultiplier(0)).toBeCloseTo(1.40); // Forte (+2.9 dB)
-    expect(engine.getChannelFocusMultiplier(1)).toBeCloseTo(0.42); // Piano (-7.5 dB)
+    expect(engine.getChannelFocusMultiplier(0)).toBeCloseTo(1.35); // Forte (+2.6 dB)
+    expect(engine.getChannelFocusMultiplier(1)).toBeCloseTo(0.72); // Gentle Background (-2.8 dB)
 
     // Reset spotlight
     engine.setSectionFocus(null, 0);

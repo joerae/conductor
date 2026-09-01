@@ -405,60 +405,98 @@ export class CameraPreviewOverlay {
         ctx.save();
         const pulse = (Math.sin(now / 120) + 1) / 2; // 0..1 pulse
 
-        // 1. If spotlight active: Draw GPU-accelerated radiant upward spotlight cone & beam
-        if (focusTelemetry.state === "grabbed" || focusTelemetry.state === "hovering") {
-          // Wide outer ambient cone
-          const outerGrad = ctx.createLinearGradient(fx, fy, fx, 0);
-          outerGrad.addColorStop(0, "rgba(255, 213, 107, 0.35)");
-          outerGrad.addColorStop(0.35, "rgba(255, 230, 150, 0.16)");
-          outerGrad.addColorStop(1, "rgba(255, 255, 255, 0.0)");
+        // 1. Full-Stage Angled Laser Ray (Pierces out of camera box to targeted orchestra section)
+        const stageOverlay = document.getElementById("stage-spotlight-ray-overlay") as SVGSVGElement | null;
+        const centerCol = document.getElementById("stage-center-column");
 
-          ctx.beginPath();
-          ctx.moveTo(fx - 14, fy);
-          ctx.lineTo(fx - 44, 0);
-          ctx.lineTo(fx + 44, 0);
-          ctx.lineTo(fx + 14, fy);
-          ctx.closePath();
-          ctx.fillStyle = outerGrad;
-          ctx.fill();
+        if (stageOverlay && centerCol && (focusTelemetry.state === "grabbed" || focusTelemetry.state === "hovering") && this.canvasEl) {
+          const centerRect = centerCol.getBoundingClientRect();
+          const canvasRect = this.canvasEl.getBoundingClientRect();
+          const isMirrored = this.mirror;
 
-          // Intense inner focus beam
-          const innerGrad = ctx.createLinearGradient(fx, fy, fx, 0);
-          innerGrad.addColorStop(0, "rgba(255, 240, 190, 0.75)");
-          innerGrad.addColorStop(0.4, "rgba(255, 220, 110, 0.35)");
-          innerGrad.addColorStop(1, "rgba(255, 255, 255, 0.05)");
+          // Fingertip start position in stage-center-column space (accounting for mirror)
+          const screenNormX = isMirrored ? (1.0 - tip.x) : tip.x;
+          const stageStartX = (canvasRect.left - centerRect.left) + screenNormX * canvasRect.width;
+          const stageStartY = (canvasRect.top - centerRect.top) + tip.y * canvasRect.height;
 
-          ctx.beginPath();
-          ctx.moveTo(fx - 5, fy);
-          ctx.lineTo(fx - 18, 0);
-          ctx.lineTo(fx + 18, 0);
-          ctx.lineTo(fx + 5, fy);
-          ctx.closePath();
-          ctx.fillStyle = innerGrad;
-          ctx.fill();
+          // Pointing direction vector in screen space
+          const pip = pointingHand.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] || pointingHand.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
+          const pipNormX = pip ? (isMirrored ? (1.0 - pip.x) : pip.x) : screenNormX;
+          const pipNormY = pip ? pip.y : (tip.y + 0.05);
+          const dirX = screenNormX - pipNormX;
+          const dirY = tip.y - pipNormY;
+          const len = Math.hypot(dirX, dirY) || 1;
+          const unitX = dirX / len;
+          const unitY = dirY / len;
 
-          // Central radiant core laser beam
-          ctx.beginPath();
-          ctx.moveTo(fx, fy);
-          ctx.lineTo(fx, 0);
-          ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-          ctx.lineWidth = 3.0;
-          ctx.stroke();
+          // Target end position: freely project ray across the stage to orchestra row (Y = 60px)
+          const targetRowY = 60;
+          const rayDist = unitY < -0.05 ? ((stageStartY - targetRowY) / -unitY) : 280;
+          let stageEndX = stageStartX + unitX * rayDist;
+          let stageEndY = Math.max(20, stageStartY + unitY * rayDist);
 
-          // Concentric spotlight halo rings
-          ctx.beginPath();
-          ctx.arc(fx, fy, 22 + pulse * 6, 0, Math.PI * 2);
-          ctx.strokeStyle = "rgba(255, 213, 107, 0.65)";
-          ctx.lineWidth = 2.0;
-          ctx.stroke();
+          const activeSecId = focusTelemetry.grabbedSectionId || focusTelemetry.hoveredSectionId;
+          if (activeSecId) {
+            const secEl = document.getElementById(`section-${activeSecId}`);
+            if (secEl) {
+              const secRect = secEl.getBoundingClientRect();
+              stageEndX = (secRect.left - centerRect.left) + secRect.width / 2;
+              stageEndY = (secRect.top - centerRect.top) + secRect.height * 0.55;
+            }
+          }
+
+          const outerRay = stageOverlay.querySelector("#spotlight-stage-outer-ray") as SVGLineElement | null;
+          const mainRay = stageOverlay.querySelector("#spotlight-stage-ray") as SVGLineElement | null;
+          const coreRay = stageOverlay.querySelector("#spotlight-stage-core") as SVGLineElement | null;
+          const targetGlow = stageOverlay.querySelector("#spotlight-stage-target-glow") as SVGCircleElement | null;
+          const targetRing = stageOverlay.querySelector("#spotlight-stage-target-ring") as SVGCircleElement | null;
+          const targetPip = stageOverlay.querySelector("#spotlight-stage-target-pip") as SVGCircleElement | null;
+
+          if (outerRay && mainRay && coreRay && targetGlow && targetRing && targetPip) {
+            outerRay.setAttribute("x1", stageStartX.toFixed(1));
+            outerRay.setAttribute("y1", stageStartY.toFixed(1));
+            outerRay.setAttribute("x2", stageEndX.toFixed(1));
+            outerRay.setAttribute("y2", stageEndY.toFixed(1));
+
+            mainRay.setAttribute("x1", stageStartX.toFixed(1));
+            mainRay.setAttribute("y1", stageStartY.toFixed(1));
+            mainRay.setAttribute("x2", stageEndX.toFixed(1));
+            mainRay.setAttribute("y2", stageEndY.toFixed(1));
+
+            coreRay.setAttribute("x1", stageStartX.toFixed(1));
+            coreRay.setAttribute("y1", stageStartY.toFixed(1));
+            coreRay.setAttribute("x2", stageEndX.toFixed(1));
+            coreRay.setAttribute("y2", stageEndY.toFixed(1));
+
+            targetGlow.setAttribute("cx", stageEndX.toFixed(1));
+            targetGlow.setAttribute("cy", stageEndY.toFixed(1));
+            targetGlow.setAttribute("r", (16 + pulse * 6).toFixed(1));
+
+            targetRing.setAttribute("cx", stageEndX.toFixed(1));
+            targetRing.setAttribute("cy", stageEndY.toFixed(1));
+            targetRing.setAttribute("r", (10 + pulse * 3).toFixed(1));
+
+            targetPip.setAttribute("cx", stageEndX.toFixed(1));
+            targetPip.setAttribute("cy", stageEndY.toFixed(1));
+
+            // Only show impact flare & ring if actively intersecting an instrument section
+            const showImpact = Boolean(activeSecId);
+            targetGlow.style.display = showImpact ? "" : "none";
+            targetRing.style.display = showImpact ? "" : "none";
+            targetPip.style.display = showImpact ? "" : "none";
+
+            stageOverlay.style.display = "block";
+          }
+        } else if (stageOverlay) {
+          stageOverlay.style.display = "none";
         }
 
-        // 2. Outer targeting reticle ring & glowing aura
+        // 2. Fingertip targeting reticle ring & glowing aura
         ctx.beginPath();
         ctx.arc(fx, fy, 14 + pulse * 4, 0, Math.PI * 2);
         ctx.fillStyle = focusTelemetry.state === "grabbed"
-          ? "rgba(255, 213, 107, 0.18)"
-          : "rgba(107, 231, 255, 0.15)";
+          ? "rgba(255, 213, 107, 0.20)"
+          : "rgba(107, 231, 255, 0.16)";
         ctx.fill();
         ctx.strokeStyle = focusTelemetry.state === "grabbed"
           ? "rgba(255, 213, 107, 0.95)"
@@ -487,13 +525,22 @@ export class CameraPreviewOverlay {
 
         ctx.restore();
       }
+    } else {
+      const stageOverlay = document.getElementById("stage-spotlight-ray-overlay");
+      if (stageOverlay) stageOverlay.style.display = "none";
     }
   }
 
   setFocusModeActive(active: boolean): void {
     if (this.videoEl) {
-      this.videoEl.style.transition = "opacity 0.45s cubic-bezier(0.2, 0.8, 0.2, 1)";
-      this.videoEl.style.opacity = active ? "0.12" : "1.0";
+      this.videoEl.style.transition = "opacity 0.3s ease";
+      // In focus mode, hide the video feed completely so glowing hands stand out on dark stage
+      // and eliminate full video texture GPU compositing overhead!
+      this.videoEl.style.opacity = active ? "0" : "1.0";
+    }
+    const stageOverlay = document.getElementById("stage-spotlight-ray-overlay");
+    if (!active && stageOverlay) {
+      stageOverlay.style.display = "none";
     }
   }
 
