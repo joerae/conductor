@@ -1,9 +1,19 @@
 {
-  "version": "0.25.0",
+  "version": "0.26.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.26.0",
+      "date": "2026-09-02",
+      "summary": "Two-Hands Steeple Spotlight Trigger & Beat Conducting Mode Conflict Isolation",
+      "details": [
+        "Two-Hands Steeple / Prayer Pose Trigger: Holding both hands pressed together vertically upright (steeple/prayer pose) for >180ms now reliably triggers Instrument Spotlight Mode across all tempo modes",
+        "Beat Mode Gesture Isolation: Single-hand vertical pointing is now disabled on entry during Beat Conducting modes (Beat / Inertial, Balanced, Instant) to completely prevent false spotlight triggers during upward beat recovery strokes and vertical dynamic shaping",
+        "Seamless Hand Transition: Once Spotlight Mode is entered, conductors can separate hands and freely aim with either index finger to sweep across the orchestra and spotlight any section"
+      ]
+    },
     {
       "version": "0.25.0",
       "date": "2026-09-02",

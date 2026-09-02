@@ -53,11 +53,20 @@ export class InstrumentFocusController {
   private readonly HOVER_STABLE_MS = 60;  // 60ms debounce for instantaneous, crisp section spotlight
   private readonly EXIT_IDLE_MS = 350;   // 350ms quick & forgiving release after pointing stops
 
+  private tempoMode: string = "gestural";
   private isEnabled: boolean = true; // Feature flag (Default: ON)
   private callbacks: FocusCallbacks;
 
   constructor(callbacks?: FocusCallbacks) {
     this.callbacks = callbacks ?? {};
+  }
+
+  setTempoMode(mode: string): void {
+    this.tempoMode = mode;
+  }
+
+  getTempoMode(): string {
+    return this.tempoMode;
   }
 
   setEnabled(enabled: boolean): void {
@@ -160,7 +169,44 @@ export class InstrumentFocusController {
       return this.getTelemetry();
     }
 
-    // Helper to verify strictly vertical "Finger Up" orientation when entering focus mode
+    // Helper: Checks if two hands are held together pointing straight upwards (Steeple / Prayer Pose 🙏)
+    const isTwoHandsTogetherPointingUp = (sampleList: HandSample[]): boolean => {
+      if (sampleList.length < 2) return false;
+      const s0 = sampleList[0];
+      const s1 = sampleList[1];
+      if (!s0.landmarks || !s1.landmarks || s0.landmarks.length < 21 || s1.landmarks.length < 21) return false;
+
+      const w0 = s0.landmarks[HAND_LANDMARK_INDICES.WRIST];
+      const w1 = s1.landmarks[HAND_LANDMARK_INDICES.WRIST];
+      const m0 = s0.landmarks[HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP];
+      const m1 = s1.landmarks[HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP];
+      const t0 = s0.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP];
+      const t1 = s1.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP];
+      const p0 = s0.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP];
+      const p1 = s1.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP];
+
+      if (!w0 || !w1 || !m0 || !m1 || !t0 || !t1 || !p0 || !p1) return false;
+
+      // 1. Both hands must be held vertically upright (knuckles above wrists)
+      const isUpright0 = w0.y - m0.y > 0.035 && Math.abs(m0.x - w0.x) < (w0.y - m0.y) * 0.75;
+      const isUpright1 = w1.y - m1.y > 0.035 && Math.abs(m1.x - w1.x) < (w1.y - m1.y) * 0.75;
+      if (!isUpright0 || !isUpright1) return false;
+
+      // 2. Both index fingertips must point upwards (tip above pip & wrist)
+      const tipUp0 = t0.y < p0.y - 0.012 && t0.y < w0.y - 0.06;
+      const tipUp1 = t1.y < p1.y - 0.012 && t1.y < w1.y - 0.06;
+      if (!tipUp0 || !tipUp1) return false;
+
+      // 3. Hands must be close together / touching (horizontal proximity)
+      const wristDistX = Math.abs(w0.x - w1.x);
+      const tipDistX = Math.abs(t0.x - t1.x);
+      const mcpDistX = Math.abs(m0.x - m1.x);
+
+      const isTouchingOrClose = (wristDistX < 0.28 || mcpDistX < 0.24) && tipDistX < 0.20;
+      return isTouchingOrClose;
+    };
+
+    // Helper: Checks strictly vertical "Finger Up" orientation for single-hand entry
     const isStrictlyVerticalPointingUp = (sample: HandSample): boolean => {
       const tip = sample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP];
       const pip = sample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP];
@@ -189,31 +235,45 @@ export class InstrumentFocusController {
 
     // 1. Find candidate pointing hand
     let pointingSample: HandSample | null = null;
+    let isEntryTriggered = false;
+
     if (this.isActive) {
-      // Once spotlight mode is active, allow sweeping across any angle
+      // Once spotlight mode is active, allow sweeping across any angle with either hand
       for (const s of samples) {
         if (s.gesture === "Pointing_Up") {
           pointingSample = s;
           break;
         }
       }
+      if (!pointingSample && isTwoHandsTogetherPointingUp(samples)) {
+        pointingSample = samples[0].conductorPoint.y >= samples[1].conductorPoint.y ? samples[0] : samples[1];
+      }
     } else {
-      // Entering spotlight mode requires intentional strictly vertical "Finger Up" gesture
-      for (const s of samples) {
-        if (s.gesture === "Pointing_Up" && isStrictlyVerticalPointingUp(s)) {
-          pointingSample = s;
-          break;
+      // In all modes (Beat Mode & Expressive): Two Hands Held Together Pointing Up (Steeple / Prayer Pose 🙏) triggers entry!
+      const hasTwoHandsTogether = isTwoHandsTogetherPointingUp(samples);
+      if (hasTwoHandsTogether) {
+        isEntryTriggered = true;
+        pointingSample = samples[0].conductorPoint.y >= samples[1].conductorPoint.y ? samples[0] : samples[1];
+      } else if (this.tempoMode === "gestural") {
+        // ONLY in Expressive (Mode E) gestural mode: Single-hand strictly vertical "Finger Up" can also trigger entry.
+        // In Beat conducting modes (Inertial/Balanced/Instant), single-hand points are ignored on entry to prevent beat-stroke conflicts!
+        for (const s of samples) {
+          if (s.gesture === "Pointing_Up" && isStrictlyVerticalPointingUp(s)) {
+            pointingSample = s;
+            isEntryTriggered = true;
+            break;
+          }
         }
       }
     }
 
     // ── Phase A: Entering Spotlight Mode ─────────────────────────────────────
     if (!this.isActive) {
-      if (pointingSample) {
+      if (isEntryTriggered && pointingSample) {
         if (this.pointingStartTime === 0) {
           this.pointingStartTime = now;
         } else if (now - this.pointingStartTime >= this.ENTER_HOLD_MS) {
-          // Stable strictly vertical pointing held -> enter Spotlight Focus Mode
+          // Stable pointing held -> enter Spotlight Focus Mode
           this.isActive = true;
           this.state = "hovering";
           this.lastActiveInteractionTime = now;

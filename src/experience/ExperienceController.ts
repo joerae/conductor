@@ -294,6 +294,7 @@ export class ExperienceController {
       this.cameraInput.setDynamicsMode(this.cameraDynamicsMode);
       this.cameraInput.setThumbsUpVFXEnabled(this.isThumbsUpVFXEnabled);
       this.cameraInput.setFocusModeEnabled(this.isFocusModeEnabled);
+      this.cameraInput.setTempoMode(this.clock.getTempoMode());
 
       const piece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
       if (piece) {
@@ -978,6 +979,9 @@ export class ExperienceController {
   setTempoMode(mode: TempoMode): void {
     this.clock.setTempoMode(mode);
     this.debug.updateTempoMode(mode);
+    if (this.cameraInput) {
+      this.cameraInput.setTempoMode(mode);
+    }
     this.updateBeatsPerTap();
     const beatsPerTap = this.getEffectiveBeatsPerTap();
 

@@ -153,4 +153,47 @@ describe("InstrumentFocusController (Spotlight Mode)", () => {
     expect(controller.getGrabbedSectionId()).toBe(null);
     expect(controller.getSectionFocus()).toBe(0.0);
   });
+
+  it("enters spotlight mode in Beat Mode when two hands are held together pointing up (steeple / prayer pose)", () => {
+    const controller = new InstrumentFocusController();
+    controller.setTempoMode("inertial"); // Beat Mode
+
+    const steepleSamples = [
+      createMockSample({ handIndex: 0, indexTip: { x: 0.48, y: 0.30 } }),
+      createMockSample({ handIndex: 1, indexTip: { x: 0.52, y: 0.30 } }),
+    ];
+
+    controller.update(steepleSamples, MOCK_SECTIONS, 1000);
+    expect(controller.isFocusModeActive()).toBe(false);
+
+    // Held > 180ms
+    controller.update(steepleSamples, MOCK_SECTIONS, 1200);
+    expect(controller.isFocusModeActive()).toBe(true);
+  });
+
+  it("ignores single-hand pointing up on entry in Beat Mode to prevent beat-stroke conflicts", () => {
+    const controller = new InstrumentFocusController();
+    controller.setTempoMode("inertial"); // Beat Mode
+
+    const singlePoint = createMockSample({ gesture: "Pointing_Up" });
+
+    controller.update([singlePoint], MOCK_SECTIONS, 1000);
+    controller.update([singlePoint], MOCK_SECTIONS, 1200);
+    controller.update([singlePoint], MOCK_SECTIONS, 1400);
+
+    // In Beat Mode, single point is ignored for entry
+    expect(controller.isFocusModeActive()).toBe(false);
+  });
+
+  it("allows single-hand pointing up on entry in Expressive Mode", () => {
+    const controller = new InstrumentFocusController();
+    controller.setTempoMode("gestural"); // Expressive Mode
+
+    const singlePoint = createMockSample({ gesture: "Pointing_Up" });
+
+    controller.update([singlePoint], MOCK_SECTIONS, 1000);
+    controller.update([singlePoint], MOCK_SECTIONS, 1200);
+
+    expect(controller.isFocusModeActive()).toBe(true);
+  });
 });

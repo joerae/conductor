@@ -332,6 +332,13 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     return this.focusController.getEnabled();
   }
 
+  /**
+   * Updates tempo mode on focus controller to tailor gesture triggers.
+   */
+  setTempoMode(mode: string): void {
+    this.focusController.setTempoMode(mode);
+  }
+
   private handleCameraStateChange(state: CameraState, error?: string): void {
     this.previewOverlay?.updateState(state, error);
     this.stateChangeCallbacks.forEach(cb => cb(state, error));
