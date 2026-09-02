@@ -1,9 +1,21 @@
 {
-  "version": "0.26.0",
+  "version": "0.26.1",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.26.1",
+      "date": "2026-09-02",
+      "summary": "Audio Degradation Fix, Bus-Based Section Focus, Binary Search Lookahead & Voice Cleanup Timing",
+      "details": [
+        "Bus-Based Section Focus Control: Migrated focus volume modulation entirely onto persistent per-channel sub-buses (ChannelBus.inputGain) and removed per-frame voice iteration, eliminating thousands of stacked AudioParam automations on active ringing notes",
+        "Safe AudioParam Automation: Added safeCancelAutomation with cancelAndHoldAtTime fallback across all DSP controls and separated master limiter configuration from per-frame dynamic continuous presets",
+        "Binary Search Score Transport Lookahead: Replaced O(N) full-score event array filtering with an O(log N + k) binary search lower-bound scan in ScoreTransport.eventsInWindow, reducing tick scan cost to sub-microsecond latency",
+        "Audio-Time Pitch Collision Cleanup: Fixed pitch collision voice cleanup timing to accurately calculate delay from AudioContext time instead of wall-clock time, preventing premature voice disconnection",
+        "Main-Thread DOM & Rate-Limiting: Deduplicated focus DOM mutations in main.ts, cached musician SVG elements, rate-limited camera dynamic updates to ~20 Hz, and added real-time Audio & Scheduler performance telemetry in the Debug Overlay"
+      ]
+    },
     {
       "version": "0.26.0",
       "date": "2026-09-02",

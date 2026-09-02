@@ -150,10 +150,18 @@ function getPromptText(state: ExperienceState, pausedBeat: number, inputSource: 
 
 let channelToSectionMap: Map<number, HTMLElement> = new Map();
 let trackNameToSectionMap: Map<string, HTMLElement> = new Map();
+let sectionMusicianEggsMap: Map<HTMLElement, SVGElement[]> = new Map();
+let sectionTextMap: Map<HTMLElement, {
+  mainText: SVGTextElement | null;
+  decompText: SVGTextElement | null;
+  histText: SVGTextElement | null;
+}> = new Map();
 
 function renderOrchestraStage(piece: PieceDefinition): void {
   channelToSectionMap.clear();
   trackNameToSectionMap.clear();
+  sectionMusicianEggsMap.clear();
+  sectionTextMap.clear();
 
   let sectionsSvg = "";
 
@@ -223,7 +231,7 @@ function renderOrchestraStage(piece: PieceDefinition): void {
     </svg>
   `;
 
-  // Build mapping from channel & trackName to DOM section
+  // Build mapping from channel & trackName to DOM section and pre-cache SVG child nodes
   piece.sections.forEach(sec => {
     const el = document.getElementById(`section-${sec.id}`);
     if (el) {
@@ -231,12 +239,25 @@ function renderOrchestraStage(piece: PieceDefinition): void {
       if (sec.trackNames) {
         sec.trackNames.forEach(tn => trackNameToSectionMap.set(tn.toUpperCase(), el));
       }
+      const eggs = Array.from(el.querySelectorAll<SVGElement>(".musician"));
+      sectionMusicianEggsMap.set(el, eggs);
+
+      sectionTextMap.set(el, {
+        mainText: el.querySelector<SVGTextElement>(".debug-vel-main"),
+        decompText: el.querySelector<SVGTextElement>(".debug-vel-decomp"),
+        histText: el.querySelector<SVGTextElement>(".debug-vel-history"),
+      });
     }
   });
 }
 
 // Map tracking the last 3 velocities for each section
 const sectionVelocityHistory = new Map<string, number[]>();
+
+// Track rendered focus UI state to prevent redundant DOM thrashing
+let lastRenderedFocusActive = false;
+let lastRenderedGrabbedSectionId: string | null = null;
+let lastRenderedHoveredSectionId: string | null = null;
 
 // ── Experience setup ──────────────────────────────────────────────────────────
 
@@ -332,6 +353,19 @@ const controller = new ExperienceController({
     }
   },
   onFocusChange: (telemetry) => {
+    // Only perform DOM mutations if rendered state actually changed
+    if (
+      telemetry.isActive === lastRenderedFocusActive &&
+      telemetry.grabbedSectionId === lastRenderedGrabbedSectionId &&
+      telemetry.hoveredSectionId === lastRenderedHoveredSectionId
+    ) {
+      return;
+    }
+
+    lastRenderedFocusActive = telemetry.isActive;
+    lastRenderedGrabbedSectionId = telemetry.grabbedSectionId;
+    lastRenderedHoveredSectionId = telemetry.hoveredSectionId;
+
     const focusBanner = document.getElementById("focus-banner");
     const focusText = document.getElementById("focus-banner-text");
     const focusBadge = document.getElementById("focus-banner-badge");
@@ -432,7 +466,7 @@ const controller = new ExperienceController({
                       document.querySelector(".instrument-section");
       if (!section) return;
 
-      const eggs = section.querySelectorAll<SVGElement>(".musician");
+      const eggs = sectionMusicianEggsMap.get(section as HTMLElement) || Array.from(section.querySelectorAll<SVGElement>(".musician"));
       const eggIndex = Math.abs(event.midiNote) % Math.max(1, eggs.length);
       const targetEgg = eggs[eggIndex] || eggs[0];
 
@@ -450,9 +484,10 @@ const controller = new ExperienceController({
         history.unshift(event.velocity);
         if (history.length > 3) history.pop();
 
-        const mainText = section.querySelector<SVGTextElement>(".debug-vel-main");
-        const decompText = section.querySelector<SVGTextElement>(".debug-vel-decomp");
-        const histText = section.querySelector<SVGTextElement>(".debug-vel-history");
+        const textElements = sectionTextMap.get(section as HTMLElement);
+        const mainText = textElements?.mainText || section.querySelector<SVGTextElement>(".debug-vel-main");
+        const decompText = textElements?.decompText || section.querySelector<SVGTextElement>(".debug-vel-decomp");
+        const histText = textElements?.histText || section.querySelector<SVGTextElement>(".debug-vel-history");
 
         const d = event.decomp;
         if (mainText) {

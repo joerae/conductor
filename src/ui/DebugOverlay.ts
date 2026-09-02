@@ -48,6 +48,15 @@ interface DebugSnapshot {
   averageJitterMs: number;
   averageJitterPercent: number;
   jitterStatus: "steady" | "accelerando" | "rallentando" | "coasting" | "calibrating";
+
+  // Audio Engine & Scheduler Performance Diagnostics
+  activeVoicesCount: number;
+  pendingCleanupCount: number;
+  channelBusCount: number;
+  automationRequestsPerSec: number;
+  schedTickMs: number;
+  schedEventsExamined: number;
+  schedLateEvents: number;
 }
 
 export class DebugOverlay {
@@ -88,6 +97,13 @@ export class DebugOverlay {
     averageJitterMs: 0,
     averageJitterPercent: 0,
     jitterStatus: "calibrating",
+    activeVoicesCount: 0,
+    pendingCleanupCount: 0,
+    channelBusCount: 0,
+    automationRequestsPerSec: 0,
+    schedTickMs: 0,
+    schedEventsExamined: 0,
+    schedLateEvents: 0,
     dynamics: {
       level: "mf",
       velocityMultiplier: 1.0,
@@ -170,6 +186,13 @@ export class DebugOverlay {
       "jitter-status",
       "jitter-deadband-val",
       "jitter-deadband-window",
+      "voices-active",
+      "voices-cleanup",
+      "channel-buses",
+      "auto-reqs",
+      "sched-tick",
+      "sched-examined",
+      "sched-late",
     ];
 
     keys.forEach((key) => {
@@ -354,6 +377,21 @@ export class DebugOverlay {
   updateAudioLatency(baseLatency: number, outputLatency: number): void {
     this.snapshot.audioLatencyMs = baseLatency * 1000;
     this.snapshot.audioOutputLatencyMs = outputLatency * 1000;
+  }
+
+  updateAudioDiagnostics(
+    diag: import("../audio/AudioEngine").AudioDiagnostics,
+    schedDiag?: import("../scheduler/Scheduler").SchedulerDiagnostics
+  ): void {
+    this.snapshot.activeVoicesCount = diag.activeVoicesCount;
+    this.snapshot.pendingCleanupCount = diag.pendingCleanupCount;
+    this.snapshot.channelBusCount = diag.channelBusCount;
+    this.snapshot.automationRequestsPerSec = diag.automationRequestsPerSec;
+    if (schedDiag) {
+      this.snapshot.schedTickMs = schedDiag.lastTickDurationMs;
+      this.snapshot.schedEventsExamined = schedDiag.eventsExaminedLastTick;
+      this.snapshot.schedLateEvents = schedDiag.lateEventCount;
+    }
   }
 
   updateDynamics(dynamics: DynamicsTelemetry): void {
@@ -585,6 +623,15 @@ export class DebugOverlay {
     if (this.elements["sched-committed"]) this.elements["sched-committed"].textContent = String(s.schedulerCommitted);
     if (this.elements["base-lat"]) this.elements["base-lat"].textContent = `${s.audioLatencyMs.toFixed(1)} ms`;
     if (this.elements["out-lat"]) this.elements["out-lat"].textContent = `${s.audioOutputLatencyMs.toFixed(1)} ms`;
+
+    // Audio Engine & Scheduler Performance Diagnostics
+    if (this.elements["voices-active"]) this.elements["voices-active"].textContent = String(s.activeVoicesCount);
+    if (this.elements["voices-cleanup"]) this.elements["voices-cleanup"].textContent = String(s.pendingCleanupCount);
+    if (this.elements["channel-buses"]) this.elements["channel-buses"].textContent = String(s.channelBusCount);
+    if (this.elements["auto-reqs"]) this.elements["auto-reqs"].textContent = `${s.automationRequestsPerSec} /s`;
+    if (this.elements["sched-tick"]) this.elements["sched-tick"].textContent = `${s.schedTickMs.toFixed(2)} ms`;
+    if (this.elements["sched-examined"]) this.elements["sched-examined"].textContent = String(s.schedEventsExamined);
+    if (this.elements["sched-late"]) this.elements["sched-late"].textContent = String(s.schedLateEvents);
   }
 
   private createContainer(): HTMLElement {
@@ -882,6 +929,13 @@ export class DebugOverlay {
         <tr title="Total score note events committed to Web Audio synthesis"><td>Sched committed</td><td id="dbg-sched-committed">0</td></tr>
         <tr title="Hardware audio input/processing base latency"><td>Base latency</td><td id="dbg-base-lat">0.0 ms</td></tr>
         <tr title="Audio output buffer DAC latency"><td>Output latency</td><td id="dbg-out-lat">0.0 ms</td></tr>
+        <tr title="Currently ringing active WebAudioFont voice gain nodes"><td>Active voices</td><td id="dbg-voices-active">0</td></tr>
+        <tr title="Pending audio voice nodes scheduled for fade/cleanup"><td>Pending cleanups</td><td id="dbg-voices-cleanup">0</td></tr>
+        <tr title="Channel spatial stereo sub-buses"><td>Channel buses</td><td id="dbg-channel-buses">0</td></tr>
+        <tr title="AudioParam automation requests in the last second"><td>DSP automation req/s</td><td id="dbg-auto-reqs">0 /s</td></tr>
+        <tr title="Execution duration of the most recent scheduler tick"><td>Sched tick duration</td><td id="dbg-sched-tick">0.0 ms</td></tr>
+        <tr title="Number of score events examined in lookahead on last tick"><td>Sched examined/tick</td><td id="dbg-sched-examined">0</td></tr>
+        <tr title="Number of score events scheduled with audioTime in the past"><td>Sched late events</td><td id="dbg-sched-late">0</td></tr>
       </table>
     `;
 

@@ -324,33 +324,62 @@ export class ExperienceController {
       }
 
       // Wire camera dynamics directly into existing orchestral dynamic ladder & AudioEngine
+      let lastAudioDynUpdateTime = 0;
+      let lastAppliedDynamicValue = -1;
+
       this.cameraInput.onDynamics(dyn => {
         if (this.inputSource === "camera") {
           // Suppress global dynamics if actively in focus mode
           if (this.cameraInput?.getFocusController().shouldSuppressGlobalDynamics()) {
             return;
           }
-          // Use continuous 0-1 value for smooth interpolated DSP; discrete level is derived internally
-          this.audioEngine.setContinuousDynamic(dyn.value);
+          const now = performance.now();
+          // Rate-limit audio engine continuous dynamics to ~20 Hz (50ms interval) unless large step
+          const valDiff = Math.abs(dyn.value - lastAppliedDynamicValue);
+          if (now - lastAudioDynUpdateTime >= 50 || valDiff >= 0.05) {
+            this.audioEngine.setContinuousDynamic(dyn.value);
+            lastAudioDynUpdateTime = now;
+            lastAppliedDynamicValue = dyn.value;
+          }
           const snappedLevel = this.audioEngine.getDynamicLevel();
-          this.baseDynamicLevel = snappedLevel;
-          this.uiCallbacks.onDynamicChange?.(snappedLevel);
-          this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
+          if (snappedLevel !== this.baseDynamicLevel) {
+            this.baseDynamicLevel = snappedLevel;
+            this.uiCallbacks.onDynamicChange?.(snappedLevel);
+            this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
+          }
         }
       });
 
       // Wire Instrument Focus Mode telemetry & dynamic section mixing
+      let lastAudioFocusUpdateTime = 0;
+      let lastAppliedSectionId: string | null = null;
+      let lastAppliedSectionFocus: number = -1;
+
       this.cameraInput.onFocus(focusTel => {
         if (this.inputSource === "camera") {
-          if (focusTel.isActive && focusTel.grabbedSectionId && focusTel.sectionFocus > 0.001) {
-            const currentPiece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
-            const sec = currentPiece?.sections.find(s => s.id === focusTel.grabbedSectionId);
-            if (sec) {
-              this.audioEngine.setSectionFocus(sec.channels, focusTel.sectionFocus);
+          const now = performance.now();
+          const isFocused = focusTel.isActive && focusTel.grabbedSectionId && focusTel.sectionFocus > 0.001;
+          const targetSectionId = isFocused ? focusTel.grabbedSectionId : null;
+          const targetFocusAmount = isFocused ? focusTel.sectionFocus : 0;
+
+          const hasSectionChanged = targetSectionId !== lastAppliedSectionId;
+          const hasAmountChanged = Math.abs(targetFocusAmount - lastAppliedSectionFocus) > 0.005;
+
+          if (hasSectionChanged || hasAmountChanged || (now - lastAudioFocusUpdateTime >= 50)) {
+            if (targetSectionId && targetFocusAmount > 0.001) {
+              const currentPiece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
+              const sec = currentPiece?.sections.find(s => s.id === targetSectionId);
+              if (sec) {
+                this.audioEngine.setSectionFocus(sec.channels, targetFocusAmount);
+              }
+            } else if (lastAppliedSectionId !== null || lastAppliedSectionFocus > 0.001) {
+              this.audioEngine.setSectionFocus(null, 0);
             }
-          } else {
-            this.audioEngine.setSectionFocus(null, 0);
+            lastAppliedSectionId = targetSectionId;
+            lastAppliedSectionFocus = targetFocusAmount;
+            lastAudioFocusUpdateTime = now;
           }
+
           this.uiCallbacks.onFocusChange?.(focusTel);
         }
       });
@@ -947,6 +976,7 @@ export class ExperienceController {
         this.debug.updateScore(this.transport.getCursorBeat());
         this.debug.updateScheduler(this.scheduler.horizon, this.scheduler.committedCount);
         this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
+        this.debug.updateAudioDiagnostics(this.audioEngine.getAudioDiagnostics(), this.scheduler.getDiagnostics());
         this.uiCallbacks.onBeat();
         break;
       }

@@ -42,6 +42,15 @@ export type NotePlaybackEvent = {
   audioTime: number;
 };
 
+export interface SchedulerDiagnostics {
+  lastTickDurationMs: number;
+  eventsExaminedLastTick: number;
+  lateEventCount: number;
+  maxLatenessMs: number;
+  committedCount: number;
+  horizon: number;
+}
+
 export class Scheduler {
   private transport: ScoreTransport;
   private audioEngine: AudioEngine;
@@ -56,6 +65,14 @@ export class Scheduler {
   public committedCount: number = 0;
   /** Diagnostic: audio time of the furthest committed event. */
   public horizon: number = 0;
+  /** Diagnostic: duration of the last scheduler tick in ms. */
+  public lastTickDurationMs: number = 0;
+  /** Diagnostic: count of events examined in the last tick window. */
+  public eventsExaminedLastTick: number = 0;
+  /** Diagnostic: count of events that were scheduled with audioTime in the past. */
+  public lateEventCount: number = 0;
+  /** Diagnostic: maximum scheduling lateness in ms. */
+  public maxLatenessMs: number = 0;
 
   constructor(
     transport: ScoreTransport,
@@ -92,11 +109,27 @@ export class Scheduler {
     this.committedCount = 0;
     this.horizon = 0;
     this.hasCompleted = false;
+    this.lastTickDurationMs = 0;
+    this.eventsExaminedLastTick = 0;
+    this.lateEventCount = 0;
+    this.maxLatenessMs = 0;
+  }
+
+  getDiagnostics(): SchedulerDiagnostics {
+    return {
+      lastTickDurationMs: Math.round(this.lastTickDurationMs * 100) / 100,
+      eventsExaminedLastTick: this.eventsExaminedLastTick,
+      lateEventCount: this.lateEventCount,
+      maxLatenessMs: Math.round(this.maxLatenessMs * 10) / 10,
+      committedCount: this.committedCount,
+      horizon: Math.round(this.horizon * 1000) / 1000,
+    };
   }
 
   // ── Private ─────────────────────────────────────────────────────────────
 
   private tick(): void {
+    const tickStart = performance.now();
     const audioNow = this.getAudioTime();
     // Advance cursor to match current audio time
     this.transport.advanceTo(audioNow);
@@ -116,6 +149,7 @@ export class Scheduler {
       const windowEnd = Math.max(audioNow + LOOKAHEAD_MS / 1000, cursorAudioTime + LOOKAHEAD_MS / 1000);
 
       const pending = this.transport.eventsInWindow(windowStart, windowEnd);
+      this.eventsExaminedLastTick = pending.length;
 
       for (const event of pending) {
         // Use a composite key: noteId + type to track each note's on/off separately
@@ -127,6 +161,11 @@ export class Scheduler {
         // If audioTime is slightly in the past due to start tap jitter (up to 300ms),
         // schedule immediately (audioNow + 0.004) so opening downbeat notes are NEVER dropped!
         if (audioTime < audioNow) {
+          const latenessMs = (audioNow - audioTime) * 1000;
+          this.lateEventCount++;
+          if (latenessMs > this.maxLatenessMs) {
+            this.maxLatenessMs = latenessMs;
+          }
           if (audioTime >= audioNow - 0.300) {
             audioTime = audioNow + 0.004;
           } else {
@@ -140,7 +179,11 @@ export class Scheduler {
 
         if (audioTime > this.horizon) this.horizon = audioTime;
       }
+    } else {
+      this.eventsExaminedLastTick = 0;
     }
+
+    this.lastTickDurationMs = performance.now() - tickStart;
 
     // Schedule next tick
     this.tickHandle = setTimeout(() => this.tick(), TICK_INTERVAL_MS);

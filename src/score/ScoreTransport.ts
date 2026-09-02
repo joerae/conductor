@@ -156,19 +156,45 @@ export class ScoreTransport {
 
   /**
    * Return all score events whose beat position falls within the given audio time window.
-   * Events are returned in ascending beat order.
+   * Events are returned in ascending beat order using binary search for O(log N + k) efficiency.
    *
    * @param fromAudioTime  Start of the window.
    * @param toAudioTime    End of the window (look-ahead horizon).
    */
   eventsInWindow(fromAudioTime: number, toAudioTime: number): ScoreEvent[] {
-    if (this.fermata) {
+    if (this.fermata || this.events.length === 0) {
       return [];
     }
     const fromBeat = this.beatAtAudioTime(fromAudioTime);
     const toBeat = this.beatAtAudioTime(toAudioTime);
-    // Include boundary margin so opening downbeat notes at originBeat are never missed
-    return this.events.filter(e => e.beat >= fromBeat - 0.05 && e.beat <= toBeat);
+    const minBeat = fromBeat - 0.05;
+
+    if (minBeat > toBeat) {
+      return [];
+    }
+
+    // Binary search for the first event with beat >= minBeat
+    let low = 0;
+    let high = this.events.length;
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      if (this.events[mid].beat >= minBeat) {
+        high = mid;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    const result: ScoreEvent[] = [];
+    for (let i = low; i < this.events.length; i++) {
+      const event = this.events[i];
+      if (event.beat > toBeat) {
+        break;
+      }
+      result.push(event);
+    }
+
+    return result;
   }
 
   /**

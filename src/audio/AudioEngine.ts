@@ -91,6 +91,41 @@ export interface ChannelBus {
   presenceFilter: BiquadFilterNode | null;
   defaultPan: number;
   currentPan: number;
+  currentFocusGain: number;
+  currentPresenceGain: number;
+}
+
+export interface AudioDiagnostics {
+  totalVoicesCreated: number;
+  activeVoicesCount: number;
+  totalVoicesCancelled: number;
+  pendingCleanupCount: number;
+  channelBusCount: number;
+  automationRequestsPerSec: number;
+}
+
+/**
+ * Safely cancels scheduled parameter changes on an AudioParam starting at `time`.
+ * Uses native `cancelAndHoldAtTime` if supported, otherwise safely falls back to
+ * `cancelScheduledValues` and pinning `setValueAtTime(param.value, time)`.
+ */
+export function safeCancelAutomation(param: AudioParam, time: number): void {
+  try {
+    if (typeof (param as unknown as { cancelAndHoldAtTime?: (t: number) => void }).cancelAndHoldAtTime === "function") {
+      (param as unknown as { cancelAndHoldAtTime: (t: number) => void }).cancelAndHoldAtTime(time);
+      return;
+    }
+  } catch {
+    // If cancelAndHoldAtTime threw, fall through to cancelScheduledValues
+  }
+
+  try {
+    const val = param.value;
+    param.cancelScheduledValues(time);
+    param.setValueAtTime(val, time);
+  } catch {
+    // Ignore audio scheduling errors
+  }
 }
 
 /**
@@ -136,9 +171,23 @@ export class AudioEngine {
   private scoreMacroRatio: number = DEFAULT_SCORE_MACRO_RATIO;
   private isLoveMode: boolean = false;
 
+  // Automation deduplication cache
+  private lastAppliedFilterCutoff: number = -1;
+  private lastAppliedShelfGain: number = -999;
+  private lastAppliedReverbWet: number = -1;
+
   // Section Focus Mode State
   private focusedChannels: Set<number> | null = null;
   private focusAmount: number = 0.0;
+  private lastFocusedChannelsKey: string = "";
+  private lastAppliedFocusAmount: number = -1;
+
+  // Voice lifecycle & diagnostics
+  private totalVoicesCreated: number = 0;
+  private totalVoicesCancelled: number = 0;
+  private pendingCleanupCount: number = 0;
+  private pendingCleanupTimers: Set<ReturnType<typeof setTimeout>> = new Set();
+  private automationRequestTimestamps: number[] = [];
 
   // ── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -164,12 +213,44 @@ export class AudioEngine {
   setMasterVolume(vol: number): void {
     this.masterVolume = Math.max(0.0, Math.min(1.25, vol));
     if (this.masterGain && this.ctx) {
+      safeCancelAutomation(this.masterGain.gain, this.ctx.currentTime);
       this.masterGain.gain.setValueAtTime(this.masterVolume, this.ctx.currentTime);
     }
   }
 
   getMasterVolume(): number {
     return this.masterVolume;
+  }
+
+  // ── Diagnostics & Telemetry ──────────────────────────────────────────────
+
+  private recordAutomationRequest(): void {
+    const now = performance.now();
+    this.automationRequestTimestamps.push(now);
+    while (
+      this.automationRequestTimestamps.length > 0 &&
+      now - this.automationRequestTimestamps[0] > 1000
+    ) {
+      this.automationRequestTimestamps.shift();
+    }
+  }
+
+  getAudioDiagnostics(): AudioDiagnostics {
+    const now = performance.now();
+    while (
+      this.automationRequestTimestamps.length > 0 &&
+      now - this.automationRequestTimestamps[0] > 1000
+    ) {
+      this.automationRequestTimestamps.shift();
+    }
+    return {
+      totalVoicesCreated: this.totalVoicesCreated,
+      activeVoicesCount: this.activeVoices.size,
+      totalVoicesCancelled: this.totalVoicesCancelled,
+      pendingCleanupCount: this.pendingCleanupCount,
+      channelBusCount: this.channelBuses.size,
+      automationRequestsPerSec: this.automationRequestTimestamps.length,
+    };
   }
 
   // ── Dynamics & DSP Control ──────────────────────────────────────────────
@@ -192,10 +273,20 @@ export class AudioEngine {
    * Updates the displayed discrete level for UI display without hard-snapping DSP.
    */
   setContinuousDynamic(value: number): void {
-    this.continuousDynamic = Math.max(0, Math.min(1, value));
-    // Update the displayed level by snapping to nearest (for UI ladder)
-    const idx = Math.round(this.continuousDynamic * (DYNAMIC_ORDER.length - 1));
-    this.dynamicLevel = DYNAMIC_ORDER[idx];
+    const clamped = Math.max(0, Math.min(1, value));
+    const idx = Math.round(clamped * (DYNAMIC_ORDER.length - 1));
+    const nextLevel = DYNAMIC_ORDER[idx];
+
+    // Deduplicate: skip if value has not meaningfully changed and discrete level is identical
+    if (
+      Math.abs(clamped - this.continuousDynamic) < 0.003 &&
+      nextLevel === this.dynamicLevel
+    ) {
+      return;
+    }
+
+    this.continuousDynamic = clamped;
+    this.dynamicLevel = nextLevel;
     this.applyContinuousPreset(this.continuousDynamic);
   }
 
@@ -204,7 +295,11 @@ export class AudioEngine {
   }
 
   setDSPBypassFlags(flags: Partial<DSPBypassFlags>): void {
+    const prevLimiter = this.dspBypassFlags.safetyLimiter;
     this.dspBypassFlags = { ...this.dspBypassFlags, ...flags };
+    if (flags.safetyLimiter !== undefined && flags.safetyLimiter !== prevLimiter) {
+      this.updateLimiterParams();
+    }
     this.applyDynamicPreset();
   }
 
@@ -237,7 +332,7 @@ export class AudioEngine {
     // 1. Instantly open master filter & boost high-frequency transient bite, then smooth cosine decay
     if (this.lowPassFilter) {
       const targetCutoff = this.dspBypassFlags.timbreFilter ? preset.filterCutoffHz : 20000;
-      this.lowPassFilter.frequency.cancelScheduledValues(now);
+      safeCancelAutomation(this.lowPassFilter.frequency, now);
       this.lowPassFilter.frequency.setValueAtTime(20000, now);
       const lpfCurve = makeCosineDecayCurve(20000, targetCutoff, 32);
       try {
@@ -248,7 +343,7 @@ export class AudioEngine {
     }
     if (this.highShelfFilter) {
       const targetGain = this.dspBypassFlags.timbreFilter ? preset.highShelfGainDb : 0.0;
-      this.highShelfFilter.gain.cancelScheduledValues(now);
+      safeCancelAutomation(this.highShelfFilter.gain, now);
       this.highShelfFilter.gain.setValueAtTime(4.0, now);
       const shelfCurve = makeCosineDecayCurve(4.0, targetGain, 32);
       try {
@@ -263,7 +358,7 @@ export class AudioEngine {
       try {
         const currentGain = voice.gainNode.gain.value || voice.targetVolume;
         const boostedGain = Math.min(1.0, currentGain * 1.60);
-        voice.gainNode.gain.cancelScheduledValues(now);
+        safeCancelAutomation(voice.gainNode.gain, now);
         voice.gainNode.gain.setValueAtTime(currentGain, now);
         voice.gainNode.gain.linearRampToValueAtTime(boostedGain, now + 0.003);
         const voiceCurve = makeCosineDecayCurve(boostedGain, voice.targetVolume, 32);
@@ -382,11 +477,21 @@ export class AudioEngine {
     // 1. Timbre filters (Low-Pass Filter + High-Shelf Harmonics)
     if (this.lowPassFilter) {
       const targetCutoff = this.dspBypassFlags.timbreFilter ? preset.filterCutoffHz : 20000;
-      this.lowPassFilter.frequency.setTargetAtTime(targetCutoff, now, timeConstant);
+      if (Math.abs(this.lastAppliedFilterCutoff - targetCutoff) > 5) {
+        safeCancelAutomation(this.lowPassFilter.frequency, now);
+        this.lowPassFilter.frequency.setTargetAtTime(targetCutoff, now, timeConstant);
+        this.lastAppliedFilterCutoff = targetCutoff;
+        this.recordAutomationRequest();
+      }
     }
     if (this.highShelfFilter) {
       const targetGain = this.dspBypassFlags.timbreFilter ? preset.highShelfGainDb : 0.0;
-      this.highShelfFilter.gain.setTargetAtTime(targetGain, now, timeConstant);
+      if (Math.abs(this.lastAppliedShelfGain - targetGain) > 0.05) {
+        safeCancelAutomation(this.highShelfFilter.gain, now);
+        this.highShelfFilter.gain.setTargetAtTime(targetGain, now, timeConstant);
+        this.lastAppliedShelfGain = targetGain;
+        this.recordAutomationRequest();
+      }
     }
 
     // 2. Reverb wet gain (0.0 when bypassed, max 0.75 in Love Mode)
@@ -394,17 +499,11 @@ export class AudioEngine {
       const targetReverb = this.isLoveMode
         ? 0.75
         : (this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.0);
-      this.reverbGain.gain.setTargetAtTime(targetReverb, now, timeConstant);
-    }
-
-    // 3. Safety Peak Limiter (Transparent protection against 0dBFS DAC clipping)
-    if (this.limiter) {
-      if (this.dspBypassFlags.safetyLimiter) {
-        this.limiter.threshold.setTargetAtTime(-1.0, now, 0.01);
-        this.limiter.ratio.setTargetAtTime(20.0, now, 0.01);
-      } else {
-        this.limiter.threshold.setTargetAtTime(0.0, now, 0.01);
-        this.limiter.ratio.setTargetAtTime(1.0, now, 0.01);
+      if (Math.abs(this.lastAppliedReverbWet - targetReverb) > 0.005) {
+        safeCancelAutomation(this.reverbGain.gain, now);
+        this.reverbGain.gain.setTargetAtTime(targetReverb, now, timeConstant);
+        this.lastAppliedReverbWet = targetReverb;
+        this.recordAutomationRequest();
       }
     }
   }
@@ -435,26 +534,49 @@ export class AudioEngine {
 
     if (this.lowPassFilter) {
       const target = this.dspBypassFlags.timbreFilter ? filterCutoff : 20000;
-      this.lowPassFilter.frequency.setTargetAtTime(target, now, timeConstant);
+      if (Math.abs(this.lastAppliedFilterCutoff - target) > 5) {
+        safeCancelAutomation(this.lowPassFilter.frequency, now);
+        this.lowPassFilter.frequency.setTargetAtTime(target, now, timeConstant);
+        this.lastAppliedFilterCutoff = target;
+        this.recordAutomationRequest();
+      }
     }
     if (this.highShelfFilter) {
       const target = this.dspBypassFlags.timbreFilter ? shelfGain : 0.0;
-      this.highShelfFilter.gain.setTargetAtTime(target, now, timeConstant);
+      if (Math.abs(this.lastAppliedShelfGain - target) > 0.05) {
+        safeCancelAutomation(this.highShelfFilter.gain, now);
+        this.highShelfFilter.gain.setTargetAtTime(target, now, timeConstant);
+        this.lastAppliedShelfGain = target;
+        this.recordAutomationRequest();
+      }
     }
     if (this.reverbGain) {
       const target = this.isLoveMode
         ? 0.75
         : (this.dspBypassFlags.reverbScaling ? reverbWet : 0.0);
-      this.reverbGain.gain.setTargetAtTime(target, now, timeConstant);
-    }
-    if (this.limiter) {
-      if (this.dspBypassFlags.safetyLimiter) {
-        this.limiter.threshold.setTargetAtTime(-1.0, now, 0.01);
-        this.limiter.ratio.setTargetAtTime(20.0, now, 0.01);
-      } else {
-        this.limiter.threshold.setTargetAtTime(0.0, now, 0.01);
-        this.limiter.ratio.setTargetAtTime(1.0, now, 0.01);
+      if (Math.abs(this.lastAppliedReverbWet - target) > 0.005) {
+        safeCancelAutomation(this.reverbGain.gain, now);
+        this.reverbGain.gain.setTargetAtTime(target, now, timeConstant);
+        this.lastAppliedReverbWet = target;
+        this.recordAutomationRequest();
       }
+    }
+  }
+
+  private updateLimiterParams(): void {
+    if (!this.ctx || !this.limiter) return;
+    const now = this.ctx.currentTime;
+    this.recordAutomationRequest();
+    if (this.dspBypassFlags.safetyLimiter) {
+      safeCancelAutomation(this.limiter.threshold, now);
+      safeCancelAutomation(this.limiter.ratio, now);
+      this.limiter.threshold.setTargetAtTime(-1.0, now, 0.01);
+      this.limiter.ratio.setTargetAtTime(20.0, now, 0.01);
+    } else {
+      safeCancelAutomation(this.limiter.threshold, now);
+      safeCancelAutomation(this.limiter.ratio, now);
+      this.limiter.threshold.setTargetAtTime(0.0, now, 0.01);
+      this.limiter.ratio.setTargetAtTime(1.0, now, 0.01);
     }
   }
 
@@ -465,12 +587,17 @@ export class AudioEngine {
     this.isLoveMode = active;
     if (!this.ctx || !this.reverbGain) return;
     const now = this.ctx.currentTime;
+    this.recordAutomationRequest();
     if (active) {
+      safeCancelAutomation(this.reverbGain.gain, now);
       this.reverbGain.gain.setTargetAtTime(0.75, now, 0.06);
+      this.lastAppliedReverbWet = 0.75;
     } else {
       const preset = DYNAMIC_PRESETS[this.dynamicLevel] || DYNAMIC_PRESETS.mf;
       const target = this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.0;
+      safeCancelAutomation(this.reverbGain.gain, now);
       this.reverbGain.gain.setTargetAtTime(target, now, 0.12);
+      this.lastAppliedReverbWet = target;
     }
   }
 
@@ -502,6 +629,7 @@ export class AudioEngine {
           bus.defaultPan = pan;
           bus.currentPan = pan;
           if (bus.panner && this.ctx) {
+            safeCancelAutomation(bus.panner.pan, this.ctx.currentTime);
             bus.panner.pan.setTargetAtTime(pan, this.ctx.currentTime, 0.08);
           }
         }
@@ -520,7 +648,8 @@ export class AudioEngine {
     if (!bus) {
       const ctx = this.ctx;
       const inputGain = ctx.createGain();
-      inputGain.gain.value = 1.0;
+      const initialFocusGain = this.getChannelFocusMultiplier(channel);
+      inputGain.gain.setValueAtTime(initialFocusGain, ctx.currentTime);
 
       let panner: StereoPannerNode | null = null;
       const defaultPan = this.channelDefaultPans.get(channel) ?? 0.0;
@@ -556,6 +685,8 @@ export class AudioEngine {
         presenceFilter,
         defaultPan,
         currentPan: defaultPan,
+        currentFocusGain: initialFocusGain,
+        currentPresenceGain: 0.0,
       };
       this.channelBuses.set(channel, bus);
     }
@@ -565,68 +696,89 @@ export class AudioEngine {
   /**
    * Sets continuous section focus / spotlight.
    * When focusAmount > 0 and focusedChannels is provided:
-   * - Spotlighted section: Volume boosted to forte tier (~1.40x, +2.9dB),
+   * - Spotlighted section: Volume boosted to forte tier (~1.35x, +2.6dB),
    *   stereo pan pulls smoothly to center stage (0.0), and presence opens up (+2.5dB).
-   * - Other sections: Backgrounded to piano tier (~0.42x, -7.5dB),
-   *   stereo pan disperses outward to the stereo sides (up to ±0.92), and presence softens.
-   * - All active ringing voices and channel sub-buses transition in real time.
+   * - Other sections: Backgrounded to piano tier (~0.72x, -2.8dB),
+   *   stereo pan disperses outward to the stereo sides (up to ±0.85), and presence softens.
+   * - Applied entirely via persistent per-channel bus gains and filters (O(channels), NOT O(active voices)).
    */
   setSectionFocus(focusedChannels: number[] | null, focusAmount: number): void {
     const clamped = Math.max(0.0, Math.min(1.0, focusAmount));
-    if (focusedChannels && focusedChannels.length > 0 && clamped > 0.001) {
-      this.focusedChannels = new Set(focusedChannels);
-      this.focusAmount = clamped;
-    } else {
-      this.focusedChannels = null;
-      this.focusAmount = 0.0;
+    const hasFocus = focusedChannels && focusedChannels.length > 0 && clamped > 0.001;
+    const effectiveChannels = hasFocus ? new Set(focusedChannels) : null;
+    const effectiveAmount = hasFocus ? clamped : 0.0;
+    const channelsKey = effectiveChannels ? Array.from(effectiveChannels).sort((a, b) => a - b).join(",") : "";
+
+    // Deduplicate: If focused channels and focus amount have not materially changed, return immediately
+    if (
+      this.lastFocusedChannelsKey === channelsKey &&
+      Math.abs(this.lastAppliedFocusAmount - effectiveAmount) < 0.005
+    ) {
+      return;
     }
+
+    this.focusedChannels = effectiveChannels;
+    this.focusAmount = effectiveAmount;
+    this.lastFocusedChannelsKey = channelsKey;
+    this.lastAppliedFocusAmount = effectiveAmount;
 
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
+    this.recordAutomationRequest();
 
-    // 1. Smoothly transition all active voices in real time
-    for (const voice of this.activeVoices.values()) {
-      const mult = this.getChannelFocusMultiplier(voice.channel);
-      const targetGain = Math.max(0.0001, voice.targetVolume * mult);
-      try {
-        voice.gainNode.gain.setTargetAtTime(targetGain, now, 0.04);
-      } catch {
-        // Ignore scheduling errors
+    // Move focus-volume control entirely onto persistent per-channel bus gain
+    for (const [ch, bus] of this.channelBuses.entries()) {
+      const targetFocusGain = this.getChannelFocusMultiplier(ch);
+      if (Math.abs(bus.currentFocusGain - targetFocusGain) > 0.005) {
+        safeCancelAutomation(bus.inputGain.gain, now);
+        bus.inputGain.gain.setTargetAtTime(targetFocusGain, now, 0.04);
+        bus.currentFocusGain = targetFocusGain;
       }
-    }
 
-    // 2. Spatial Stereo DSP: Spotlight center pull + other sections disperse outward
-    if (this.focusedChannels && this.focusAmount > 0.001) {
-      for (const [ch, bus] of this.channelBuses.entries()) {
-        if (!bus.panner) continue;
+      // Spatial Stereo DSP: Spotlight center pull + other sections disperse outward
+      if (this.focusedChannels && this.focusAmount > 0.001) {
         if (this.focusedChannels.has(ch)) {
           // Spotlighted section: Pulls to center (0.0) with enhanced presence
-          bus.panner.pan.setTargetAtTime(0.0, now, 0.06);
-          bus.currentPan = 0.0;
-          if (bus.presenceFilter) {
-            bus.presenceFilter.gain.setTargetAtTime(2.5 * this.focusAmount, now, 0.06);
+          const targetPan = 0.0;
+          if (bus.panner && Math.abs(bus.currentPan - targetPan) > 0.005) {
+            safeCancelAutomation(bus.panner.pan, now);
+            bus.panner.pan.setTargetAtTime(targetPan, now, 0.06);
+            bus.currentPan = targetPan;
+          }
+          const targetPres = 2.5 * this.focusAmount;
+          if (bus.presenceFilter && Math.abs(bus.currentPresenceGain - targetPres) > 0.05) {
+            safeCancelAutomation(bus.presenceFilter.gain, now);
+            bus.presenceFilter.gain.setTargetAtTime(targetPres, now, 0.06);
+            bus.currentPresenceGain = targetPres;
           }
         } else {
           // Other sections: Gently widen in stereo panorama
           const defPan = bus.defaultPan;
           const dir = defPan === 0 ? (ch % 2 === 0 ? -1 : 1) : Math.sign(defPan);
           const dispersedPan = dir * Math.min(0.85, Math.max(0.40, Math.abs(defPan) * 1.18));
-          bus.panner.pan.setTargetAtTime(dispersedPan, now, 0.06);
-          bus.currentPan = dispersedPan;
-          if (bus.presenceFilter) {
-            bus.presenceFilter.gain.setTargetAtTime(-1.0 * this.focusAmount, now, 0.06);
+          if (bus.panner && Math.abs(bus.currentPan - dispersedPan) > 0.005) {
+            safeCancelAutomation(bus.panner.pan, now);
+            bus.panner.pan.setTargetAtTime(dispersedPan, now, 0.06);
+            bus.currentPan = dispersedPan;
+          }
+          const targetPres = -1.0 * this.focusAmount;
+          if (bus.presenceFilter && Math.abs(bus.currentPresenceGain - targetPres) > 0.05) {
+            safeCancelAutomation(bus.presenceFilter.gain, now);
+            bus.presenceFilter.gain.setTargetAtTime(targetPres, now, 0.06);
+            bus.currentPresenceGain = targetPres;
           }
         }
-      }
-    } else {
-      // Reset all channels to natural default seating pan and neutral presence
-      for (const bus of this.channelBuses.values()) {
-        if (bus.panner) {
+      } else {
+        // Reset all channels to natural default seating pan and neutral presence
+        if (bus.panner && Math.abs(bus.currentPan - bus.defaultPan) > 0.005) {
+          safeCancelAutomation(bus.panner.pan, now);
           bus.panner.pan.setTargetAtTime(bus.defaultPan, now, 0.10);
           bus.currentPan = bus.defaultPan;
         }
-        if (bus.presenceFilter) {
+        if (bus.presenceFilter && Math.abs(bus.currentPresenceGain - 0.0) > 0.05) {
+          safeCancelAutomation(bus.presenceFilter.gain, now);
           bus.presenceFilter.gain.setTargetAtTime(0.0, now, 0.10);
+          bus.currentPresenceGain = 0.0;
         }
       }
     }
@@ -665,20 +817,21 @@ export class AudioEngine {
     this.lowPassFilter.type = "lowpass";
     this.lowPassFilter.frequency.value = this.dspBypassFlags.timbreFilter ? preset.filterCutoffHz : 20000;
     this.lowPassFilter.Q.value = 0.707;
+    this.lastAppliedFilterCutoff = this.lowPassFilter.frequency.value;
 
     // Dynamic High-Shelf Filter (boosts piercing brass/string brilliance in ff/f, softens in p/pp)
     this.highShelfFilter = ctx.createBiquadFilter();
     this.highShelfFilter.type = "highshelf";
     this.highShelfFilter.frequency.value = 4500;
     this.highShelfFilter.gain.value = this.dspBypassFlags.timbreFilter ? preset.highShelfGainDb : 0.0;
+    this.lastAppliedShelfGain = this.highShelfFilter.gain.value;
 
     // Master Safety Peak Limiter: Transparent soft limiter at -1.0 dBFS (no squash on natural dynamics)
     this.limiter = ctx.createDynamicsCompressor();
-    this.limiter.threshold.value = this.dspBypassFlags.safetyLimiter ? -1.0 : 0.0;
     this.limiter.knee.value = 3.0;
-    this.limiter.ratio.value = this.dspBypassFlags.safetyLimiter ? 20.0 : 1.0;
     this.limiter.attack.value = 0.001;
     this.limiter.release.value = 0.05;
+    this.updateLimiterParams();
 
     // Synthesize clean, warm concert hall stereo impulse response
     const rate = ctx.sampleRate;
@@ -708,6 +861,7 @@ export class AudioEngine {
 
     this.reverbGain = ctx.createGain();
     this.reverbGain.gain.value = this.dspBypassFlags.reverbScaling ? preset.reverbWet : 0.0;
+    this.lastAppliedReverbWet = this.reverbGain.gain.value;
 
     // Routing:
     // masterGain -> lowPassFilter -> highShelfFilter -> limiter -> destination
@@ -805,6 +959,34 @@ export class AudioEngine {
   // ── Phase 1/2/3: Sampled notes & Dynamic voice control ────────────────────
 
   /**
+   * Shared helper to schedule cleanup of an active voice node once its
+   * audio-time fade has fully completed.
+   */
+  private cleanupVoiceAfter(
+    voice: { envelope: { cancel: () => void }; gainNode: GainNode },
+    fadeEndTime: number,
+    safetyMarginMs: number = 50
+  ): void {
+    const now = this.ctx ? this.ctx.currentTime : 0;
+    const delayMs = Math.max(0, (fadeEndTime - now) * 1000) + safetyMarginMs;
+    this.pendingCleanupCount++;
+
+    const timer = setTimeout(() => {
+      this.pendingCleanupCount = Math.max(0, this.pendingCleanupCount - 1);
+      this.pendingCleanupTimers.delete(timer);
+      try {
+        voice.envelope.cancel();
+        voice.gainNode.disconnect();
+        this.totalVoicesCancelled++;
+      } catch {
+        // Ignore if already disconnected
+      }
+    }, delayMs);
+
+    this.pendingCleanupTimers.add(timer);
+  }
+
+  /**
    * Schedule a note-on event using the WebAudioFont sample bank.
    * Applies proportional velocity scaling, dynamic attack shaping, and voice management.
    *
@@ -831,7 +1013,7 @@ export class AudioEngine {
 
     const varName = programToWebAudioFontVar(program, channel);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const preset = (window as any)[varName];
+    const preset = typeof window !== "undefined" ? (window as any)[varName] : (globalThis as any)[varName];
     if (!preset) {
       // Samples not yet decoded — fall back to a click so there is always audio feedback
       this.scheduleClick(audioTime);
@@ -845,17 +1027,10 @@ export class AudioEngine {
     for (const [existingId, voice] of this.activeVoices.entries()) {
       if (voice.channel === channel && voice.midiNote === midiNote) {
         try {
-          voice.gainNode.gain.cancelScheduledValues(audioTime);
+          safeCancelAutomation(voice.gainNode.gain, audioTime);
           voice.gainNode.gain.setValueAtTime(voice.targetVolume, audioTime);
           voice.gainNode.gain.linearRampToValueAtTime(0.0001, audioTime + 0.015);
-          setTimeout(() => {
-            try {
-              voice.envelope.cancel();
-              voice.gainNode.disconnect();
-            } catch {
-              // Ignore
-            }
-          }, 40);
+          this.cleanupVoiceAfter(voice, audioTime + 0.015, 50);
           this.activeVoices.delete(existingId);
         } catch {
           // Ignore
@@ -876,8 +1051,8 @@ export class AudioEngine {
 
     const rawVelRatio = Math.max(0.08, effectiveVelocity / 127);
     const baseVolume = Math.min(1.0, Math.pow(rawVelRatio, 1.15) * 1.05);
-    const focusMultiplier = this.getChannelFocusMultiplier(channel);
-    const volume = Math.min(1.0, baseVolume * focusMultiplier);
+    // Note: Volume is baseVolume; focus multiplier is applied directly by ChannelBus.inputGain
+    const volume = baseVolume;
 
     // Dynamic Attack Time: Bite on loud notes, gentle swell on quiet notes
     const dynamicPreset = DYNAMIC_PRESETS[this.dynamicLevel] || DYNAMIC_PRESETS.mf;
@@ -911,6 +1086,7 @@ export class AudioEngine {
       envelope,
       targetVolume: volume,
     });
+    this.totalVoicesCreated++;
   }
 
   /**
@@ -923,23 +1099,17 @@ export class AudioEngine {
     const voice = this.activeVoices.get(noteId);
     if (!voice || !this.ctx) return;
 
-    const { gainNode, envelope, targetVolume } = voice;
+    const { gainNode, targetVolume } = voice;
     const releaseTime = 0.06; // 60ms natural orchestral release
 
     try {
       const startTime = Math.max(this.ctx.currentTime, audioTime);
+      safeCancelAutomation(gainNode.gain, startTime);
       gainNode.gain.setValueAtTime(targetVolume, startTime);
       gainNode.gain.linearRampToValueAtTime(0.0001, startTime + releaseTime);
 
-      // Clean up after release completes
-      setTimeout(() => {
-        try {
-          envelope.cancel();
-          gainNode.disconnect();
-        } catch {
-          // Ignore if already disconnected
-        }
-      }, Math.max(0, (startTime + releaseTime - this.ctx!.currentTime) * 1000) + 50);
+      // Clean up after release completes using audio-time base
+      this.cleanupVoiceAfter(voice, startTime + releaseTime, 50);
     } catch {
       // Ignore audio scheduling error
     }
@@ -1018,15 +1188,23 @@ export class AudioEngine {
     const now = this.ctx?.currentTime ?? 0;
     for (const voice of this.activeVoices.values()) {
       try {
-        voice.gainNode.gain.cancelScheduledValues(now);
+        safeCancelAutomation(voice.gainNode.gain, now);
         voice.gainNode.gain.linearRampToValueAtTime(0.0001, now + 0.02);
         voice.envelope.cancel();
         voice.gainNode.disconnect();
+        this.totalVoicesCancelled++;
       } catch {
         // Ignore if already completed
       }
     }
     this.activeVoices.clear();
+
+    // Clear all pending voice cleanup timers
+    for (const timer of this.pendingCleanupTimers) {
+      clearTimeout(timer);
+    }
+    this.pendingCleanupTimers.clear();
+    this.pendingCleanupCount = 0;
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
