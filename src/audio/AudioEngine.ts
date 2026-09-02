@@ -58,6 +58,15 @@ declare global {
   }
 }
 
+interface WebAudioFontEnvelope {
+  cancel: () => void;
+  audioBufferSourceNode?: AudioBufferSourceNode | null;
+  disconnect?: () => void;
+  when?: number;
+  duration?: number;
+  target?: AudioNode;
+}
+
 interface WebAudioFontPlayerInstance {
   loader: {
     decodeAfterLoading: (ctx: AudioContext, varName: string) => void;
@@ -70,7 +79,9 @@ interface WebAudioFontPlayerInstance {
     pitch: number,
     duration: number,
     volume?: number
-  ) => { cancel: () => void };
+  ) => WebAudioFontEnvelope;
+  cancelQueue?: (ctx: AudioContext) => void;
+  envelopes?: WebAudioFontEnvelope[];
 }
 
 // ─── Active Voice & Spatial Channel Buses ──────────────────────────────────
@@ -80,7 +91,7 @@ interface ActiveVoice {
   midiNote: number;
   channel: number;
   gainNode: GainNode;
-  envelope: { cancel: () => void };
+  envelope: WebAudioFontEnvelope;
   targetVolume: number;
 }
 
@@ -963,7 +974,7 @@ export class AudioEngine {
    * audio-time fade has fully completed.
    */
   private cleanupVoiceAfter(
-    voice: { envelope: { cancel: () => void }; gainNode: GainNode },
+    voice: ActiveVoice,
     fadeEndTime: number,
     safetyMarginMs: number = 50
   ): void {
@@ -975,7 +986,36 @@ export class AudioEngine {
       this.pendingCleanupCount = Math.max(0, this.pendingCleanupCount - 1);
       this.pendingCleanupTimers.delete(timer);
       try {
-        voice.envelope.cancel();
+        if (voice.envelope) {
+          try {
+            voice.envelope.cancel();
+          } catch {
+            // Ignore
+          }
+          const src = (voice.envelope as any).audioBufferSourceNode;
+          if (src) {
+            try {
+              src.stop(0);
+              src.disconnect();
+            } catch {
+              // Ignore
+            }
+            (voice.envelope as any).audioBufferSourceNode = null;
+          }
+          try {
+            voice.envelope.disconnect?.();
+          } catch {
+            // Ignore
+          }
+          // Prune envelope from WebAudioFont player queue to prevent unbounded memory growth
+          if (this.player && Array.isArray((this.player as any).envelopes)) {
+            const envelopes: any[] = (this.player as any).envelopes;
+            const idx = envelopes.indexOf(voice.envelope);
+            if (idx !== -1) {
+              envelopes.splice(idx, 1);
+            }
+          }
+        }
         voice.gainNode.disconnect();
         this.totalVoicesCancelled++;
       } catch {
@@ -1030,6 +1070,13 @@ export class AudioEngine {
           safeCancelAutomation(voice.gainNode.gain, audioTime);
           voice.gainNode.gain.setValueAtTime(voice.targetVolume, audioTime);
           voice.gainNode.gain.linearRampToValueAtTime(0.0001, audioTime + 0.015);
+          if (voice.envelope && (voice.envelope as any).audioBufferSourceNode) {
+            try {
+              (voice.envelope as any).audioBufferSourceNode.stop(audioTime + 0.020);
+            } catch {
+              // Ignore
+            }
+          }
           this.cleanupVoiceAfter(voice, audioTime + 0.015, 50);
           this.activeVoices.delete(existingId);
         } catch {
@@ -1107,6 +1154,16 @@ export class AudioEngine {
       safeCancelAutomation(gainNode.gain, startTime);
       gainNode.gain.setValueAtTime(targetVolume, startTime);
       gainNode.gain.linearRampToValueAtTime(0.0001, startTime + releaseTime);
+
+      // Explicitly schedule the underlying AudioBufferSourceNode to stop at release end
+      const stopAudioTime = startTime + releaseTime + 0.010;
+      if (voice.envelope && (voice.envelope as any).audioBufferSourceNode) {
+        try {
+          (voice.envelope as any).audioBufferSourceNode.stop(stopAudioTime);
+        } catch {
+          // Ignore if already stopped
+        }
+      }
 
       // Clean up after release completes using audio-time base
       this.cleanupVoiceAfter(voice, startTime + releaseTime, 50);
@@ -1190,7 +1247,15 @@ export class AudioEngine {
       try {
         safeCancelAutomation(voice.gainNode.gain, now);
         voice.gainNode.gain.linearRampToValueAtTime(0.0001, now + 0.02);
-        voice.envelope.cancel();
+        if (voice.envelope) {
+          try { voice.envelope.cancel(); } catch {}
+          const src = (voice.envelope as any).audioBufferSourceNode;
+          if (src) {
+            try { src.stop(now + 0.02); src.disconnect(); } catch {}
+            (voice.envelope as any).audioBufferSourceNode = null;
+          }
+          try { voice.envelope.disconnect?.(); } catch {}
+        }
         voice.gainNode.disconnect();
         this.totalVoicesCancelled++;
       } catch {
@@ -1198,6 +1263,15 @@ export class AudioEngine {
       }
     }
     this.activeVoices.clear();
+
+    if (this.player && Array.isArray((this.player as any).envelopes)) {
+      try {
+        if (this.ctx && typeof this.player.cancelQueue === "function") {
+          this.player.cancelQueue(this.ctx);
+        }
+      } catch {}
+      (this.player as any).envelopes.length = 0;
+    }
 
     // Clear all pending voice cleanup timers
     for (const timer of this.pendingCleanupTimers) {

@@ -7,8 +7,9 @@
     {
       "version": "0.26.1",
       "date": "2026-09-02",
-      "summary": "Audio Degradation Fix, Bus-Based Section Focus, Binary Search Lookahead & Voice Cleanup Timing",
+      "summary": "Audio Degradation Fix: WebAudioFont BufferSourceNode Lifetimes, Envelopes Pruning, Bus-Based Focus & Binary Search",
       "details": [
+        "WebAudioFont BufferSource Lifetime & Envelope Pruning: Fixed 999-second open AudioBufferSourceNode accumulation by explicitly scheduling node stop at note release, disconnecting buffer sources, and pruning expired envelopes from WebAudioFontPlayer.envelopes queue",
         "Bus-Based Section Focus Control: Migrated focus volume modulation entirely onto persistent per-channel sub-buses (ChannelBus.inputGain) and removed per-frame voice iteration, eliminating thousands of stacked AudioParam automations on active ringing notes",
         "Safe AudioParam Automation: Added safeCancelAutomation with cancelAndHoldAtTime fallback across all DSP controls and separated master limiter configuration from per-frame dynamic continuous presets",
         "Binary Search Score Transport Lookahead: Replaced O(N) full-score event array filtering with an O(log N + k) binary search lower-bound scan in ScoreTransport.eventsInWindow, reducing tick scan cost to sub-microsecond latency",
