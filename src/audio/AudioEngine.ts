@@ -113,6 +113,7 @@ export interface AudioDiagnostics {
   pendingCleanupCount: number;
   channelBusCount: number;
   automationRequestsPerSec: number;
+  fontEnvelopesCount: number;
 }
 
 /**
@@ -261,6 +262,9 @@ export class AudioEngine {
       pendingCleanupCount: this.pendingCleanupCount,
       channelBusCount: this.channelBuses.size,
       automationRequestsPerSec: this.automationRequestTimestamps.length,
+      fontEnvelopesCount: (this.player && Array.isArray((this.player as any).envelopes))
+        ? (this.player as any).envelopes.length
+        : 0,
     };
   }
 

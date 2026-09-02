@@ -53,6 +53,7 @@ interface DebugSnapshot {
   activeVoicesCount: number;
   pendingCleanupCount: number;
   channelBusCount: number;
+  fontEnvelopesCount: number;
   automationRequestsPerSec: number;
   schedTickMs: number;
   schedEventsExamined: number;
@@ -100,6 +101,7 @@ export class DebugOverlay {
     activeVoicesCount: 0,
     pendingCleanupCount: 0,
     channelBusCount: 0,
+    fontEnvelopesCount: 0,
     automationRequestsPerSec: 0,
     schedTickMs: 0,
     schedEventsExamined: 0,
@@ -189,6 +191,7 @@ export class DebugOverlay {
       "voices-active",
       "voices-cleanup",
       "channel-buses",
+      "font-envelopes",
       "auto-reqs",
       "sched-tick",
       "sched-examined",
@@ -386,6 +389,7 @@ export class DebugOverlay {
     this.snapshot.activeVoicesCount = diag.activeVoicesCount;
     this.snapshot.pendingCleanupCount = diag.pendingCleanupCount;
     this.snapshot.channelBusCount = diag.channelBusCount;
+    this.snapshot.fontEnvelopesCount = diag.fontEnvelopesCount;
     this.snapshot.automationRequestsPerSec = diag.automationRequestsPerSec;
     if (schedDiag) {
       this.snapshot.schedTickMs = schedDiag.lastTickDurationMs;
@@ -628,6 +632,7 @@ export class DebugOverlay {
     if (this.elements["voices-active"]) this.elements["voices-active"].textContent = String(s.activeVoicesCount);
     if (this.elements["voices-cleanup"]) this.elements["voices-cleanup"].textContent = String(s.pendingCleanupCount);
     if (this.elements["channel-buses"]) this.elements["channel-buses"].textContent = String(s.channelBusCount);
+    if (this.elements["font-envelopes"]) this.elements["font-envelopes"].textContent = String(s.fontEnvelopesCount);
     if (this.elements["auto-reqs"]) this.elements["auto-reqs"].textContent = `${s.automationRequestsPerSec} /s`;
     if (this.elements["sched-tick"]) this.elements["sched-tick"].textContent = `${s.schedTickMs.toFixed(2)} ms`;
     if (this.elements["sched-examined"]) this.elements["sched-examined"].textContent = String(s.schedEventsExamined);
@@ -932,6 +937,7 @@ export class DebugOverlay {
         <tr title="Currently ringing active WebAudioFont voice gain nodes"><td>Active voices</td><td id="dbg-voices-active">0</td></tr>
         <tr title="Pending audio voice nodes scheduled for fade/cleanup"><td>Pending cleanups</td><td id="dbg-voices-cleanup">0</td></tr>
         <tr title="Channel spatial stereo sub-buses"><td>Channel buses</td><td id="dbg-channel-buses">0</td></tr>
+        <tr title="WebAudioFont internal envelope gain and buffer source nodes"><td>Font envelopes</td><td id="dbg-font-envelopes">0</td></tr>
         <tr title="AudioParam automation requests in the last second"><td>DSP automation req/s</td><td id="dbg-auto-reqs">0 /s</td></tr>
         <tr title="Execution duration of the most recent scheduler tick"><td>Sched tick duration</td><td id="dbg-sched-tick">0.0 ms</td></tr>
         <tr title="Number of score events examined in lookahead on last tick"><td>Sched examined/tick</td><td id="dbg-sched-examined">0</td></tr>
