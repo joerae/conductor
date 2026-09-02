@@ -321,6 +321,17 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     return this.isThumbsUpVFXEnabled;
   }
 
+  /**
+   * Toggles Instrument Spotlight Focus Mode feature flag.
+   */
+  setFocusModeEnabled(enabled: boolean): void {
+    this.focusController.setEnabled(enabled);
+  }
+
+  getFocusModeEnabled(): boolean {
+    return this.focusController.getEnabled();
+  }
+
   private handleCameraStateChange(state: CameraState, error?: string): void {
     this.previewOverlay?.updateState(state, error);
     this.stateChangeCallbacks.forEach(cb => cb(state, error));

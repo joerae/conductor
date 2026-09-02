@@ -1,9 +1,18 @@
 {
-  "version": "0.24.0",
+  "version": "0.25.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.25.0",
+      "date": "2026-09-02",
+      "summary": "Focus Mode Debug Feature Flag & Instant Camera AudioContext Initialization",
+      "details": [
+        "Focus Mode Debug Feature Flag: Added an interactive feature flag toggle in the Diagnostics & A/B DSP panel (D key) to enable/disable Instrument Spotlight Focus Mode on demand (ON by default)",
+        "Instant Camera AudioContext Initialization: Fixed initial gestural start by ensuring AudioContext is pre-warmed on camera activation and resumed prior to audio timestamp calculation, eliminating dropped notes when raising hands"
+      ]
+    },
     {
       "version": "0.24.0",
       "date": "2026-09-02",

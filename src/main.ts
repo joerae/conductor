@@ -866,6 +866,13 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+// Unlock AudioContext on first user interaction (pointer or key)
+const unlockAudio = () => {
+  controller.resumeAudio().catch(() => {});
+};
+window.addEventListener("pointerdown", unlockAudio, { once: true });
+window.addEventListener("keydown", unlockAudio, { once: true });
+
 // ── Load application ──────────────────────────────────────────────────────────
 
 loadVersionInfo();

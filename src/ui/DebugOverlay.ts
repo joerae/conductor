@@ -62,6 +62,7 @@ export class DebugOverlay {
   private onTempoModeChange?: (mode: "balanced" | "instant" | "autoplay" | "inertial" | "gestural") => void;
   private onAutoplayInTempo?: () => void;
   private onThumbsUpVFXToggle?: (enabled: boolean) => void;
+  private onFocusModeToggle?: (enabled: boolean) => void;
 
   // Cached DOM elements for live text updates without innerHTML thrashing
   private elements: Record<string, HTMLElement> = {};
@@ -115,7 +116,8 @@ export class DebugOverlay {
     onTempoDeadbandChange?: (ratio: number) => void,
     onTempoModeChange?: (mode: "balanced" | "instant" | "autoplay" | "inertial" | "gestural") => void,
     onAutoplayInTempo?: () => void,
-    onThumbsUpVFXToggle?: (enabled: boolean) => void
+    onThumbsUpVFXToggle?: (enabled: boolean) => void,
+    onFocusModeToggle?: (enabled: boolean) => void
   ) {
     this.onDSPToggle = onDSPToggle;
     this.onTogglePause = onTogglePause;
@@ -126,6 +128,7 @@ export class DebugOverlay {
     this.onTempoModeChange = onTempoModeChange;
     this.onAutoplayInTempo = onAutoplayInTempo;
     this.onThumbsUpVFXToggle = onThumbsUpVFXToggle;
+    this.onFocusModeToggle = onFocusModeToggle;
     this.container = this.createContainer();
     document.body.appendChild(this.container);
 
@@ -215,6 +218,14 @@ export class DebugOverlay {
     thumbsUpVfxCb?.addEventListener("change", () => {
       if (this.onThumbsUpVFXToggle) {
         this.onThumbsUpVFXToggle(thumbsUpVfxCb.checked);
+      }
+    });
+
+    // Wire up Instrument Spotlight Focus Mode toggle (Feature Flag, Default: ON)
+    const focusModeCb = this.container.querySelector<HTMLInputElement>("#dbg-focus-mode-cb");
+    focusModeCb?.addEventListener("change", () => {
+      if (this.onFocusModeToggle) {
+        this.onFocusModeToggle(focusModeCb.checked);
       }
     });
 
@@ -814,6 +825,10 @@ export class DebugOverlay {
         <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Trigger a sparkling celestial particle starburst on the camera preview when showing a Thumbs Up gesture (Feature Flag)">
           <input type="checkbox" id="dbg-thumbsup-vfx-cb" style="accent-color:#ffd56b; margin-right:6px;">
           <span><strong>✨ Thumbs Up Camera VFX Burst</strong> (Sparkle Starburst)</span>
+        </label>
+        <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Enable Camera Instrument Spotlight Focus Mode (Point Up gesture to spotlight and bring instrument section forward in mix)">
+          <input type="checkbox" id="dbg-focus-mode-cb" checked style="accent-color:#ffd56b; margin-right:6px;">
+          <span><strong>🪄 Instrument Spotlight Focus Mode</strong> (Point Up to Mix Section)</span>
         </label>
       </div>
 

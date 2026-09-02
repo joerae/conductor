@@ -53,18 +53,26 @@ export class InstrumentFocusController {
   private readonly HOVER_STABLE_MS = 60;  // 60ms debounce for instantaneous, crisp section spotlight
   private readonly EXIT_IDLE_MS = 350;   // 350ms quick & forgiving release after pointing stops
 
+  private isEnabled: boolean = true; // Feature flag (Default: ON)
   private callbacks: FocusCallbacks;
 
   constructor(callbacks?: FocusCallbacks) {
     this.callbacks = callbacks ?? {};
   }
 
-  setCallbacks(callbacks: FocusCallbacks): void {
-    this.callbacks = { ...this.callbacks, ...callbacks };
+  setEnabled(enabled: boolean): void {
+    this.isEnabled = enabled;
+    if (!enabled && this.isActive) {
+      this.reset();
+    }
+  }
+
+  getEnabled(): boolean {
+    return this.isEnabled;
   }
 
   isFocusModeActive(): boolean {
-    return this.isActive;
+    return this.isEnabled && this.isActive;
   }
 
   shouldSuppressBeats(): boolean {
@@ -138,6 +146,11 @@ export class InstrumentFocusController {
     now: number = performance.now(),
     mirror: boolean = true
   ): FocusTelemetry {
+    if (!this.isEnabled) {
+      if (this.isActive) this.reset();
+      return this.getTelemetry();
+    }
+
     if (samples.length === 0 || sections.length === 0) {
       if (this.isActive) {
         if (now - this.lastActiveInteractionTime > this.EXIT_IDLE_MS) {

@@ -99,6 +99,7 @@ export class ExperienceController {
   private isPartyMode: boolean = false;
   private isLoveMode: boolean = false;
   private isThumbsUpVFXEnabled: boolean = false; // Feature flag (Default: OFF)
+  private isFocusModeEnabled: boolean = true; // Feature flag (Default: ON)
 
   // Overburn decay timer (for ff/fff dynamic)
   private overburnTimer: ReturnType<typeof setTimeout> | null = null;
@@ -160,6 +161,9 @@ export class ExperienceController {
       },
       (enabled: boolean) => {
         this.setThumbsUpVFXEnabled(enabled);
+      },
+      (enabled: boolean) => {
+        this.setFocusModeEnabled(enabled);
       }
     );
 
@@ -289,10 +293,18 @@ export class ExperienceController {
       this.cameraInput = new CameraBeatInputProvider();
       this.cameraInput.setDynamicsMode(this.cameraDynamicsMode);
       this.cameraInput.setThumbsUpVFXEnabled(this.isThumbsUpVFXEnabled);
+      this.cameraInput.setFocusModeEnabled(this.isFocusModeEnabled);
 
       const piece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
       if (piece) {
         this.cameraInput.setSections(piece.sections);
+      }
+
+      // Pre-warm / resume AudioContext on camera activation
+      try {
+        await this.audioEngine.resume();
+      } catch {
+        // Ignored
       }
 
       // Wire camera error fallback to keyboard mode
@@ -724,6 +736,19 @@ export class ExperienceController {
     return this.isThumbsUpVFXEnabled;
   }
 
+  setFocusModeEnabled(enabled: boolean): void {
+    this.isFocusModeEnabled = enabled;
+    this.cameraInput?.setFocusModeEnabled(enabled);
+  }
+
+  isFocusModeActive(): boolean {
+    return this.isFocusModeEnabled;
+  }
+
+  async resumeAudio(): Promise<void> {
+    await this.audioEngine.resume();
+  }
+
   // ── Beat observation handler ─────────────────────────────────────────────
 
   private beatSoundEnabled = false; // Off by default — VFX flash still fires on beat
@@ -826,7 +851,13 @@ export class ExperienceController {
 
   // ── Playback ─────────────────────────────────────────────────────────────
 
-  private startPlayback(): void {
+  private async startPlayback(): Promise<void> {
+    try {
+      await this.audioEngine.resume();
+    } catch {
+      // AudioContext resume might fail in non-user-gesture context in some strict browsers
+    }
+
     if (this.clock.getTempoMode() === "gestural") {
       this.clock.setPeriodMs(60000 / this.currentGesturalBpm);
       this.clock.startRunningAtCurrentPeriod();
