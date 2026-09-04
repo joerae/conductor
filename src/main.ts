@@ -12,6 +12,7 @@ import type { DynamicLevel } from "./audio/dynamicsTypes";
 import { NoteVisualManager } from "./ui/NoteVisualManager";
 import { bpmToPercent, initBpmGaugeTicks } from "./ui/bpmGauge";
 import { SpotlightScoreVisualizer } from "./ui/SpotlightScoreVisualizer";
+import { WarmupManager } from "./warmup/WarmupManager";
 import "./style.css";
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
@@ -19,7 +20,7 @@ import "./style.css";
 const promptEl = document.getElementById("prompt") as HTMLElement;
 const titleEl = document.getElementById("piece-title") as HTMLElement;
 const subtitleEl = document.getElementById("piece-subtitle") as HTMLElement;
-const loadingEl = document.getElementById("loading-screen") as HTMLElement;
+const loadingEl = document.getElementById("loading-screen") as HTMLElement | null;
 const stageEl = document.getElementById("stage") as HTMLElement;
 const beatFlashEl = document.getElementById("beat-flash") as HTMLElement;
 const restartBtn = document.getElementById("restart-btn") as HTMLButtonElement;
@@ -35,6 +36,8 @@ const repertoireModal = document.getElementById("repertoire-modal") as HTMLEleme
 const closeRepertoireBtn = document.getElementById("close-repertoire-btn") as HTMLButtonElement;
 const repertoireList = document.getElementById("repertoire-list") as HTMLElement;
 const silhouetteContainer = document.getElementById("orchestra-silhouette") as HTMLElement;
+const cameraHeroSlot = document.getElementById("camera-hero-slot") as HTMLElement | null;
+const howToConductBtn = document.getElementById("how-to-conduct-btn") as HTMLButtonElement | null;
 
 // ── Beat flash animation ──────────────────────────────────────────────────────
 
@@ -636,11 +639,11 @@ const valOrchestraBpm = document.getElementById("val-orchestra-bpm") as HTMLElem
 const valIndicatedBpm = document.getElementById("val-indicated-bpm") as HTMLElement;
 
 
-function updateBpmGaugeUI(): void {
+function updateBpmGaugeUI(overrideBpm?: number): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const clockState = (controller as any).clock?.getState?.();
-  const orchestraBpm = clockState?.bpm || 0;
-  const indicatedBpm = controller.getIndicatedBpm() || orchestraBpm || 0;
+  const orchestraBpm = overrideBpm ?? (clockState?.bpm || 0);
+  const indicatedBpm = overrideBpm ?? (controller.getIndicatedBpm() || orchestraBpm || 0);
 
   if (orchestraBpm > 0) {
     if (valOrchestraBpm) valOrchestraBpm.textContent = `${orchestraBpm.toFixed(0)}`;
@@ -834,7 +837,7 @@ function openRepertoireModal(): void {
 async function switchPiece(pieceId: string): Promise<void> {
   clearAllNoteVisuals();
   spotlightScoreVisualizer?.hide();
-  loadingEl.style.display = "flex";
+  if (loadingEl) loadingEl.style.display = "flex";
   try {
     await controller.loadPiece(pieceId);
     const piece = controller.getCurrentPiece();
@@ -844,7 +847,7 @@ async function switchPiece(pieceId: string): Promise<void> {
   } catch (err) {
     console.error("Failed to switch piece", err);
   } finally {
-    loadingEl.style.display = "none";
+    if (loadingEl) loadingEl.style.display = "none";
   }
 }
 
@@ -923,12 +926,26 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// Unlock AudioContext on first user interaction (pointer or key)
-const unlockAudio = () => {
-  controller.resumeAudio().catch(() => {});
-};
-window.addEventListener("pointerdown", unlockAudio, { once: true });
-window.addEventListener("keydown", unlockAudio, { once: true });
+let warmupManager: WarmupManager | null = null;
+
+function updateAnalogueDynamicUI(overrideContinuous?: number, overrideLevel?: string): void {
+  const analogueMarker = document.getElementById("dynamic-analogue-marker") as HTMLElement | null;
+  const dynamicCurrentBadge = document.getElementById("dynamic-current-badge") as HTMLElement | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const continuousVal = overrideContinuous ?? (controller as any).audioEngine?.getContinuousDynamic?.() ?? 0.5;
+
+  if (analogueMarker) {
+    // Map continuousVal [0, 1] to horizontal percentage [4%, 96%] so marker glides smoothly along track
+    const pct = Math.max(4, Math.min(96, continuousVal * 92 + 4));
+    analogueMarker.style.left = `${pct}%`;
+  }
+
+  if (dynamicCurrentBadge) {
+    const level = overrideLevel ?? controller.getDynamicLevel();
+    const pct = Math.round(continuousVal * 100);
+    dynamicCurrentBadge.textContent = `${level.toUpperCase()} (${pct}%)`;
+  }
+}
 
 // ── Load application ──────────────────────────────────────────────────────────
 
@@ -940,42 +957,120 @@ loadRepertoireCatalog().then(() => {
   subtitleEl.textContent = `${initialPiece.composer} — ${initialPiece.movement} • ${initialPiece.conductMode || ""}`;
   renderOrchestraStage(initialPiece);
 
-  controller.load().then(() => {
-    loadingEl.style.display = "none";
-    stageEl.style.display = "flex";
-    
-    // Sync UI buttons & hint text with initial controller state (Camera + Mode E)
-    updateInputSourceButtons(controller.getInputSource());
-    updateModeButtons(controller.getTempoMode());
-    initBpmGaugeTicks();
+  // Immediate Shell Render: Stage is active immediately in warming-up mode
+  stageEl.style.display = "flex";
+  stageEl.classList.add("stage-warming-up");
+  if (loadingEl) loadingEl.style.display = "none";
 
-    // Continuous smooth update loop for BPM gauge & Analogue Dynamics Marker
-    function gaugeRenderLoop(): void {
-      updateBpmGaugeUI();
-      updateAnalogueDynamicUI();
-      requestAnimationFrame(gaugeRenderLoop);
-    }
-    gaugeRenderLoop();
-  }).catch(err => {
-    loadingEl.innerHTML = `<p class="error">Failed to load: ${err.message}</p>`;
-  });
+  // Sync UI buttons & hint text with initial controller state (Camera + Mode E)
+  updateInputSourceButtons(controller.getInputSource());
+  updateModeButtons(controller.getTempoMode());
+  initBpmGaugeTicks();
+
+  // Continuous smooth update loop for BPM gauge & Analogue Dynamics Marker
+  function gaugeRenderLoop(): void {
+    updateBpmGaugeUI();
+    updateAnalogueDynamicUI();
+    requestAnimationFrame(gaugeRenderLoop);
+  }
+  gaugeRenderLoop();
+
+  // Instantiate and mount WarmupManager inside camera hero slot
+  if (cameraHeroSlot) {
+    warmupManager = new WarmupManager({
+      onStartConducting: () => {
+        stageEl.classList.remove("stage-warming-up");
+        controller.startConducting();
+        updateControlHints();
+      },
+      onContinueKeyboard: () => {
+        void controller.setInputSource("keyboard");
+        updateControlHints();
+      },
+      onRetryCamera: () => {
+        void controller.setInputSource("camera");
+        updateControlHints();
+      },
+      getCameraAxisMapping: () => controller.getCameraAxisMapping(),
+      onTempoDemonstration: (bpm) => {
+        updateBpmGaugeUI(bpm);
+      },
+      onDynamicsDemonstration: (level, continuous) => {
+        updateAnalogueDynamicUI(continuous, level);
+      },
+      onSpotlightSection: (sectionId) => {
+        if (sectionId) {
+          const secEl = document.getElementById(`section-${sectionId}`);
+          if (secEl) {
+            const eggs = sectionMusicianEggsMap.get(secEl) || [];
+            eggs.forEach(egg => egg.classList.add("playing"));
+            setTimeout(() => eggs.forEach(egg => egg.classList.remove("playing")), 300);
+          }
+        }
+      },
+    });
+
+    const audioCtx = controller.getAudioEngine().getAudioContext() ?? undefined;
+    warmupManager.mount(cameraHeroSlot, audioCtx);
+
+    // Kick off background piece loading with coordinator
+    controller.loadWithCoordinator(warmupManager.getCoordinator()).catch(err => {
+      console.error("Conductor loadWithCoordinator error:", err);
+    });
+  } else {
+    // Fallback if camera slot missing
+    controller.load().catch(err => {
+      console.error("Conductor fallback load error:", err);
+    });
+  }
 });
 
-function updateAnalogueDynamicUI(): void {
-  const analogueMarker = document.getElementById("dynamic-analogue-marker") as HTMLElement | null;
-  const dynamicCurrentBadge = document.getElementById("dynamic-current-badge") as HTMLElement | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const continuousVal = (controller as any).audioEngine?.getContinuousDynamic?.() ?? 0.5;
+// Wire user interaction to unlock audio & start warm-up sound
+const handleWarmupUserGesture = () => {
+  controller.resumeAudio().then(() => {
+    const audioCtx = controller.getAudioEngine().getAudioContext();
+    if (audioCtx && warmupManager) {
+      void warmupManager.handleStartWarmupWithGesture(audioCtx);
+    }
+  }).catch(() => {});
+};
+window.addEventListener("pointerdown", handleWarmupUserGesture, { once: true });
+window.addEventListener("keydown", handleWarmupUserGesture, { once: true });
 
-  if (analogueMarker) {
-    // Map continuousVal [0, 1] to horizontal percentage [4%, 96%] so marker glides smoothly along track
-    const pct = Math.max(4, Math.min(96, continuousVal * 92 + 4));
-    analogueMarker.style.left = `${pct}%`;
+// Footer "How to conduct" tutorial replay button
+howToConductBtn?.addEventListener("click", () => {
+  if (!cameraHeroSlot) return;
+  stageEl.classList.add("stage-warming-up");
+  if (!warmupManager) {
+    warmupManager = new WarmupManager({
+      onStartConducting: () => {
+        stageEl.classList.remove("stage-warming-up");
+        controller.startConducting();
+        updateControlHints();
+      },
+      onContinueKeyboard: () => {
+        void controller.setInputSource("keyboard");
+        updateControlHints();
+      },
+      onRetryCamera: () => {
+        void controller.setInputSource("camera");
+        updateControlHints();
+      },
+      getCameraAxisMapping: () => controller.getCameraAxisMapping(),
+      onTempoDemonstration: (bpm) => updateBpmGaugeUI(bpm),
+      onDynamicsDemonstration: (level, continuous) => updateAnalogueDynamicUI(continuous, level),
+      onSpotlightSection: (sectionId) => {
+        if (sectionId) {
+          const secEl = document.getElementById(`section-${sectionId}`);
+          if (secEl) {
+            const eggs = sectionMusicianEggsMap.get(secEl) || [];
+            eggs.forEach(egg => egg.classList.add("playing"));
+            setTimeout(() => eggs.forEach(egg => egg.classList.remove("playing")), 300);
+          }
+        }
+      },
+    });
   }
-
-  if (dynamicCurrentBadge) {
-    const level = controller.getDynamicLevel();
-    const pct = Math.round(continuousVal * 100);
-    dynamicCurrentBadge.textContent = `${level.toUpperCase()} (${pct}%)`;
-  }
-}
+  const audioCtx = controller.getAudioEngine().getAudioContext() ?? undefined;
+  warmupManager.replayWarmup(cameraHeroSlot, audioCtx);
+});

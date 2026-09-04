@@ -21,6 +21,7 @@ import { DebugOverlay } from "../ui/DebugOverlay";
 import { DEFAULT_PIECE_ID, getPieceById, REPERTOIRE } from "../score/repertoire";
 import type { PieceDefinition } from "../score/repertoire";
 import type { VelocityDecomposition } from "../audio/dynamicsTypes";
+import { LoadingCoordinator } from "../warmup/LoadingCoordinator";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -249,17 +250,43 @@ export class ExperienceController {
 
   // ── Lifecycle & Repertoire ────────────────────────────────────────────────
 
-  async load(pieceId: string = DEFAULT_PIECE_ID): Promise<void> {
+  private activeCoordinator: LoadingCoordinator | null = null;
+
+  getAudioEngine(): AudioEngine {
+    return this.audioEngine;
+  }
+
+  startConducting(): void {
+    this.currentGesturalBpm = this.nominalPieceBpm;
+    this.clock.setBpm(this.nominalPieceBpm);
+    this.indicatedBpm = Math.round(this.nominalPieceBpm);
+    this.baseDynamicLevel = "mf";
+    this.audioEngine.setDynamicLevel("mf");
+    this.prepTapCount = 0;
+    this.pausedBeat = 0;
+    this.setState("ready");
+    this.uiCallbacks.onStateChange?.("ready");
+    this.uiCallbacks.onDynamicChange?.("mf");
+  }
+
+  async load(
+    pieceId: string = DEFAULT_PIECE_ID,
+    coordinator?: LoadingCoordinator
+  ): Promise<void> {
+    if (coordinator) {
+      return this.loadWithCoordinator(coordinator, pieceId);
+    }
+
     this.setState("loading");
     this.currentPieceId = pieceId;
     const piece = getPieceById(pieceId) || REPERTOIRE[0];
 
     try {
-      // Load MIDI score and instrument samples in parallel
+      // Prioritize violin asset and piece-specific instrument banks
       await Promise.all([
         this.midiScore.load(piece.midiUrl),
-        this.audioEngine.loadSamples().catch(err =>
-          console.warn("Conductor: sample loading failed, using fallback click", err)
+        this.audioEngine.loadPieceSamples(piece).catch(err =>
+          console.warn("Conductor: piece sample loading failed, using fallback click", err)
         ),
       ]);
       this.transport.setEvents(this.midiScore.getEvents(), this.midiScore.getMetadata().totalBeats);
@@ -308,6 +335,96 @@ export class ExperienceController {
       console.error("Conductor: failed to load piece", err);
       throw err;
     }
+  }
+
+  async loadWithCoordinator(
+    coordinator: LoadingCoordinator,
+    pieceId: string = DEFAULT_PIECE_ID
+  ): Promise<void> {
+    this.activeCoordinator = coordinator;
+    this.setState("loading");
+    this.currentPieceId = pieceId;
+    const piece = getPieceById(pieceId) || REPERTOIRE[0];
+
+    coordinator.updateTask("shell", "ready");
+
+    // 1. Kick off Warm-up Violin & Player load immediately (priority asset)
+    coordinator.updateTask("warmupViolin", "loading");
+    const violinPromise = this.audioEngine.loadWarmupViolin()
+      .then(() => coordinator.updateTask("warmupViolin", "ready"))
+      .catch(err => {
+        console.warn("Warm-up violin load warning:", err);
+        coordinator.updateTask("warmupViolin", "ready");
+      });
+
+    // 2. Kick off MIDI score load
+    coordinator.updateTask("score", "loading");
+    const scorePromise = this.midiScore.load(piece.midiUrl)
+      .then(() => {
+        this.transport.setEvents(this.midiScore.getEvents(), this.midiScore.getMetadata().totalBeats);
+        const beatsPerTap = this.getEffectiveBeatsPerTap();
+        this.clock.setBeatsPerTap(beatsPerTap);
+        this.transport.setBeatsPerTap(beatsPerTap);
+
+        const meta = this.midiScore.getMetadata();
+        this.nominalPieceBpm = meta?.embeddedBpm || piece.defaultBpm || 140;
+        this.basePieceBpm = this.nominalPieceBpm;
+        this.currentGesturalBpm = this.nominalPieceBpm;
+        if (this.clock.getTempoMode() === "inertial") {
+          this.clock.setPeriodMs((60000 / this.basePieceBpm) * beatsPerTap);
+        } else {
+          this.clock.setPeriodMs(60000 / this.basePieceBpm);
+        }
+        coordinator.updateTask("score", "ready");
+      })
+      .catch(err => {
+        coordinator.updateTask("score", "error");
+        throw err;
+      });
+
+    // 3. Kick off Piece Instrument Samples load (selective!)
+    coordinator.updateTask("instruments", "loading");
+    const instrumentsPromise = this.audioEngine.loadPieceSamples(piece)
+      .then(() => {
+        coordinator.updateTask("instruments", "ready");
+        this.audioEngine.preloadRemainingSamples();
+      })
+      .catch(err => {
+        console.warn("Piece instruments load warning, using click/synth fallback:", err);
+        coordinator.updateTask("instruments", "ready");
+      });
+
+    // 4. Wire keyboard subscription immediately
+    if (this.unsubscribeKeyboard) {
+      this.unsubscribeKeyboard();
+      this.unsubscribeKeyboard = null;
+    }
+    this.unsubscribeKeyboard = this.keyboardInput.onBeat(obs => this.handleBeatObservation(obs));
+    this.keyboardInput.start();
+
+    if (this.cameraInput) {
+      this.cameraInput.setSections(piece.sections);
+    }
+    this.audioEngine.setDefaultSectionPanning(piece.sections);
+    this.audioEngine.setSectionFocus(null, 0);
+
+    // 5. If camera mode, kick off camera initialization
+    let cameraPromise = Promise.resolve();
+    if (this.inputSource === "camera") {
+      coordinator.updateTask("cameraPermission", "loading");
+      coordinator.updateTask("handTracking", "loading");
+      cameraPromise = this.initCamera().catch(err => {
+        console.warn("Camera init failed during warmup, continuing with keyboard:", err);
+        coordinator.updateTask("cameraPermission", "error");
+        coordinator.updateTask("handTracking", "error");
+      });
+    }
+
+    await Promise.all([violinPromise, scorePromise, instrumentsPromise, cameraPromise]);
+
+    this.prepTapCount = 0;
+    this.pausedBeat = 0;
+    this.setState("ready");
   }
 
   async setInputSource(source: InputSource): Promise<void> {
@@ -405,9 +522,19 @@ export class ExperienceController {
           // Ignored
         }
 
-        // Wire camera error fallback to keyboard mode
+        // Wire camera state to loading coordinator & error fallback to keyboard mode
         this.cameraInput.onStateChange((state, err) => {
-          if (state === "error") {
+          if (state === "requesting_permission") {
+            this.activeCoordinator?.updateTask("cameraPermission", "loading");
+          } else if (state === "loading_model") {
+            this.activeCoordinator?.updateTask("cameraPermission", "ready");
+            this.activeCoordinator?.updateTask("handTracking", "loading");
+          } else if (state === "tracking") {
+            this.activeCoordinator?.updateTask("cameraPermission", "ready");
+            this.activeCoordinator?.updateTask("handTracking", "ready");
+          } else if (state === "error") {
+            this.activeCoordinator?.updateTask("cameraPermission", "error");
+            this.activeCoordinator?.updateTask("handTracking", "error");
             console.warn("Camera failed to load, gracefully falling back to keyboard mode:", err);
             void this.setInputSource("keyboard");
           }

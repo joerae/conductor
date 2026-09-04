@@ -1,9 +1,24 @@
 {
-  "version": "0.28.0",
+  "version": "0.29.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.29.0",
+      "date": "2026-09-04",
+      "summary": "Interactive Warming Up Experience: Immediate Shell Render, Monotonic Progress, Priority SoundFonts & 3-Step Interactive Tutorial",
+      "details": [
+        "Immediate Shell Render: Replaced blank loading screen with instant render (<500ms) of stage, orchestra layout, and camera hero slot in warming-up state",
+        "LoadingCoordinator Monotonic Progress: Honest, weighted task progress tracking across shell, warm-up violin, score, piece soundfonts, and camera hand tracking with user-friendly stage status messages",
+        "Prioritized SoundFont & Asset Delivery: Prioritized WebAudioFontPlayer and Violin (prog 40) script downloads first, enabling an audible interactive warm-up while score and full orchestral banks load in the background",
+        "Isolated WarmupAudioPlayer Transport: Created dedicated, memory-safe warm-up audio engine playing Ode to Joy phrase with pitch responsiveness, continuous dynamic scaling, and mute controls",
+        "WarmupVisuals & Silhouettes: Interactive SVG hand silhouette tutorial demonstrating Tempo modulation (Lesson 1), Dynamics shaping (Lesson 2), and Instrument Spotlight (Lesson 3) in sync with audio and UI gauges",
+        "Axis Mapping Awareness: Warm-up tutorial automatically adapts visual gestures and instructions between Default Flipped (Width=Tempo, Height=Dynamics) and Classic (Height=Tempo, Width=Dynamics)",
+        "Accessibility & Reduced Motion: Compliant with prefers-reduced-motion using static keyframe demonstration poses, ARIA polite live regions, and screen reader announcements",
+        "Fast-Path & Tutorial Replay: Returning users bypass full tutorial once assets are ready, and a new 'How to conduct' footer button allows replaying the interactive warm-up at any time"
+      ]
+    },
     {
       "version": "0.28.0",
       "date": "2026-09-04",

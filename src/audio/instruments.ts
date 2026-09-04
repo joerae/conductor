@@ -93,3 +93,37 @@ export const WEBAUDIOFONT_SCRIPTS: string[] = [
   "https://surikov.github.io/webaudiofontdata/sound/0560_FluidR3_GM_sf2_file.js",   // Trumpet  (prog 56)
   "https://surikov.github.io/webaudiofontdata/sound/0600_FluidR3_GM_sf2_file.js",   // French Horn (prog 60)
 ];
+
+export const WEBAUDIOFONT_PLAYER_URL =
+  "https://surikov.github.io/webaudiofont/npm/dist/WebAudioFontPlayer.js";
+
+export const VIOLIN_SCRIPT_URL =
+  "https://surikov.github.io/webaudiofontdata/sound/0400_FluidR3_GM_sf2_file.js";
+
+export function getProgramScriptUrl(program: number): string {
+  const code = String(program * 10).padStart(4, "0");
+  return `https://surikov.github.io/webaudiofontdata/sound/${code}_FluidR3_GM_sf2_file.js`;
+}
+
+/**
+ * Returns only the WebAudioFont script URLs required for the given piece.
+ * Always includes piano fallback (prog 0) and violin (prog 40).
+ */
+export function getScriptsForPiece(piece: { sections: Array<{ programs: number[] }> }): string[] {
+  const neededPrograms = new Set<number>([0, 40]);
+  for (const section of piece.sections) {
+    for (const prog of section.programs) {
+      neededPrograms.add(prog);
+    }
+  }
+
+  const scripts: string[] = [];
+  for (const prog of neededPrograms) {
+    const url = getProgramScriptUrl(prog);
+    if (WEBAUDIOFONT_SCRIPTS.includes(url) && !scripts.includes(url)) {
+      scripts.push(url);
+    }
+  }
+  return scripts;
+}
+

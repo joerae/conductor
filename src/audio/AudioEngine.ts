@@ -13,7 +13,13 @@
  *   - A/B Debug Bypass controls for isolating individual DSP components.
  */
 
-import { programToWebAudioFontVar, WEBAUDIOFONT_SCRIPTS } from "./instruments";
+import {
+  programToWebAudioFontVar,
+  WEBAUDIOFONT_SCRIPTS,
+  WEBAUDIOFONT_PLAYER_URL,
+  VIOLIN_SCRIPT_URL,
+  getScriptsForPiece,
+} from "./instruments";
 import {
   DYNAMIC_PRESETS,
   DYNAMIC_ORDER,
@@ -889,21 +895,72 @@ export class AudioEngine {
   }
 
   /**
+   * Load the WebAudioFontPlayer and prioritized violin sample bank (Prog 40)
+   * so the warm-up interactive loop can begin as early as possible.
+   */
+  async loadWarmupViolin(): Promise<void> {
+    await this.ensurePlayer();
+    await this.loadScript(VIOLIN_SCRIPT_URL);
+
+    if (this.ctx && this.player) {
+      this.decodeScriptUrl(VIOLIN_SCRIPT_URL);
+    }
+  }
+
+  /**
+   * Load only the instrument sample banks required for the given piece.
+   */
+  async loadPieceSamples(piece: { sections: Array<{ programs: number[] }> }): Promise<void> {
+    await this.ensurePlayer();
+    const urls = getScriptsForPiece(piece);
+    await Promise.all(urls.map(url => this.loadScript(url)));
+
+    if (this.ctx && this.player) {
+      for (const url of urls) {
+        this.decodeScriptUrl(url);
+      }
+    }
+    this.samplesLoaded = true;
+  }
+
+  /**
+   * Preload remaining repertoire soundfonts during browser idle time.
+   */
+  preloadRemainingSamples(): void {
+    const loadIdle = () => {
+      Promise.all(WEBAUDIOFONT_SCRIPTS.map(url => this.loadScript(url)))
+        .then(() => {
+          if (this.ctx && this.player) {
+            this.decodeLoadedSamples();
+          }
+        })
+        .catch(err => console.warn("Background SoundFont preload idle warning:", err));
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      (window as any).requestIdleCallback(loadIdle);
+    } else {
+      setTimeout(loadIdle, 3000);
+    }
+  }
+
+  private async ensurePlayer(): Promise<void> {
+    if (this.player) return;
+    await this.loadScript(WEBAUDIOFONT_PLAYER_URL);
+    if (!this.player && typeof window !== "undefined" && (window as any).WebAudioFontPlayer) {
+      this.player = new (window as any).WebAudioFontPlayer();
+      (window as any)._conductorWebAudioFontPlayer = this.player;
+    }
+  }
+
+  /**
    * Load all WebAudioFont sample banks needed for Phase 1/2/3.
    * Downloads scripts and initializes the player.
    * Can be called during app initialization (does not require user gesture).
    */
   async loadSamples(): Promise<void> {
     if (this.samplesLoaded) return;
-
-    // Load the WebAudioFontPlayer script if not already present
-    await this.loadScript(
-      "https://surikov.github.io/webaudiofont/npm/dist/WebAudioFontPlayer.js"
-    );
-
-    // Instantiate the player
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.player = new (window as any).WebAudioFontPlayer();
+    await this.ensurePlayer();
 
     // Load all instrument sample scripts in parallel
     await Promise.all(
@@ -918,13 +975,26 @@ export class AudioEngine {
     this.samplesLoaded = true;
   }
 
+  getAudioContext(): AudioContext | null {
+    return this.ctx;
+  }
+
+  getWebAudioFontPlayer(): WebAudioFontPlayerInstance | null {
+    return this.player;
+  }
+
+  private decodeScriptUrl(url: string): void {
+    if (!this.ctx || !this.player) return;
+    const varName = this.urlToVarName(url);
+    if (varName && (window as any)[varName]) {
+      this.player.loader.decodeAfterLoading(this.ctx, varName);
+    }
+  }
+
   private decodeLoadedSamples(): void {
     if (!this.ctx || !this.player) return;
     for (const url of WEBAUDIOFONT_SCRIPTS) {
-      const varName = this.urlToVarName(url);
-      if (varName && (window as any)[varName]) {
-        this.player.loader.decodeAfterLoading(this.ctx, varName);
-      }
+      this.decodeScriptUrl(url);
     }
   }
 

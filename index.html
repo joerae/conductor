@@ -16,16 +16,8 @@
 
 <body>
 
-  <!-- Loading screen -->
-  <div id="loading-screen">
-    <div class="loading-inner">
-      <div class="loading-spinner"></div>
-      <p>Preparing the orchestra…</p>
-    </div>
-  </div>
-
-  <!-- Stage (hidden until loaded) -->
-  <div id="stage" style="display:none" data-state="ready">
+  <!-- Stage (Visible immediately as interactive warming-up shell) -->
+  <div id="stage" class="stage-warming-up" data-state="loading">
 
     <!-- Beat flash overlay -->
     <div id="beat-flash"></div>
@@ -321,7 +313,9 @@
 
     <!-- Footer controls -->
     <footer id="stage-footer">
-      <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.28.0</button>
+      <button id="how-to-conduct-btn" class="subtle-link" aria-label="Replay warming up conducting tutorial">How to conduct</button>
+      <span class="footer-divider">•</span>
+      <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.29.0</button>
       <span class="footer-divider">•</span>
       <span id="debug-hint" class="debug-hint">Press D for debug overlay & A/B DSP</span>
     </footer>
