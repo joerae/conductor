@@ -35,6 +35,7 @@ export class HandTracker {
   private isRunning = false;
   private animFrameId: number | null = null;
   private lastVideoTime = -1;
+  private startGeneration = 0;
 
   private config: CameraConfig;
   private callbacks: Set<HandTrackerCallback> = new Set();
@@ -60,6 +61,10 @@ export class HandTracker {
   onStateChange(callback: (state: CameraState, error?: string) => void): () => void {
     this.stateChangeCallbacks.add(callback);
     return () => this.stateChangeCallbacks.delete(callback);
+  }
+
+  isTrackingRunning(): boolean {
+    return this.isRunning;
   }
 
   /**
@@ -108,9 +113,15 @@ export class HandTracker {
    */
   async start(video: HTMLVideoElement): Promise<void> {
     if (this.isRunning) return;
+    const currentGeneration = ++this.startGeneration;
 
     if (!this.handLandmarker) {
       await this.initModel();
+    }
+
+    // Abort if stop() or another start() was called while awaiting model loading
+    if (currentGeneration !== this.startGeneration) {
+      return;
     }
 
     this.isRunning = true;
@@ -121,7 +132,7 @@ export class HandTracker {
     this.emitState("tracking");
 
     const processLoop = () => {
-      if (!this.isRunning) return;
+      if (!this.isRunning || currentGeneration !== this.startGeneration) return;
 
       const now = performance.now();
       this.frameCount++;
@@ -256,6 +267,7 @@ export class HandTracker {
    * Stops the inference loop and cancels the animation frame.
    */
   stop(): void {
+    this.startGeneration++;
     this.isRunning = false;
     if (this.animFrameId !== null) {
       cancelAnimationFrame(this.animFrameId);

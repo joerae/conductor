@@ -200,6 +200,8 @@ export class AudioEngine {
   private pendingCleanupCount: number = 0;
   private pendingCleanupTimers: Set<ReturnType<typeof setTimeout>> = new Set();
   private automationRequestTimestamps: number[] = [];
+  private loadedScriptUrls: Set<string> = new Set();
+  private pendingScriptLoads: Map<string, Promise<void>> = new Map();
 
   // ── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -750,16 +752,16 @@ export class AudioEngine {
         bus.currentFocusGain = targetFocusGain;
       }
 
-      // Spatial Stereo DSP: Spotlight center pull + other sections disperse outward
+      // Keep stereo pan anchored to its natural seating position (no center pull or side dispersion)
+      if (bus.panner && Math.abs(bus.currentPan - bus.defaultPan) > 0.005) {
+        safeCancelAutomation(bus.panner.pan, now);
+        bus.panner.pan.setTargetAtTime(bus.defaultPan, now, 0.06);
+        bus.currentPan = bus.defaultPan;
+      }
+
+      // Presence filter enhancement for spotlighted section
       if (this.focusedChannels && this.focusAmount > 0.001) {
         if (this.focusedChannels.has(ch)) {
-          // Spotlighted section: Pulls to center (0.0) with enhanced presence
-          const targetPan = 0.0;
-          if (bus.panner && Math.abs(bus.currentPan - targetPan) > 0.005) {
-            safeCancelAutomation(bus.panner.pan, now);
-            bus.panner.pan.setTargetAtTime(targetPan, now, 0.06);
-            bus.currentPan = targetPan;
-          }
           const targetPres = 2.5 * this.focusAmount;
           if (bus.presenceFilter && Math.abs(bus.currentPresenceGain - targetPres) > 0.05) {
             safeCancelAutomation(bus.presenceFilter.gain, now);
@@ -767,15 +769,6 @@ export class AudioEngine {
             bus.currentPresenceGain = targetPres;
           }
         } else {
-          // Other sections: Gently widen in stereo panorama
-          const defPan = bus.defaultPan;
-          const dir = defPan === 0 ? (ch % 2 === 0 ? -1 : 1) : Math.sign(defPan);
-          const dispersedPan = dir * Math.min(0.85, Math.max(0.40, Math.abs(defPan) * 1.18));
-          if (bus.panner && Math.abs(bus.currentPan - dispersedPan) > 0.005) {
-            safeCancelAutomation(bus.panner.pan, now);
-            bus.panner.pan.setTargetAtTime(dispersedPan, now, 0.06);
-            bus.currentPan = dispersedPan;
-          }
           const targetPres = -1.0 * this.focusAmount;
           if (bus.presenceFilter && Math.abs(bus.currentPresenceGain - targetPres) > 0.05) {
             safeCancelAutomation(bus.presenceFilter.gain, now);
@@ -784,12 +777,6 @@ export class AudioEngine {
           }
         }
       } else {
-        // Reset all channels to natural default seating pan and neutral presence
-        if (bus.panner && Math.abs(bus.currentPan - bus.defaultPan) > 0.005) {
-          safeCancelAutomation(bus.panner.pan, now);
-          bus.panner.pan.setTargetAtTime(bus.defaultPan, now, 0.10);
-          bus.currentPan = bus.defaultPan;
-        }
         if (bus.presenceFilter && Math.abs(bus.currentPresenceGain - 0.0) > 0.05) {
           safeCancelAutomation(bus.presenceFilter.gain, now);
           bus.presenceFilter.gain.setTargetAtTime(0.0, now, 0.10);
@@ -1288,17 +1275,54 @@ export class AudioEngine {
   // ── Private helpers ──────────────────────────────────────────────────────
 
   private loadScript(url: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (document.querySelector(`script[src="${url}"]`)) {
-        resolve(); // Already loaded
-        return;
-      }
-      const script = document.createElement("script");
+    if (this.loadedScriptUrls.has(url)) {
+      return Promise.resolve();
+    }
+    const pending = this.pendingScriptLoads.get(url);
+    if (pending) {
+      return pending;
+    }
+
+    if (typeof document === "undefined") {
+      return Promise.resolve();
+    }
+
+    const existing = document.querySelector(`script[src="${url}"]`) as HTMLScriptElement | null;
+    if (existing && existing.dataset.loaded === "true") {
+      this.loadedScriptUrls.add(url);
+      return Promise.resolve();
+    }
+
+    const loadPromise = new Promise<void>((resolve, reject) => {
+      const script = existing || document.createElement("script");
       script.src = url;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error(`Failed to load script: ${url}`));
-      document.head.appendChild(script);
+
+      const cleanup = () => {
+        this.pendingScriptLoads.delete(url);
+      };
+
+      script.onload = () => {
+        script.dataset.loaded = "true";
+        this.loadedScriptUrls.add(url);
+        cleanup();
+        resolve();
+      };
+
+      script.onerror = () => {
+        cleanup();
+        if (script.parentNode) {
+          script.parentNode.removeChild(script);
+        }
+        reject(new Error(`Failed to load script: ${url}`));
+      };
+
+      if (!existing) {
+        document.head.appendChild(script);
+      }
     });
+
+    this.pendingScriptLoads.set(url, loadPromise);
+    return loadPromise;
   }
 
   private urlToVarName(url: string): string | null {

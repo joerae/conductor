@@ -97,13 +97,21 @@ export class ScoreTransport {
    * @param audioTime     The AudioContext time corresponding to startBeat.
    * @param periodSec     The current beat period from ConductorClock.
    * @param beatsPerTap   Beats advanced per tap (1 for 4/4, 2 for cut time).
+   * @param leadInBeats   Number of silent beats before score start (only when startBeat === 0).
    */
-  start(startBeat: number, audioTime: number, periodSec: number, beatsPerTap: number = 1): void {
+  start(
+    startBeat: number,
+    audioTime: number,
+    periodSec: number,
+    beatsPerTap: number = 1,
+    leadInBeats: number = 0
+  ): void {
     this.beatsPerTap = Math.max(1, beatsPerTap);
-    this.originBeat = startBeat;
-    this.originAudioTime = audioTime;
     this.periodSec = periodSec / this.beatsPerTap;
-    this.cursorBeat = startBeat;
+    const effectiveLeadIn = startBeat === 0 ? Math.max(0, leadInBeats) : 0;
+    this.originBeat = startBeat;
+    this.originAudioTime = audioTime + effectiveLeadIn * this.periodSec;
+    this.cursorBeat = startBeat - effectiveLeadIn;
     this.playing = true;
     this.fermata = false;
   }

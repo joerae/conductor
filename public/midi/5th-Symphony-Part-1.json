@@ -7,11 +7,12 @@
   "year": 1808,
   "midiFile": "5th-Symphony-Part-1.mid",
   "defaultBpm": 108,
-  "timeSignature": "4/4",
-  "beatsPerTap": 1,
-  "conductMode": "Normal (1 tap = 4 beats / 1 bar)",
+  "timeSignature": "2/4",
+  "beatsPerTap": 2,
+  "conductMode": "Cut Time / Alla Breve (1 tap = 2 beats / 1 bar)",
   "layout": "full_orchestra",
-  "description": "The most famous four-note motif in music history.",
+  "description": "The most famous four-note motif in music history. Conducted in cut time (1 tap = 2 beats / 1 bar of 2/4) at ~108 half notes/min.",
+  "leadInBeats": 1,
   "sections": [
     {
       "id": "woodwinds",

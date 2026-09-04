@@ -99,8 +99,13 @@ export async function loadRepertoireCatalog(): Promise<PieceDefinition[]> {
         const pieceRes = await fetch(`/midi/${jsonFile}`);
         if (pieceRes.ok) {
           const pieceData = await pieceRes.json();
-          pieceData.midiUrl = `/midi/${pieceData.midiFile}`;
-          loadedPieces.push(pieceData);
+          const basePiece = REPERTOIRE.find(p => p.id === pieceData.id);
+          const mergedPiece: PieceDefinition = {
+            ...(basePiece || {}),
+            ...pieceData,
+            midiUrl: `/midi/${pieceData.midiFile || basePiece?.midiFile}`,
+          };
+          loadedPieces.push(mergedPiece);
         }
       } catch (err) {
         console.warn(`Could not load piece json: ${jsonFile}`, err);

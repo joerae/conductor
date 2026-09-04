@@ -120,6 +120,14 @@ export class ExperienceController {
   private readonly HAND_Y_HISTORY_LEN = 12; // ~400ms at 30fps
   private handYHistory: Map<number, number[]> = new Map();
 
+  // Lifecycle & Concurrency Guards
+  private unsubscribeKeyboard: (() => void) | null = null;
+  private completionTimer: ReturnType<typeof setTimeout> | null = null;
+  private playbackSessionId: number = 0;
+  private startPlaybackPromise: Promise<void> | null = null;
+  private cutoffInitiatedPause: boolean = false;
+  private isCameraInitializing: boolean = false;
+
   constructor(callbacks: UICallbacks) {
     this.uiCallbacks = callbacks;
     this.audioEngine = new AudioEngine();
@@ -207,9 +215,17 @@ export class ExperienceController {
 
   private handlePieceComplete(): void {
     this.setState("completed");
-    setTimeout(() => {
-      this.scheduler.stop();
-      this.transport.stop();
+    if (this.completionTimer) {
+      clearTimeout(this.completionTimer);
+      this.completionTimer = null;
+    }
+    const currentSession = this.playbackSessionId;
+    this.completionTimer = setTimeout(() => {
+      if (this.playbackSessionId === currentSession) {
+        this.scheduler.stop();
+        this.transport.stop();
+      }
+      this.completionTimer = null;
     }, 2000);
   }
 
@@ -244,8 +260,12 @@ export class ExperienceController {
         this.clock.setPeriodMs(60000 / this.basePieceBpm);
       }
 
-      // Wire active input provider → clock
-      this.keyboardInput.onBeat(obs => this.handleBeatObservation(obs));
+      // Wire active input provider → clock (cleanly retain exactly 1 subscription)
+      if (this.unsubscribeKeyboard) {
+        this.unsubscribeKeyboard();
+        this.unsubscribeKeyboard = null;
+      }
+      this.unsubscribeKeyboard = this.keyboardInput.onBeat(obs => this.handleBeatObservation(obs));
       this.keyboardInput.start();
 
       if (this.cameraInput) {
@@ -255,7 +275,12 @@ export class ExperienceController {
       this.audioEngine.setSectionFocus(null, 0);
 
       if (this.inputSource === "camera") {
-        await this.initCamera();
+        try {
+          await this.initCamera();
+        } catch (err) {
+          console.warn("Conductor: camera startup failed during piece load, continuing in keyboard mode", err);
+          await this.setInputSource("keyboard");
+        }
       }
 
       this.prepTapCount = 0;
@@ -271,13 +296,17 @@ export class ExperienceController {
     if (source === "camera") {
       this.inputSource = "camera";
       this.setTempoMode("gestural");
-      await this.initCamera();
+      try {
+        await this.initCamera();
+      } catch (err) {
+        console.warn("Conductor: setInputSource('camera') failed, falling back to keyboard:", err);
+        await this.setInputSource("keyboard");
+        return;
+      }
     } else {
       if (source === this.inputSource && !this.cameraInput) return;
       this.inputSource = "keyboard";
-      if (this.cameraInput) {
-        this.cameraInput.stop();
-      }
+      this.shutdownCameraState();
     }
 
     this.updateBeatsPerTap();
@@ -288,40 +317,83 @@ export class ExperienceController {
     this.uiCallbacks.onInputSourceChange?.(this.inputSource);
   }
 
-  private async initCamera(): Promise<void> {
-    if (!this.cameraInput) {
-      this.cameraInput = new CameraBeatInputProvider();
-      this.cameraInput.setDynamicsMode(this.cameraDynamicsMode);
-      this.cameraInput.setThumbsUpVFXEnabled(this.isThumbsUpVFXEnabled);
-      this.cameraInput.setFocusModeEnabled(this.isFocusModeEnabled);
-      this.cameraInput.setTempoMode(this.clock.getTempoMode());
-
-      const piece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
-      if (piece) {
-        this.cameraInput.setSections(piece.sections);
-      }
-
-      // Pre-warm / resume AudioContext on camera activation
+  private shutdownCameraState(): void {
+    if (this.cameraInput) {
       try {
-        await this.audioEngine.resume();
+        this.cameraInput.stop();
       } catch {
         // Ignored
       }
+    }
+    this.audioEngine.setSectionFocus(null, 0);
+    this.uiCallbacks.onFocusChange?.({
+      isActive: false,
+      state: "idle",
+      hoveredSectionId: null,
+      grabbedSectionId: null,
+      sectionFocus: 0,
+      pointerScreenPoint: null,
+      pointingHandIndex: null,
+      pinchDistanceRatio: 1.0,
+    });
 
-      // Wire camera error fallback to keyboard mode
-      this.cameraInput.onStateChange((state, err) => {
-        if (state === "error") {
-          console.warn("Camera failed to load, gracefully falling back to keyboard mode:", err);
-          this.setInputSource("keyboard");
+    if (this.isFistCutoff) {
+      this.isFistCutoff = false;
+      this.uiCallbacks.onFistCutoffChange?.(false);
+    }
+    this.cutoffInitiatedPause = false;
+
+    if (this.isPartyMode) {
+      this.isPartyMode = false;
+      this.uiCallbacks.onPartyModeChange?.(false);
+    }
+
+    if (this.isFermata) {
+      this.isFermata = false;
+      this.transport.setFermata(false, this.audioEngine.getAudioTime());
+      this.uiCallbacks.onFermataChange?.(false);
+    }
+
+    this.handYHistory.clear();
+    this.isHandsDown = false;
+    this.handsDownPulseCount = 0;
+  }
+
+  private async initCamera(): Promise<void> {
+    if (this.isCameraInitializing) return;
+    this.isCameraInitializing = true;
+
+    try {
+      if (!this.cameraInput) {
+        this.cameraInput = new CameraBeatInputProvider({
+          onClose: () => {
+            void this.setInputSource("keyboard");
+          },
+        });
+        this.cameraInput.setDynamicsMode(this.cameraDynamicsMode);
+        this.cameraInput.setThumbsUpVFXEnabled(this.isThumbsUpVFXEnabled);
+        this.cameraInput.setFocusModeEnabled(this.isFocusModeEnabled);
+        this.cameraInput.setTempoMode(this.clock.getTempoMode());
+
+        const piece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
+        if (piece) {
+          this.cameraInput.setSections(piece.sections);
         }
-      });
 
-      try {
-        await this.cameraInput.start();
-      } catch (err) {
-        console.warn("Failed to start camera, falling back to keyboard mode:", err);
-        this.setInputSource("keyboard");
-      }
+        // Pre-warm / resume AudioContext on camera activation
+        try {
+          await this.audioEngine.resume();
+        } catch {
+          // Ignored
+        }
+
+        // Wire camera error fallback to keyboard mode
+        this.cameraInput.onStateChange((state, err) => {
+          if (state === "error") {
+            console.warn("Camera failed to load, gracefully falling back to keyboard mode:", err);
+            void this.setInputSource("keyboard");
+          }
+        });
 
       // Wire camera dynamics directly into existing orchestral dynamic ladder & AudioEngine
       let lastAudioDynUpdateTime = 0;
@@ -405,18 +477,22 @@ export class ExperienceController {
             if (!this.isFistCutoff) {
               this.isFistCutoff = true;
               if (this.state === "playing") {
+                this.cutoffInitiatedPause = true;
                 this.pausePlayback(true);
               } else {
+                this.cutoffInitiatedPause = false;
                 this.uiCallbacks.onFistCutoffChange?.(true);
               }
             }
           } else if (this.isFistCutoff) {
             this.isFistCutoff = false;
             this.uiCallbacks.onFistCutoffChange?.(false);
-            // Auto-resume playback as soon as thumb down is released
-            if (this.state === "paused") {
+            // Auto-resume playback ONLY if thumbs down initiated the pause
+            if (this.cutoffInitiatedPause && this.state === "paused") {
+              this.cutoffInitiatedPause = false;
               this.startPlayback();
             }
+            this.cutoffInitiatedPause = false;
           }
 
           // ── 2. Double Peace Signs (✌️ + ✌️): Party Mode ──
@@ -444,9 +520,12 @@ export class ExperienceController {
             }
 
             // Mode E: Auto-start instantly as soon as user raises hands in front of camera
-            if (this.state === "ready" || this.state === "paused") {
+            if (this.state === "ready" || this.state === "paused" || this.state === "completed") {
               const isRaised = samples.some(s => s.conductorPoint.y >= 0.10);
               if (isRaised) {
+                if (this.state === "completed") {
+                  this.restart();
+                }
                 this.startPlayback();
               }
             } else if (this.state === "playing") {
@@ -569,10 +648,22 @@ export class ExperienceController {
           }
         }
       });
+      this.cameraInput.setOnClose(() => {
+        void this.setInputSource("keyboard");
+      });
     }
 
-    await this.cameraInput.start();
+    try {
+      await this.cameraInput.start();
+    } catch (err) {
+      console.warn("Failed to start camera, falling back to keyboard mode:", err);
+      await this.setInputSource("keyboard");
+      return;
+    }
+  } finally {
+    this.isCameraInitializing = false;
   }
+}
 
   getInputSource(): InputSource {
     return this.inputSource;
@@ -615,6 +706,11 @@ export class ExperienceController {
   }
 
   async loadPiece(pieceId: string): Promise<void> {
+    if (this.completionTimer) {
+      clearTimeout(this.completionTimer);
+      this.completionTimer = null;
+    }
+    this.playbackSessionId++;
     this.scheduler.stop();
     this.scheduler.reset();
     this.transport.stop();
@@ -632,6 +728,11 @@ export class ExperienceController {
   }
 
   restart(): void {
+    if (this.completionTimer) {
+      clearTimeout(this.completionTimer);
+      this.completionTimer = null;
+    }
+    this.playbackSessionId++;
     this.scheduler.stop();
     this.scheduler.reset();
     this.transport.stop();
@@ -644,6 +745,14 @@ export class ExperienceController {
 
   pausePlayback(isCutoff: boolean = false): void {
     if (this.state !== "playing") return;
+    if (this.completionTimer) {
+      clearTimeout(this.completionTimer);
+      this.completionTimer = null;
+    }
+    this.playbackSessionId++;
+    if (!isCutoff) {
+      this.cutoffInitiatedPause = false;
+    }
     this.pausedBeat = this.transport.getCursorBeat();
     this.scheduler.stop();
     this.scheduler.reset();
@@ -675,9 +784,13 @@ export class ExperienceController {
   }
 
   togglePause(): void {
+    this.cutoffInitiatedPause = false;
     if (this.state === "playing") {
       this.pausePlayback(false);
-    } else if (this.state === "paused" || this.state === "ready") {
+    } else if (this.state === "paused" || this.state === "ready" || this.state === "completed") {
+      if (this.state === "completed") {
+        this.restart();
+      }
       this.startPlayback();
       this.debug.updatePauseState(false);
     }
@@ -808,9 +921,10 @@ export class ExperienceController {
 
   /**
    * Nudge the Mode E gestural live BPM by deltaBpm.
-   * Modulates current live conducting tempo while preserving the piece's fixed target nominal reference sweet spot.
+   * Adjusts target base BPM so the change persists across subsequent camera samples.
    */
   nudgeGesturalBpm(deltaBpm: number): void {
+    this.basePieceBpm = Math.max(30, Math.min(240, this.basePieceBpm + deltaBpm));
     this.currentGesturalBpm = Math.max(30, Math.min(240, this.currentGesturalBpm + deltaBpm));
     this.clock.setBpm(this.currentGesturalBpm);
     this.indicatedBpm = Math.round(this.currentGesturalBpm);
@@ -822,6 +936,11 @@ export class ExperienceController {
     source: "keyboard" | "camera";
     confidence: number;
   }): Promise<void> {
+    // If state is completed, reset to ready so conducting restarts cleanly
+    if (this.state === "completed") {
+      this.restart();
+    }
+
     // Resume AudioContext on first tap if suspended (requires user gesture)
     await this.audioEngine.resume();
 
@@ -882,46 +1001,70 @@ export class ExperienceController {
   // ── Playback ─────────────────────────────────────────────────────────────
 
   private async startPlayback(): Promise<void> {
-    try {
-      await this.audioEngine.resume();
-    } catch {
-      // AudioContext resume might fail in non-user-gesture context in some strict browsers
+    if (this.state === "playing") return;
+    if (this.startPlaybackPromise) {
+      return this.startPlaybackPromise;
     }
 
-    if (this.clock.getTempoMode() === "gestural") {
-      this.clock.setPeriodMs(60000 / this.currentGesturalBpm);
-      this.clock.startRunningAtCurrentPeriod();
-    }
+    this.startPlaybackPromise = (async () => {
+      try {
+        if (this.completionTimer) {
+          clearTimeout(this.completionTimer);
+          this.completionTimer = null;
+        }
+        this.playbackSessionId++;
 
-    const clockState = this.clock.getState();
-    const periodSec = clockState.periodMs / 1000;
-    const nextBeatAudioTime = this.clock.predictNextBeatAudioTime();
-    const audioNow = this.audioEngine.getAudioTime();
+        try {
+          await this.audioEngine.resume();
+        } catch {
+          // AudioContext resume might fail in non-user-gesture context in some strict browsers
+        }
 
-    // In Beat Mode: 2 prep taps establish tempo (1, 2). Music begins 1 beat later on nextBeatAudioTime
-    // with pristine audio attack and zero dropped opening notes.
-    // In Gestural Mode: Starts immediately with 60ms audio buffer lead time.
-    const isGestural = this.clock.getTempoMode() === "gestural";
-    const startAudioTime = isGestural
-      ? audioNow + 0.06
-      : (nextBeatAudioTime > audioNow + 0.05 ? nextBeatAudioTime : audioNow + periodSec);
+        if (this.state === "playing") return;
 
-    // Start or resume from pausedBeat
-    const startBeat = this.pausedBeat;
-    const beatsPerTap = this.getEffectiveBeatsPerTap();
-    this.transport.start(startBeat, startAudioTime, periodSec, beatsPerTap);
-    this.scheduler.start();
-    this.setState("playing");
+        if (this.clock.getTempoMode() === "gestural") {
+          this.clock.setPeriodMs(60000 / this.currentGesturalBpm);
+          this.clock.startRunningAtCurrentPeriod();
+        }
 
-    // Update audio latency in debug overlay
-    const ctx = (this.audioEngine as unknown as { ctx: AudioContext | null }).ctx;
-    if (ctx) {
-      this.debug.updateAudioLatency(
-        (ctx as AudioContext & { baseLatency?: number }).baseLatency ?? 0,
-        (ctx as AudioContext & { outputLatency?: number }).outputLatency ?? 0
-      );
-    }
-    this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
+        const clockState = this.clock.getState();
+        const periodSec = clockState.periodMs / 1000;
+        const nextBeatAudioTime = this.clock.predictNextBeatAudioTime();
+        const audioNow = this.audioEngine.getAudioTime();
+
+        // In Beat Mode: 2 prep taps establish tempo (1, 2). Music begins 1 beat later on nextBeatAudioTime
+        // with pristine audio attack and zero dropped opening notes.
+        // In Gestural Mode: Starts immediately with 60ms audio buffer lead time.
+        const isGestural = this.clock.getTempoMode() === "gestural";
+        const startAudioTime = isGestural
+          ? audioNow + 0.06
+          : (nextBeatAudioTime > audioNow + 0.05 ? nextBeatAudioTime : audioNow + periodSec);
+
+        // Start or resume from pausedBeat
+        const startBeat = this.pausedBeat;
+        const beatsPerTap = this.getEffectiveBeatsPerTap();
+        const piece = this.getCurrentPiece();
+        const leadInBeats = (startBeat === 0 && piece?.leadInBeats) ? piece.leadInBeats : 0;
+
+        this.transport.start(startBeat, startAudioTime, periodSec, beatsPerTap, leadInBeats);
+        this.scheduler.start();
+        this.setState("playing");
+
+        // Update audio latency in debug overlay
+        const ctx = (this.audioEngine as unknown as { ctx: AudioContext | null }).ctx;
+        if (ctx) {
+          this.debug.updateAudioLatency(
+            (ctx as AudioContext & { baseLatency?: number }).baseLatency ?? 0,
+            (ctx as AudioContext & { outputLatency?: number }).outputLatency ?? 0
+          );
+        }
+        this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
+      } finally {
+        this.startPlaybackPromise = null;
+      }
+    })();
+
+    return this.startPlaybackPromise;
   }
 
   // ── Clock event handler ──────────────────────────────────────────────────
@@ -1025,6 +1168,9 @@ export class ExperienceController {
   startAutoplayInTempo(): void {
     this.setTempoMode("autoplay");
     this.clock.setPeriodMs(60000 / this.basePieceBpm);
+    if (this.state === "completed") {
+      this.restart();
+    }
     if (this.state === "ready" || this.state === "paused") {
       this.startPlayback();
     }

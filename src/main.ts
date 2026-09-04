@@ -9,6 +9,8 @@ import type { TempoMode } from "./clock/ConductorClock";
 import { loadRepertoireCatalog, getPieceById, REPERTOIRE } from "./score/repertoire";
 import type { PieceDefinition } from "./score/repertoire";
 import type { DynamicLevel } from "./audio/dynamicsTypes";
+import { NoteVisualManager } from "./ui/NoteVisualManager";
+import { bpmToPercent, initBpmGaugeTicks } from "./ui/bpmGauge";
 import "./style.css";
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
@@ -158,6 +160,7 @@ let sectionTextMap: Map<HTMLElement, {
 }> = new Map();
 
 function renderOrchestraStage(piece: PieceDefinition): void {
+  clearAllNoteVisuals();
   channelToSectionMap.clear();
   trackNameToSectionMap.clear();
   sectionMusicianEggsMap.clear();
@@ -259,6 +262,12 @@ let lastRenderedFocusActive = false;
 let lastRenderedGrabbedSectionId: string | null = null;
 let lastRenderedHoveredSectionId: string | null = null;
 
+// Track visual session and active playing notes for reference counting
+const noteVisualManager = new NoteVisualManager();
+export function clearAllNoteVisuals(): void {
+  noteVisualManager.clearAll();
+}
+
 // ── Experience setup ──────────────────────────────────────────────────────────
 
 const controller = new ExperienceController({
@@ -281,11 +290,9 @@ const controller = new ExperienceController({
     }
     stageEl.dataset.state = state;
 
-    // Reset visual highlights when not playing
+    // Reset visual highlights and pending timers when not playing
     if (state !== "playing") {
-      document.querySelectorAll(".musician.playing, .instrument-section.playing").forEach(el => {
-        el.classList.remove("playing");
-      });
+      clearAllNoteVisuals();
     }
   },
   onInputSourceChange: (source: InputSource) => {
@@ -460,28 +467,24 @@ const controller = new ExperienceController({
     setTimeout(() => stageEl.classList.remove("accent-flash"), 380);
   },
   onNoteVisual: (event) => {
-    setTimeout(() => {
-      const section = channelToSectionMap.get(event.channel) ||
-                      trackNameToSectionMap.get(String(event.trackId).toUpperCase()) ||
-                      document.querySelector(".instrument-section");
-      if (!section) return;
-
-      const eggs = sectionMusicianEggsMap.get(section as HTMLElement) || Array.from(section.querySelectorAll<SVGElement>(".musician"));
-      const eggIndex = Math.abs(event.midiNote) % Math.max(1, eggs.length);
-      const targetEgg = eggs[eggIndex] || eggs[0];
-
-      if (event.type === "noteOn") {
-        section.classList.add("playing");
-        if (targetEgg) targetEgg.classList.add("playing");
-
-        // Record history for debug HUD
-        const sectionKey = section.dataset.sectionId || "sec";
+    noteVisualManager.handleNoteVisual(event, {
+      getSection: (channel, trackId) =>
+        channelToSectionMap.get(channel) ||
+        trackNameToSectionMap.get(String(trackId).toUpperCase()) ||
+        document.querySelector(".instrument-section"),
+      getMusicianEgg: (section, midiNote) => {
+        const eggs = sectionMusicianEggsMap.get(section as HTMLElement) || Array.from(section.querySelectorAll<SVGElement>(".musician"));
+        const eggIndex = Math.abs(midiNote) % Math.max(1, eggs.length);
+        return eggs[eggIndex] || eggs[0] || null;
+      },
+      onVelocityHistory: (section, velocity, decomp) => {
+        const sectionKey = (section as HTMLElement).dataset.sectionId || "sec";
         let history = sectionVelocityHistory.get(sectionKey);
         if (!history) {
           history = [];
           sectionVelocityHistory.set(sectionKey, history);
         }
-        history.unshift(event.velocity);
+        history.unshift(velocity);
         if (history.length > 3) history.pop();
 
         const textElements = sectionTextMap.get(section as HTMLElement);
@@ -489,26 +492,19 @@ const controller = new ExperienceController({
         const decompText = textElements?.decompText || section.querySelector<SVGTextElement>(".debug-vel-decomp");
         const histText = textElements?.histText || section.querySelector<SVGTextElement>(".debug-vel-history");
 
-        const d = event.decomp;
         if (mainText) {
-          mainText.textContent = `v: ${event.velocity} (${d.dynamicLevel} ×${d.dynMultiplier.toFixed(2)})`;
+          mainText.textContent = `v: ${velocity} (${decomp.dynamicLevel} ×${decomp.dynMultiplier.toFixed(2)})`;
         }
         if (decompText) {
-          const deltaStr = d.macroDelta >= 0 ? `+${d.macroDelta}` : `${d.macroDelta}`;
-          const macroStr = d.macroEnabled ? `Macro ${d.macro} (${deltaStr})` : `Raw ${d.raw}`;
-          decompText.textContent = `Raw ${d.raw} ➔ ${macroStr}`;
+          const deltaStr = decomp.macroDelta >= 0 ? `+${decomp.macroDelta}` : `${decomp.macroDelta}`;
+          const macroStr = decomp.macroEnabled ? `Macro ${decomp.macro} (${deltaStr})` : `Raw ${decomp.raw}`;
+          decompText.textContent = `Raw ${decomp.raw} ➔ ${macroStr}`;
         }
         if (histText) {
           histText.textContent = `History: ${history.join(" • ")}`;
         }
-      } else {
-        if (targetEgg) targetEgg.classList.remove("playing");
-        const anyActive = section.querySelector(".musician.playing");
-        if (!anyActive) {
-          section.classList.remove("playing");
-        }
-      }
-    }, event.delayMs);
+      },
+    });
   },
 });
 
@@ -620,12 +616,6 @@ const markerIndicated = document.getElementById("bpm-marker-indicated") as HTMLE
 const valOrchestraBpm = document.getElementById("val-orchestra-bpm") as HTMLElement;
 const valIndicatedBpm = document.getElementById("val-indicated-bpm") as HTMLElement;
 
-function bpmToPercent(bpm: number): number {
-  const minBpm = 40;
-  const maxBpm = 220;
-  const clamped = Math.max(minBpm, Math.min(maxBpm, bpm));
-  return ((clamped - minBpm) / (maxBpm - minBpm)) * 100;
-}
 
 function updateBpmGaugeUI(): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -771,7 +761,10 @@ window.addEventListener("keydown", (e) => {
 // Initialize UI to starting dynamic level (mf)
 updateDynamicLadderUI(controller.getDynamicLevel());
 
-restartBtn.addEventListener("click", () => controller.restart());
+restartBtn.addEventListener("click", () => {
+  clearAllNoteVisuals();
+  controller.restart();
+});
 switchPieceBtn.addEventListener("click", () => openRepertoireModal());
 
 // ── Repertoire Modal Handling ─────────────────────────────────────────────────
@@ -812,6 +805,7 @@ function openRepertoireModal(): void {
 }
 
 async function switchPiece(pieceId: string): Promise<void> {
+  clearAllNoteVisuals();
   loadingEl.style.display = "flex";
   try {
     await controller.loadPiece(pieceId);
@@ -925,6 +919,7 @@ loadRepertoireCatalog().then(() => {
     // Sync UI buttons & hint text with initial controller state (Camera + Mode E)
     updateInputSourceButtons(controller.getInputSource());
     updateModeButtons(controller.getTempoMode());
+    initBpmGaugeTicks();
 
     // Continuous smooth update loop for BPM gauge & Analogue Dynamics Marker
     function gaugeRenderLoop(): void {

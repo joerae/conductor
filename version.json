@@ -1,9 +1,34 @@
 {
-  "version": "0.26.1",
+  "version": "0.27.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.27.0",
+      "date": "2026-09-04",
+      "summary": "Code Audit Integrity & Hardening: Concurrency Guards, Lifecycle Isolation, Harmonized Beethoven Cut-Time & Lead-In, Stereo Pan Invariance, and Visual Ref-Counting",
+      "details": [
+        "Keyboard Subscription Ownership: Retained and invoked unsubscribeKeyboard() before replacing listeners on piece load, eliminating duplicate preparation tap counts and multiplied beat effects",
+        "Camera Failure Non-Fatal Fallback: Guarded camera start to attempt initialization once per explicit activation, gracefully falling back to keyboard mode with partial resource release without unhandled promise rejections or repeated retries",
+        "Camera Model-Loading Cancellation Race: Added generation tokens and explicit cancellation guards in HandTracker and CameraBeatInputProvider to prevent background rAF inference loops when stopping during model download",
+        "Complete Preview Closure Routing: Routed camera preview closure directly through ExperienceController.setInputSource('keyboard') to ensure complete shutdown of gesture state, focus, and input buttons",
+        "Idempotent Playback Initialization: Guarded startPlayback() with a shared start promise and session generation token, ensuring simultaneous start requests result in exactly one transport and scheduler startup",
+        "Session-Guarded Completion Timeout: Tracked piece completion timer and invalidated delayed stop callbacks across restarts and piece transitions with playbackSessionId guards",
+        "Seamless Restart from Completion: Added clean restart support from completed state across keyboard space taps, camera hand raises, and transport rewinds while preserving piece configuration",
+        "Harmonized Beethoven Metadata: Aligned 5th-Symphony-Part-1.json with built-in score repertoire to authoritative 2/4 cut time (beatsPerTap: 2, defaultBpm: 108, leadInBeats: 1) and merged piece metadata in catalog loader",
+        "Score Transport Lead-In Timing: Implemented metadata-driven leadInBeats in ScoreTransport.start() with negative cursor origin offset so opening notes at beat 0 are accurately scheduled without lookahead misses",
+        "Section Focus Gain Consistency & Stereo Pan Invariance: Removed voice-level focus gain multiplication to prevent double-scaling on notes starting during focus; maintained natural orchestral seating stereo pan without artificial center-stage pull",
+        "Camera Shutdown Gesture State Reset: Added comprehensive shutdownCameraState() clearing section focus in AudioEngine and UI, dramatic thumbs-down cutoff, party mode, fermata, and hand position history",
+        "Gesture-Owned Pause Disambiguation: Added cutoffInitiatedPause flag so releasing thumbs-down cutoff only auto-resumes if the cutoff initiated the pause, preventing accidental resume of manual pauses",
+        "Immediate Accent Audio Punch: Verified immediate transient punch and cosine decay across master low-pass and high-shelf filters on accent trigger",
+        "Visual Session Timer Registry: Isolated note visualization setTimeout timers within visual sessions, instantly cancelling pending visual timers on restart and piece changes",
+        "Musician Egg Reference Counting: Reference-counted active overlapping notes per musician element so .playing highlight remains active until all sounding notes on that instrument have ended",
+        "BPM Gauge Mathematical Alignment: Unified vertical BPM gauge ticks and green zone bands to linear formula ((bpm - 40) / 180) * 100 with dynamic DOM label synchronization",
+        "External Script Load Retry: Tracked script URLs and in-flight promises in AudioEngine.loadScript(), removing failed script tags on error to allow genuine retries",
+        "Target Tempo Nudge Persistence: Arrow keys now adjust basePieceBpm so nudged tempo persists across camera samples"
+      ]
+    },
     {
       "version": "0.26.1",
       "date": "2026-09-02",

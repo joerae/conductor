@@ -30,6 +30,7 @@ import type { PieceSection } from "../score/repertoire";
 export interface CameraBeatInputOptions {
   config?: Partial<CameraConfig>;
   mountOverlay?: boolean;
+  onClose?: () => void;
   onStateChange?: (state: CameraState, error?: string) => void;
   onTelemetry?: (telemetry: CameraTelemetry) => void;
   onSamples?: (samples: HandSample[]) => void;
@@ -49,6 +50,8 @@ export class CameraBeatInputProvider implements BeatInputProvider {
   private lastThumbsUpBurstTime = new Map<number, number>();
   private isThumbsUpVFXEnabled: boolean = false;
   private currentSections: PieceSection[] = [];
+  private closeCallback: (() => void) | null = null;
+  private startGeneration = 0;
 
   private callbacks: Array<(beat: BeatObservation) => void> = [];
   private stateChangeCallbacks: Set<(state: CameraState, error?: string) => void> = new Set();
@@ -68,6 +71,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
   };
 
   constructor(options?: CameraBeatInputOptions) {
+    this.closeCallback = options?.onClose ?? null;
     this.cameraController = new CameraController({
       onStateChange: (state, err) => this.handleCameraStateChange(state, err),
     });
@@ -82,7 +86,13 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     if (options?.mountOverlay !== false && typeof document !== "undefined") {
       this.previewOverlay = new CameraPreviewOverlay({
         mirror: options?.config?.mirrorPreview ?? true,
-        onClose: () => this.stop(),
+        onClose: () => {
+          if (this.closeCallback) {
+            this.closeCallback();
+          } else {
+            this.stop();
+          }
+        },
       });
     }
 
@@ -231,12 +241,17 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     return { ...this.currentTelemetry };
   }
 
+  setOnClose(callback: () => void): void {
+    this.closeCallback = callback;
+  }
+
   /**
    * Starts camera capture and hand tracking inference loop.
    */
   async start(): Promise<void> {
     if (this.isStarted) return;
     this.isStarted = true;
+    const currentGeneration = ++this.startGeneration;
 
     this.motionFilter.reset();
     this.beatDetector.reset();
@@ -253,8 +268,17 @@ export class CameraBeatInputProvider implements BeatInputProvider {
 
       const videoEl = this.previewOverlay?.getVideoElement() ?? undefined;
       const activeVideo = await this.cameraController.start(videoEl);
+      if (currentGeneration !== this.startGeneration || !this.isStarted) {
+        this.cameraController.stop();
+        return;
+      }
 
       await this.handTracker.start(activeVideo);
+      if (currentGeneration !== this.startGeneration || !this.isStarted) {
+        this.handTracker.stop();
+        this.cameraController.stop();
+        return;
+      }
     } catch (err) {
       this.isStarted = false;
       this.stop();
@@ -266,6 +290,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
    * Stops camera stream, releases hardware tracks, and cancels inference loop.
    */
   stop(): void {
+    this.startGeneration++;
     this.isStarted = false;
     this.handTracker.stop();
     this.cameraController.stop();
