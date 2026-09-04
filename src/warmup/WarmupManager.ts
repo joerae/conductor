@@ -80,7 +80,8 @@ export class WarmupManager {
         onRetryCamera: () => this.options.onRetryCamera?.(),
         onToggleMute: () => this.toggleMute(),
       },
-      () => this.options.getCameraAxisMapping?.() ?? "classic"
+      () => this.options.getCameraAxisMapping?.() ?? "classic",
+      () => this.coordinator.getMode()
     );
 
     this.visuals.setReturningUser(this.isReturningUser);
@@ -111,9 +112,9 @@ export class WarmupManager {
         this.audioPlayer.enableAccompaniment(state.instruments === "ready");
       }
 
-      // If returning user and all ready, auto-advance
-      if (this.isReturningUser && state.isReady) {
-        this.handleStartConducting();
+      // When ready, make it clear in visuals that the conductor can proceed
+      if (state.isReady) {
+        this.visuals?.setDisplayState("ready");
       }
     });
 
@@ -150,7 +151,7 @@ export class WarmupManager {
     if (!this.visuals) return;
 
     if (this.currentLessonIndex >= this.lessons.length) {
-      // Finished all 3 lessons
+      // Finished all lessons
       const isReady = this.coordinator.getState().isReady;
       this.visuals.setDisplayState(isReady ? "ready" : "nearly_ready");
       return;
@@ -159,16 +160,15 @@ export class WarmupManager {
     const lesson = this.lessons[this.currentLessonIndex];
     this.visuals.setLesson(lesson);
 
-    const duration = lesson === "spotlight" ? 3000 : 2500;
+    // Give each lesson a deliberate 5.4s duration to complete a full deliberate gesture
+    const duration = lesson === "spotlight" ? 4000 : 5400;
     this.lessonTimerId = setTimeout(() => {
       this.currentLessonIndex++;
       this.presentCurrentLesson();
     }, duration);
   }
 
-  handleLiveSample(sample: { tempoBpm?: number; dynamicLevel?: string; dynamicContinuous?: number }): void {
-    if (!this.isRunning) return;
-
+  handleLiveSample(sample: { tempoBpm?: number; dynamicLevel?: string; dynamicContinuous?: number; isHandsRaised?: boolean }): void {
     this.visuals?.setLiveTrackingActive(true);
 
     if (sample.tempoBpm) {
@@ -178,6 +178,11 @@ export class WarmupManager {
     if (sample.dynamicLevel && sample.dynamicContinuous !== undefined) {
       this.audioPlayer.setDynamic(sample.dynamicLevel, sample.dynamicContinuous);
       this.options.onDynamicsDemonstration?.(sample.dynamicLevel, sample.dynamicContinuous);
+    }
+
+    // Exiting Warm Up: Once user raises hands and loading is ready, exit the tutorial
+    if (sample.isHandsRaised && this.coordinator.getState().isReady) {
+      void this.handleStartConducting();
     }
   }
 
@@ -228,8 +233,12 @@ export class WarmupManager {
       }
     }
 
-    // Fade warm-up audio over 200ms
-    await this.audioPlayer.fadeAndStop(200);
+    // Fade warm-up audio over 200ms if running
+    if (this.isRunning) {
+      await this.audioPlayer.fadeAndStop(200);
+    } else {
+      this.audioPlayer.stop();
+    }
 
     // Clean up visuals
     this.visuals?.destroy();

@@ -74,6 +74,7 @@ export class DebugOverlay {
   private onThumbsUpVFXToggle?: (enabled: boolean) => void;
   private onFocusModeToggle?: (enabled: boolean) => void;
   private onScoreVisualizerToggle?: (enabled: boolean) => void;
+  private onRerunTutorial?: () => void;
 
   // Cached DOM elements for live text updates without innerHTML thrashing
   private elements: Record<string, HTMLElement> = {};
@@ -278,6 +279,12 @@ export class DebugOverlay {
       if (this.onTogglePause) {
         this.onTogglePause();
       }
+    });
+
+    // Rerun Tutorial / Warm Up button in header
+    const rerunBtn = document.getElementById("dbg-rerun-tutorial-btn");
+    rerunBtn?.addEventListener("click", () => {
+      this.onRerunTutorial?.();
     });
 
     // Macro Dynamics Smoothing Slider
@@ -531,6 +538,10 @@ export class DebugOverlay {
     }
   }
 
+  setOnRerunTutorial(callback: () => void): void {
+    this.onRerunTutorial = callback;
+  }
+
   // ── Private ─────────────────────────────────────────────────────────────
 
   private updateMacroLabel(ratio: number): void {
@@ -733,19 +744,34 @@ export class DebugOverlay {
     el.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
         <span class="debug-title" style="margin:0; font-size:12px;">DIAGNOSTICS & A/B DSP</span>
-        <button id="dbg-pause-btn" style="
-          background: rgba(255, 213, 107, 0.15);
-          color: #ffd56b;
-          border: 1px solid rgba(255, 213, 107, 0.5);
-          border-radius: 4px;
-          padding: 4px 10px;
-          font-family: inherit;
-          font-size: 11px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.15s ease;
-          white-space: nowrap;
-        ">⏸ Pause Orchestra</button>
+        <div style="display:flex; gap:6px;">
+          <button id="dbg-rerun-tutorial-btn" style="
+            background: rgba(110, 231, 183, 0.15);
+            color: #6ee7b7;
+            border: 1px solid rgba(110, 231, 183, 0.5);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+          " title="Rerun the interactive warming-up conducting tutorial">🎓 Rerun Warm Up</button>
+          <button id="dbg-pause-btn" style="
+            background: rgba(255, 213, 107, 0.15);
+            color: #ffd56b;
+            border: 1px solid rgba(255, 213, 107, 0.5);
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+          ">⏸ Pause Orchestra</button>
+        </div>
       </div>
 
       <!-- Tempo & Playback Modes (Debug Panel) -->

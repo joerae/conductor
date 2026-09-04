@@ -18,7 +18,7 @@ export interface WarmupVisualsCallbacks {
   onStartConducting: () => void;
   onContinueKeyboard: () => void;
   onRetryCamera: () => void;
-  onToggleMute: () => void;
+  onToggleMute?: () => void;
 }
 
 export class WarmupVisuals {
@@ -26,6 +26,7 @@ export class WarmupVisuals {
   private overlayEl: HTMLElement | null = null;
   private callbacks: WarmupVisualsCallbacks;
   private getAxisMapping: () => CameraAxisMapping;
+  private getInputMode: () => "camera" | "keyboard";
 
   private currentLesson: WarmupLessonId = "tempo";
   private displayState: WarmupDisplayState = "awaiting_interaction";
@@ -36,6 +37,7 @@ export class WarmupVisuals {
   private animFrameId: number | null = null;
   private animStartTime: number = 0;
   private isLiveTracking: boolean = false;
+  private userSelectedLesson: boolean = false;
 
   // External sync callbacks
   public onTempoSync?: (bpm: number, isDemo: boolean) => void;
@@ -44,10 +46,12 @@ export class WarmupVisuals {
 
   constructor(
     callbacks: WarmupVisualsCallbacks,
-    getAxisMapping: () => CameraAxisMapping = () => "classic"
+    getAxisMapping: () => CameraAxisMapping = () => "classic",
+    getInputMode: () => "camera" | "keyboard" = () => "camera"
   ) {
     this.callbacks = callbacks;
     this.getAxisMapping = getAxisMapping;
+    this.getInputMode = getInputMode;
 
     if (typeof window !== "undefined") {
       this.prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -68,7 +72,14 @@ export class WarmupVisuals {
     this.isReturningUser = isReturning;
     if (this.overlayEl) {
       this.overlayEl.classList.toggle("returning-user", isReturning);
+      const animStage = this.overlayEl.querySelector("#warmup-animation-stage") as HTMLElement | null;
+      if (animStage) animStage.style.display = isReturning ? "none" : "block";
+      const pills = this.overlayEl.querySelector("#warmup-lesson-pills") as HTMLElement | null;
+      if (pills) pills.style.display = isReturning ? "none" : "flex";
+      const skipBtn = this.overlayEl.querySelector("#warmup-skip-btn") as HTMLElement | null;
+      if (skipBtn) skipBtn.style.display = isReturning ? "none" : "inline-flex";
     }
+    this.updateLessonUI();
   }
 
   setDisplayState(state: WarmupDisplayState): void {
@@ -84,11 +95,6 @@ export class WarmupVisuals {
 
   setMuted(muted: boolean): void {
     this.isMuted = muted;
-    const muteBtn = this.overlayEl?.querySelector("#warmup-mute-btn");
-    if (muteBtn) {
-      muteBtn.textContent = muted ? "🔇 Muted" : "🔊 Sound on";
-      muteBtn.setAttribute("aria-label", muted ? "Unmute audio" : "Mute audio");
-    }
   }
 
   isSoundMuted(): boolean {
@@ -194,20 +200,23 @@ export class WarmupVisuals {
       <!-- Compact Glassmorphism Instruction Card (Bottom of Frame) -->
       <div class="warmup-card" id="warmup-card">
         <div class="warmup-card-header">
-          <span class="warmup-step-badge" id="warmup-step-badge">WARMING UP 1 OF 3</span>
+          <div class="warmup-card-header-left" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span class="warmup-step-badge" id="warmup-step-badge">STEP 1: SPEED (TEMPO)</span>
+            <div class="warmup-lesson-pills" id="warmup-lesson-pills" role="tablist" aria-label="Tutorial lessons">
+              <button class="warmup-lesson-pill active" data-lesson="tempo" id="pill-tempo" role="tab" aria-selected="true">⚡ Speed</button>
+              <button class="warmup-lesson-pill" data-lesson="dynamics" id="pill-dynamics" role="tab" aria-selected="false">🔊 Volume</button>
+            </div>
+          </div>
           <div class="warmup-card-actions">
-            <button id="warmup-mute-btn" class="warmup-pill-btn" aria-label="Toggle sound">
-              🔊 Sound on
-            </button>
             <button id="warmup-skip-btn" class="warmup-pill-btn secondary" aria-label="Skip warming up">
-              Skip warm-up
+              Skip
             </button>
           </div>
         </div>
 
         <h2 class="warmup-headline" id="warmup-headline">Shape the tempo</h2>
         <p class="warmup-copy" id="warmup-copy">
-          Move your hands higher to speed up. Lower them to slow down. Hear the violin follow you.
+          Raise your hands higher to speed up. Lower them to slow down. Watch the tempo speedometer to your right.
         </p>
 
         <!-- Loading Bar Section -->
@@ -220,7 +229,7 @@ export class WarmupVisuals {
             <div class="warmup-progress-fill" id="warmup-progress-fill" style="width: 0%;"></div>
           </div>
           <div class="warmup-status-row">
-            <span class="warmup-task-status" id="warmup-task-status">Tuning the first violin...</span>
+            <span class="warmup-task-status" id="warmup-task-status">Tuning instruments...</span>
           </div>
         </div>
 
@@ -234,9 +243,9 @@ export class WarmupVisuals {
           <button id="warmup-use-keyboard-btn" class="warmup-secondary-btn" style="display: none;">
             ⌨️ Use keyboard instead
           </button>
-          <!-- Ready State Button -->
-          <button id="warmup-ready-btn" class="warmup-primary-btn ready-glow" style="display: none;">
-            🪄 Start conducting
+          <!-- Ready State Button (High-contrast, unmissable call-to-action) -->
+          <button id="warmup-ready-btn" class="warmup-primary-btn ready-glow prominent-cta" style="display: none;">
+            🪄 START CONDUCTING — TRY IT NOW ➔
           </button>
           <!-- Camera Retry Button -->
           <button id="warmup-retry-cam-btn" class="warmup-secondary-btn" style="display: none;">
@@ -252,6 +261,7 @@ export class WarmupVisuals {
     this.overlayEl = overlay;
     this.container.appendChild(overlay);
     this.bindEvents();
+    this.setReturningUser(this.isReturningUser);
     this.startAnimationLoop();
     this.updateLessonUI();
     this.updateDisplayStateUI();
@@ -259,6 +269,16 @@ export class WarmupVisuals {
 
   private bindEvents(): void {
     if (!this.overlayEl) return;
+
+    this.overlayEl.querySelector("#pill-tempo")?.addEventListener("click", () => {
+      this.userSelectedLesson = true;
+      this.setLesson("tempo");
+    });
+
+    this.overlayEl.querySelector("#pill-dynamics")?.addEventListener("click", () => {
+      this.userSelectedLesson = true;
+      this.setLesson("dynamics");
+    });
 
     this.overlayEl.querySelector("#warmup-start-audio-btn")?.addEventListener("click", () => {
       this.callbacks.onStartWarmup();
@@ -270,10 +290,6 @@ export class WarmupVisuals {
 
     this.overlayEl.querySelector("#warmup-skip-btn")?.addEventListener("click", () => {
       this.callbacks.onSkipWarmup();
-    });
-
-    this.overlayEl.querySelector("#warmup-mute-btn")?.addEventListener("click", () => {
-      this.callbacks.onToggleMute();
     });
 
     this.overlayEl.querySelector("#warmup-ready-btn")?.addEventListener("click", () => {
@@ -293,6 +309,9 @@ export class WarmupVisuals {
     const readyBtn = this.overlayEl.querySelector("#warmup-ready-btn") as HTMLElement | null;
     const retryCamBtn = this.overlayEl.querySelector("#warmup-retry-cam-btn") as HTMLElement | null;
     const skipBtn = this.overlayEl.querySelector("#warmup-skip-btn") as HTMLElement | null;
+    const badge = this.overlayEl.querySelector("#warmup-step-badge");
+    const headline = this.overlayEl.querySelector("#warmup-headline");
+    const copy = this.overlayEl.querySelector("#warmup-copy");
 
     if (startAudioBtn) startAudioBtn.style.display = "none";
     if (useKeyBtn) useKeyBtn.style.display = "none";
@@ -310,10 +329,20 @@ export class WarmupVisuals {
       case "nearly_ready":
         if (skipBtn) skipBtn.style.display = "none";
         break;
-      case "ready":
-        if (readyBtn) readyBtn.style.display = "inline-flex";
+      case "ready": {
+        const isCam = this.getInputMode() === "camera";
+        if (readyBtn) {
+          readyBtn.textContent = isCam ? "🪄 RAISE HANDS TO BEGIN ➔" : "⌨️ PRESS SPACE TO BEGIN ➔";
+          readyBtn.style.display = "inline-flex";
+        }
         if (skipBtn) skipBtn.style.display = "none";
+        if (headline) headline.textContent = "Ready to Conduct!";
+        if (badge) badge.textContent = "✓ ORCHESTRA READY • BATON IN HAND";
+        if (copy) {
+          copy.textContent = isCam ? "Raise your hands to begin" : "Press SPACE to begin";
+        }
         break;
+      }
       case "camera_failed":
         if (useKeyBtn) {
           useKeyBtn.textContent = "⌨️ Continue with keyboard";
@@ -334,24 +363,42 @@ export class WarmupVisuals {
     const handRight = this.overlayEl.querySelector("#warmup-hand-right") as SVGElement | null;
     const handPointer = this.overlayEl.querySelector("#warmup-hand-pointer") as SVGElement | null;
 
+    const pillTempo = this.overlayEl.querySelector("#pill-tempo");
+    const pillDynamics = this.overlayEl.querySelector("#pill-dynamics");
+    if (pillTempo) pillTempo.classList.toggle("active", this.currentLesson === "tempo");
+    if (pillDynamics) pillDynamics.classList.toggle("active", this.currentLesson === "dynamics");
+
     const mapping = this.getAxisMapping();
     const isFlipped = mapping === "flipped";
 
+    if (this.displayState === "ready") {
+      const isCam = this.getInputMode() === "camera";
+      if (badge) badge.textContent = "✓ ORCHESTRA READY • BATON IN HAND";
+      if (headline) headline.textContent = "Ready to Conduct!";
+      if (copy) copy.textContent = isCam ? "Raise your hands to begin" : "Press SPACE to begin";
+      return;
+    }
+
     if (this.isReturningUser) {
-      if (badge) badge.textContent = "QUICK CONDUCTING TIP";
-      if (headline) headline.textContent = "Welcome Back";
-      if (copy) copy.textContent = "Raise your hands when ready to begin conducting.";
+      if (badge) badge.textContent = "WELCOME BACK";
+      if (headline) headline.textContent = "Tuning the Orchestra…";
+      if (copy) copy.textContent = "Preparing instruments for your performance.";
+      if (handLeft) handLeft.style.display = "none";
+      if (handRight) handRight.style.display = "none";
+      if (handPointer) handPointer.style.display = "none";
       return;
     }
 
     switch (this.currentLesson) {
       case "tempo":
-        if (badge) badge.textContent = "WARMING UP 1 OF 3";
+        if (badge) {
+          badge.textContent = "STEP 1 OF 2: SPEED (TEMPO)";
+        }
         if (headline) headline.textContent = "Shape the tempo";
         if (copy) {
           copy.textContent = isFlipped
-            ? "Move your hands apart to speed up. Bring them together to slow down. Hear the violin follow you."
-            : "Move your hands higher to speed up. Lower them to slow down. Hear the violin follow you.";
+            ? "Move your hands apart to speed up. Bring them together to slow down. Watch the tempo speedometer to your right."
+            : "Raise your hands higher to speed up. Lower them to slow down. Watch the tempo speedometer to your right.";
         }
         if (handLeft) handLeft.style.display = "block";
         if (handRight) handRight.style.display = "block";
@@ -359,12 +406,14 @@ export class WarmupVisuals {
         break;
 
       case "dynamics":
-        if (badge) badge.textContent = "WARMING UP 2 OF 3";
-        if (headline) headline.textContent = "Shape the sound";
+        if (badge) {
+          badge.textContent = "STEP 2 OF 2: VOLUME (DYNAMICS)";
+        }
+        if (headline) headline.textContent = "Shape the volume";
         if (copy) {
           copy.textContent = isFlipped
-            ? "Move your hands higher for louder. Lower them for softer."
-            : "Move your hands apart for louder. Bring them together for softer.";
+            ? "Raise your hands higher for louder (fff). Lower them for softer (pp). Watch the dynamics ribbon below."
+            : "Move your hands apart for louder (fff). Bring them together for softer (pp). Watch the dynamics ribbon below.";
         }
         if (handLeft) handLeft.style.display = "block";
         if (handRight) handRight.style.display = "block";
@@ -372,7 +421,7 @@ export class WarmupVisuals {
         break;
 
       case "spotlight":
-        if (badge) badge.textContent = "WARMING UP 3 OF 3";
+        if (badge) badge.textContent = "TUTORIAL: SPOTLIGHT";
         if (headline) headline.textContent = "Spotlight the orchestra";
         if (copy) copy.textContent = "Hold one finger upright, then aim at a section to bring it forward.";
         if (handLeft) handLeft.style.display = "none";
@@ -396,12 +445,18 @@ export class WarmupVisuals {
   private animateStep(now: number): void {
     if (!this.overlayEl) return;
 
-    // If live tracking is active, don't drive needle/audio with synthetic animation
-    if (this.isLiveTracking) return;
+    // If returning user or live tracking is active, don't drive needle/audio with synthetic animation
+    if (this.isReturningUser || this.isLiveTracking) return;
 
     const elapsed = (now - this.animStartTime) / 1000;
     const mapping = this.getAxisMapping();
     const isFlipped = mapping === "flipped";
+
+    // Auto-advance between Speed and Volume tutorials if user has not manually clicked a tab
+    if (!this.userSelectedLesson && elapsed > 8.0 && this.displayState !== "ready") {
+      this.setLesson(this.currentLesson === "tempo" ? "dynamics" : "tempo");
+      return;
+    }
 
     const handLeft = this.overlayEl.querySelector("#warmup-hand-left") as SVGElement | null;
     const handRight = this.overlayEl.querySelector("#warmup-hand-right") as SVGElement | null;
@@ -409,62 +464,64 @@ export class WarmupVisuals {
 
     if (this.prefersReducedMotion) {
       // In reduced motion, stay at clean stationary demonstration poses
-      if (handLeft) handLeft.setAttribute("transform", "translate(220, 220)");
-      if (handRight) handRight.setAttribute("transform", "translate(380, 220)");
-      if (handPointer) handPointer.setAttribute("transform", "translate(300, 240)");
+      if (handLeft) handLeft.setAttribute("transform", "translate(220, 200)");
+      if (handRight) handRight.setAttribute("transform", "translate(380, 200)");
+      if (handPointer) handPointer.setAttribute("transform", "translate(300, 220)");
       return;
     }
 
-    if (this.currentLesson === "tempo") {
-      // Periodic sinusoidal oscillation (~2.5s cycle)
-      const phase = (elapsed % 2.5) / 2.5; // 0 -> 1
-      const sinVal = Math.sin(phase * Math.PI * 2); // -1 -> 1
-      const normalized01 = (sinVal + 1) / 2; // 0 (low) -> 1 (high)
+    // Deliberate, graceful 5.4-second conducting cycle with cosine easing
+    const CYCLE_DURATION = 5.4;
+    const phase = (elapsed % CYCLE_DURATION) / CYCLE_DURATION; // 0 -> 1
+    const eased = (1 - Math.cos(phase * Math.PI * 2)) / 2; // 0 (min) -> 1 (max) -> 0 (min)
 
+    if (this.currentLesson === "tempo") {
       if (isFlipped) {
         // Flipped: Width modulates tempo
-        const spread = 80 + normalized01 * 120; // 80 to 200px
-        if (handLeft) handLeft.setAttribute("transform", `translate(${300 - spread}, 230)`);
-        if (handRight) handRight.setAttribute("transform", `translate(${300 + spread}, 230)`);
+        const spread = 60 + eased * 140; // 60 to 200px
+        if (handLeft) handLeft.setAttribute("transform", `translate(${300 - spread}, 200)`);
+        if (handRight) handRight.setAttribute("transform", `translate(${300 + spread}, 200)`);
       } else {
-        // Classic: Height modulates tempo
-        const yPos = 280 - normalized01 * 140; // 280 (low) to 140 (high)
+        // Classic: Height modulates tempo with deliberate broad travel
+        const yPos = 260 - eased * 150; // 260 (low, slow) down to 110 (high, fast)
         if (handLeft) handLeft.setAttribute("transform", `translate(220, ${yPos})`);
         if (handRight) handRight.setAttribute("transform", `translate(380, ${yPos})`);
       }
 
-      // Sync tempo needle: 70 BPM (slow) to 160 BPM (fast)
-      const demoBpm = 70 + normalized01 * 90;
+      // Sync tempo needle and audio smoothly: 52 BPM (Largo) to 162 BPM (Presto)
+      const demoBpm = Math.round(52 + eased * 110);
       this.onTempoSync?.(demoBpm, true);
     } else if (this.currentLesson === "dynamics") {
-      const phase = (elapsed % 2.5) / 2.5;
-      const sinVal = Math.sin(phase * Math.PI * 2);
-      const normalized01 = (sinVal + 1) / 2; // 0 (soft) -> 1 (loud)
-
       if (isFlipped) {
         // Flipped: Height modulates dynamics
-        const yPos = 280 - normalized01 * 140;
+        const yPos = 260 - eased * 150;
         if (handLeft) handLeft.setAttribute("transform", `translate(220, ${yPos})`);
         if (handRight) handRight.setAttribute("transform", `translate(380, ${yPos})`);
       } else {
-        // Classic: Width modulates dynamics
-        const spread = 70 + normalized01 * 140; // 70 to 210px
-        if (handLeft) handLeft.setAttribute("transform", `translate(${300 - spread}, 230)`);
-        if (handRight) handRight.setAttribute("transform", `translate(${300 + spread}, 230)`);
+        // Classic: Width modulates dynamics with broad horizontal travel
+        const spread = 45 + eased * 165; // 45px (intimate pp) to 210px (expansive fff)
+        if (handLeft) handLeft.setAttribute("transform", `translate(${300 - spread}, 200)`);
+        if (handRight) handRight.setAttribute("transform", `translate(${300 + spread}, 200)`);
       }
 
-      // Sync dynamics ladder & volume
-      const level = normalized01 > 0.75 ? "ff" : normalized01 > 0.5 ? "f" : normalized01 > 0.25 ? "mf" : "p";
-      this.onDynamicsSync?.(level, normalized01);
+      // Sync dynamics ladder, analogue pip, badge & audio volume
+      const continuous = 0.05 + eased * 0.90;
+      const level =
+        continuous >= 0.88 ? "fff" :
+        continuous >= 0.72 ? "ff" :
+        continuous >= 0.56 ? "f" :
+        continuous >= 0.42 ? "mf" :
+        continuous >= 0.26 ? "mp" :
+        continuous >= 0.14 ? "p" : "pp";
+
+      this.onDynamicsSync?.(level, continuous);
     } else if (this.currentLesson === "spotlight") {
-      // Hand pointer ray sweeps across stage (~3s cycle)
-      const phase = (elapsed % 3.0) / 3.0;
-      const sweepX = 260 + Math.sin(phase * Math.PI * 2) * 90; // sweeps left to right
+      // Hand pointer ray sweeps across stage (~4.0s cycle)
+      const phaseSpot = (elapsed % 4.0) / 4.0;
+      const sweepX = 260 + Math.sin(phaseSpot * Math.PI * 2) * 90;
       if (handPointer) {
-        handPointer.setAttribute("transform", `translate(${sweepX}, 250)`);
+        handPointer.setAttribute("transform", `translate(${sweepX}, 220)`);
       }
-
-      // Intersect sections visually
       const targetSec = sweepX < 280 ? "violin1" : sweepX < 320 ? "violin2" : "viola";
       this.onSpotlightSync?.(targetSec);
     }

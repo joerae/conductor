@@ -258,6 +258,46 @@ function renderOrchestraStage(piece: PieceDefinition): void {
   });
 }
 
+function renderWarmupOrchestraStage(): void {
+  clearAllNoteVisuals();
+  channelToSectionMap.clear();
+  trackNameToSectionMap.clear();
+  sectionMusicianEggsMap.clear();
+  sectionTextMap.clear();
+
+  const centerX = 500;
+  const cy = 68;
+  const secId = "warmup-violin";
+
+  const sectionsSvg = `
+    <g id="section-${secId}" class="instrument-section" data-section-id="${secId}">
+      <g class="section-debug-hud">
+        <rect x="${centerX - 65}" y="0" width="130" height="42" rx="6" class="debug-vel-pill" />
+        <text x="${centerX}" y="17" text-anchor="middle" class="debug-vel-main" style="font-size:11px;">Warm Up Soloist</text>
+        <text x="${centerX}" y="31" text-anchor="middle" class="debug-vel-decomp" style="font-size:8.5px;">Concertmaster Violin</text>
+      </g>
+      <ellipse cx="${centerX - 24}" cy="${cy + 6}" rx="16" ry="24" class="musician violin egg-0" />
+      <ellipse cx="${centerX}" cy="${cy}" rx="19" ry="29" class="musician violin egg-1" />
+      <ellipse cx="${centerX + 24}" cy="${cy + 6}" rx="16" ry="24" class="musician violin egg-2" />
+      <text x="${centerX}" y="122" text-anchor="middle" class="section-label" style="font-size: 13px; font-weight: 600; letter-spacing: 0.08em;">Violin</text>
+    </g>
+  `;
+
+  silhouetteContainer.innerHTML = `
+    <svg viewBox="0 0 1000 140" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+      ${sectionsSvg}
+      <!-- Stage floor -->
+      <rect x="20" y="134" width="960" height="4" rx="2" class="stage-floor" />
+    </svg>
+  `;
+
+  const el = document.getElementById(`section-${secId}`);
+  if (el) {
+    const eggs = Array.from(el.querySelectorAll<SVGElement>(".musician"));
+    sectionMusicianEggsMap.set(el, eggs);
+  }
+}
+
 // Map tracking the last 3 velocities for each section
 const sectionVelocityHistory = new Map<string, number[]>();
 
@@ -509,6 +549,21 @@ const controller = new ExperienceController({
       },
     });
   },
+  onCameraMotionSample: (sample) => {
+    if (stageEl.classList.contains("stage-warming-up")) {
+      warmupManager?.handleLiveSample(sample);
+      if (sample.tempoBpm) {
+        demoBpm = sample.tempoBpm;
+      }
+      if (sample.dynamicContinuous !== undefined && sample.dynamicLevel) {
+        demoContinuous = sample.dynamicContinuous;
+        demoDynamicLevel = sample.dynamicLevel as DynamicLevel;
+      }
+      if (sample.isHandsRaised && warmupManager?.getCoordinator().getState().isReady) {
+        exitWarmupAndStartConducting();
+      }
+    }
+  },
 });
 
 spotlightScoreVisualizer = new SpotlightScoreVisualizer({
@@ -589,7 +644,7 @@ function updateInputSourceButtons(source: InputSource): void {
 
   if (spaceKeyHint) {
     if (source === "camera") {
-      spaceKeyHint.innerHTML = `<span class="key" style="border-color:#5cd87e; color:#5cd87e; background:rgba(52,199,89,0.08); box-shadow:0 0 12px rgba(52,199,89,0.2);">📷 MOTION ACTIVE • TAP SPACE FOR BEATS</span>`;
+      spaceKeyHint.innerHTML = `<span class="key" style="border-color:#5cd87e; color:#5cd87e; background:rgba(52,199,89,0.08); box-shadow:0 0 12px rgba(52,199,89,0.2);">📷 MOTION ACTIVE • RAISE HANDS TO CONDUCT</span>`;
     } else {
       spaceKeyHint.innerHTML = `<span class="key">SPACE</span>`;
     }
@@ -785,6 +840,10 @@ window.addEventListener("keydown", (e) => {
     // \ always triggers accent burst
     e.preventDefault();
     controller.armAccent();
+  } else if (e.code === "KeyW" && !e.repeat) {
+    // W reruns the warm-up tutorial
+    e.preventDefault();
+    rerunWarmup();
   }
 });
 
@@ -927,6 +986,9 @@ window.addEventListener("keydown", (e) => {
 });
 
 let warmupManager: WarmupManager | null = null;
+let demoBpm: number | undefined;
+let demoContinuous: number | undefined;
+let demoDynamicLevel: DynamicLevel | undefined;
 
 function updateAnalogueDynamicUI(overrideContinuous?: number, overrideLevel?: string): void {
   const analogueMarker = document.getElementById("dynamic-analogue-marker") as HTMLElement | null;
@@ -947,6 +1009,85 @@ function updateAnalogueDynamicUI(overrideContinuous?: number, overrideLevel?: st
   }
 }
 
+// ── Warm Up Lifecycle & Helpers ─────────────────────────────────────────────
+
+function exitWarmupAndStartConducting(): void {
+  if (!stageEl.classList.contains("stage-warming-up")) return;
+  demoBpm = undefined;
+  demoContinuous = undefined;
+  demoDynamicLevel = undefined;
+  stageEl.classList.remove("stage-warming-up");
+  const piece = controller.getCurrentPiece() || getPieceById(controller.getCurrentPieceId()) || REPERTOIRE[0];
+  renderOrchestraStage(piece);
+  controller.startConducting();
+  updateControlHints();
+}
+
+function pulseWarmupViolin(): void {
+  const secEl = document.getElementById("section-warmup-violin") || document.querySelector(".instrument-section");
+  if (secEl) {
+    const eggs = sectionMusicianEggsMap.get(secEl as HTMLElement) || Array.from(secEl.querySelectorAll<SVGElement>(".musician"));
+    eggs.forEach(egg => egg.classList.add("playing"));
+    setTimeout(() => eggs.forEach(egg => egg.classList.remove("playing")), 320);
+  }
+}
+
+function wireWarmupAudioEvents(): void {
+  if (!warmupManager) return;
+  const player = warmupManager.getAudioPlayer();
+  player.onNotePlay = () => {
+    pulseWarmupViolin();
+  };
+}
+
+function createWarmupManager(): WarmupManager {
+  const manager = new WarmupManager({
+    onStartConducting: () => {
+      exitWarmupAndStartConducting();
+    },
+    onContinueKeyboard: () => {
+      void controller.setInputSource("keyboard");
+      updateControlHints();
+    },
+    onRetryCamera: () => {
+      void controller.setInputSource("camera");
+      updateControlHints();
+    },
+    getCameraAxisMapping: () => controller.getCameraAxisMapping(),
+    onTempoDemonstration: (bpm) => {
+      demoBpm = bpm;
+      updateBpmGaugeUI(bpm);
+    },
+    onDynamicsDemonstration: (level, continuous) => {
+      demoDynamicLevel = level as DynamicLevel;
+      demoContinuous = continuous;
+      updateAnalogueDynamicUI(continuous, level);
+      updateDynamicLadderUI(level as DynamicLevel);
+    },
+    onSpotlightSection: () => {
+      pulseWarmupViolin();
+    },
+  });
+  return manager;
+}
+
+function rerunWarmup(): void {
+  if (!cameraHeroSlot) return;
+  stageEl.classList.add("stage-warming-up");
+  renderWarmupOrchestraStage();
+  if (!warmupManager) {
+    warmupManager = createWarmupManager();
+  }
+  const audioCtx = controller.getAudioEngine().getAudioContext() ?? undefined;
+  warmupManager.replayWarmup(cameraHeroSlot, audioCtx);
+  wireWarmupAudioEvents();
+}
+
+// Wire debug overlay rerun tutorial button
+controller.getDebugOverlay()?.setOnRerunTutorial(() => {
+  rerunWarmup();
+});
+
 // ── Load application ──────────────────────────────────────────────────────────
 
 loadVersionInfo();
@@ -955,7 +1096,7 @@ loadRepertoireCatalog().then(() => {
   const initialPiece = controller.getCurrentPiece();
   titleEl.textContent = initialPiece.title;
   subtitleEl.textContent = `${initialPiece.composer} — ${initialPiece.movement} • ${initialPiece.conductMode || ""}`;
-  renderOrchestraStage(initialPiece);
+  renderWarmupOrchestraStage();
 
   // Immediate Shell Render: Stage is active immediately in warming-up mode
   stageEl.style.display = "flex";
@@ -969,49 +1110,26 @@ loadRepertoireCatalog().then(() => {
 
   // Continuous smooth update loop for BPM gauge & Analogue Dynamics Marker
   function gaugeRenderLoop(): void {
-    updateBpmGaugeUI();
-    updateAnalogueDynamicUI();
+    if (stageEl.classList.contains("stage-warming-up")) {
+      updateBpmGaugeUI(demoBpm);
+      updateAnalogueDynamicUI(demoContinuous, demoDynamicLevel);
+      if (demoDynamicLevel) {
+        updateDynamicLadderUI(demoDynamicLevel);
+      }
+    } else {
+      updateBpmGaugeUI();
+      updateAnalogueDynamicUI();
+    }
     requestAnimationFrame(gaugeRenderLoop);
   }
   gaugeRenderLoop();
 
   // Instantiate and mount WarmupManager inside camera hero slot
   if (cameraHeroSlot) {
-    warmupManager = new WarmupManager({
-      onStartConducting: () => {
-        stageEl.classList.remove("stage-warming-up");
-        controller.startConducting();
-        updateControlHints();
-      },
-      onContinueKeyboard: () => {
-        void controller.setInputSource("keyboard");
-        updateControlHints();
-      },
-      onRetryCamera: () => {
-        void controller.setInputSource("camera");
-        updateControlHints();
-      },
-      getCameraAxisMapping: () => controller.getCameraAxisMapping(),
-      onTempoDemonstration: (bpm) => {
-        updateBpmGaugeUI(bpm);
-      },
-      onDynamicsDemonstration: (level, continuous) => {
-        updateAnalogueDynamicUI(continuous, level);
-      },
-      onSpotlightSection: (sectionId) => {
-        if (sectionId) {
-          const secEl = document.getElementById(`section-${sectionId}`);
-          if (secEl) {
-            const eggs = sectionMusicianEggsMap.get(secEl) || [];
-            eggs.forEach(egg => egg.classList.add("playing"));
-            setTimeout(() => eggs.forEach(egg => egg.classList.remove("playing")), 300);
-          }
-        }
-      },
-    });
-
+    warmupManager = createWarmupManager();
     const audioCtx = controller.getAudioEngine().getAudioContext() ?? undefined;
     warmupManager.mount(cameraHeroSlot, audioCtx);
+    wireWarmupAudioEvents();
 
     // Kick off background piece loading with coordinator
     controller.loadWithCoordinator(warmupManager.getCoordinator()).catch(err => {
@@ -1019,6 +1137,8 @@ loadRepertoireCatalog().then(() => {
     });
   } else {
     // Fallback if camera slot missing
+    renderOrchestraStage(initialPiece);
+    stageEl.classList.remove("stage-warming-up");
     controller.load().catch(err => {
       console.error("Conductor fallback load error:", err);
     });
@@ -1037,40 +1157,18 @@ const handleWarmupUserGesture = () => {
 window.addEventListener("pointerdown", handleWarmupUserGesture, { once: true });
 window.addEventListener("keydown", handleWarmupUserGesture, { once: true });
 
-// Footer "How to conduct" tutorial replay button
+// Footer "How to conduct" tutorial replay button (if present)
 howToConductBtn?.addEventListener("click", () => {
-  if (!cameraHeroSlot) return;
-  stageEl.classList.add("stage-warming-up");
-  if (!warmupManager) {
-    warmupManager = new WarmupManager({
-      onStartConducting: () => {
-        stageEl.classList.remove("stage-warming-up");
-        controller.startConducting();
-        updateControlHints();
-      },
-      onContinueKeyboard: () => {
-        void controller.setInputSource("keyboard");
-        updateControlHints();
-      },
-      onRetryCamera: () => {
-        void controller.setInputSource("camera");
-        updateControlHints();
-      },
-      getCameraAxisMapping: () => controller.getCameraAxisMapping(),
-      onTempoDemonstration: (bpm) => updateBpmGaugeUI(bpm),
-      onDynamicsDemonstration: (level, continuous) => updateAnalogueDynamicUI(continuous, level),
-      onSpotlightSection: (sectionId) => {
-        if (sectionId) {
-          const secEl = document.getElementById(`section-${sectionId}`);
-          if (secEl) {
-            const eggs = sectionMusicianEggsMap.get(secEl) || [];
-            eggs.forEach(egg => egg.classList.add("playing"));
-            setTimeout(() => eggs.forEach(egg => egg.classList.remove("playing")), 300);
-          }
-        }
-      },
-    });
+  rerunWarmup();
+});
+
+// Spacebar quick-start when ready during warming up (keyboard mode or quick skip)
+window.addEventListener("keydown", (e) => {
+  if (e.code === "Space" && stageEl.classList.contains("stage-warming-up")) {
+    const isReady = warmupManager?.getCoordinator().getState().isReady;
+    if (isReady) {
+      e.preventDefault();
+      exitWarmupAndStartConducting();
+    }
   }
-  const audioCtx = controller.getAudioEngine().getAudioContext() ?? undefined;
-  warmupManager.replayWarmup(cameraHeroSlot, audioCtx);
 });

@@ -65,6 +65,8 @@ export class WarmupAudioPlayer {
   private activeVoices: Set<{ stop: () => void }> = new Set();
   private isAccompanimentEnabled: boolean = false;
 
+  public onNotePlay?: (note: WarmupNote, audioTime: number, durationSec: number) => void;
+
   constructor() {}
 
   /**
@@ -199,6 +201,14 @@ export class WarmupAudioPlayer {
   private playNote(note: WarmupNote, audioTime: number, durationSec: number): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
+
+    // Trigger visual note play callback in sync with audio time
+    const deltaMs = Math.max(0, (audioTime - ctx.currentTime) * 1000);
+    setTimeout(() => {
+      if (this.isRunning) {
+        this.onNotePlay?.(note, audioTime, durationSec);
+      }
+    }, deltaMs);
 
     // Check if WebAudioFont violin preset is available
     const win = typeof window !== "undefined" ? (window as any) : (globalThis as any);

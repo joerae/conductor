@@ -1,9 +1,22 @@
 {
-  "version": "0.29.0",
+  "version": "0.29.1",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.29.1",
+      "date": "2026-09-04",
+      "summary": "Warm-up Screen Layering Fix, Deliberate Speed & Volume Modulation, Tutorial Navigation, and Unmissable Ready CTA",
+      "details": [
+        "Stage Element Isolation: Suppressed orchestra musician row, mode switches, spotlight lasers, and prompts during warming up so conductors focus solely on the Volume (Dynamics) and Speed (Tempo) controls alongside the central tutorial card",
+        "Layering & Card Unclipping: Allocated 480px comfortable min-height to camera hero slot with flex-shrink protection on warmup card, eliminating text clipping and card overflow behind the dynamics bar",
+        "Slow & Deliberate Conducting Gestures: Increased movement cycle period to 5.4s with cosine easing and broad physical amplitude (150px vertical range, 165px horizontal spread)",
+        "Live Controls Linkage: Resolved 60fps render-loop clobbering in main.ts so demo BPM smoothly sweeps the speedometer needle and value from 52 to 162 BPM, and demo continuous volume modulates the dynamics ladder active pill (pp to fff), analogue pip, badge %, and violin audio volume in real time",
+        "Interactive Tutorial Navigation: Added step pills (Speed vs Volume) and auto-cycling so both new and returning conductors can easily explore the conducting tutorial tips",
+        "Unmissable Ready CTA: Rendered high-contrast, glowing 'START CONDUCTING — TRY IT NOW ➔' call-to-action button with golden shimmer and spacebar quick-start when all instruments are tuned and ready"
+      ]
+    },
     {
       "version": "0.29.0",
       "date": "2026-09-04",

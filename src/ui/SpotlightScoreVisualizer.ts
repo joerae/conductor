@@ -63,18 +63,77 @@ export function getClefForSection(sectionId: string): ClefType {
   return "treble";
 }
 
+// Key signatures map: note letter -> alteration in key signature ("#" | "b")
+const KEY_SIGNATURE_ALTERATIONS: Record<string, Record<string, string>> = {
+  // Major
+  "C": {},
+  "G": { f: "#" },
+  "D": { f: "#", c: "#" },
+  "A": { f: "#", c: "#", g: "#" },
+  "E": { f: "#", c: "#", g: "#", d: "#" },
+  "B": { f: "#", c: "#", g: "#", d: "#", a: "#" },
+  "F#": { f: "#", c: "#", g: "#", d: "#", a: "#", e: "#" },
+  "C#": { f: "#", c: "#", g: "#", d: "#", a: "#", e: "#", b: "#" },
+  "F": { b: "b" },
+  "Bb": { b: "b", e: "b" },
+  "Eb": { b: "b", e: "b", a: "b" },
+  "Ab": { b: "b", e: "b", a: "b", d: "b" },
+  "Db": { b: "b", e: "b", a: "b", d: "b", g: "b" },
+  "Gb": { b: "b", e: "b", a: "b", d: "b", g: "b", c: "b" },
+  "Cb": { b: "b", e: "b", a: "b", d: "b", g: "b", c: "b", f: "b" },
+  // Minor
+  "Am": {},
+  "Em": { f: "#" },
+  "Bm": { f: "#", c: "#" },
+  "F#m": { f: "#", c: "#", g: "#" },
+  "C#m": { f: "#", c: "#", g: "#", d: "#" },
+  "G#m": { f: "#", c: "#", g: "#", d: "#", a: "#" },
+  "D#m": { f: "#", c: "#", g: "#", d: "#", a: "#", e: "#" },
+  "Dm": { b: "b" },
+  "Gm": { b: "b", e: "b" },
+  "Cm": { b: "b", e: "b", a: "b" },
+  "Fm": { b: "b", e: "b", a: "b", d: "b" },
+  "Bbm": { b: "b", e: "b", a: "b", d: "b", g: "b" },
+  "Ebm": { b: "b", e: "b", a: "b", d: "b", g: "b", c: "b" },
+};
+
 /**
- * Converts MIDI note number (0–127) to VexFlow key string (e.g. "c/4", "f/4") and accidental ("#" or "b").
+ * Converts MIDI note number (0–127) to VexFlow key string (e.g. "c/4", "f/4") and accidental ("#", "b", "n", or null).
+ * Takes into account the key signature so notes natural to the key do not receive redundant accidentals.
  */
-export function midiNoteToVexKey(midiNote: number): VexKeyInfo {
-  const noteLetters = ["c", "c", "d", "e", "e", "f", "f", "g", "g", "a", "b", "b"];
-  const accidentals = ["", "#", "", "b", "", "", "#", "", "#", "", "b", ""];
+export function midiNoteToVexKey(midiNote: number, keySignature: string = "C"): VexKeyInfo {
   const pitchClass = ((midiNote % 12) + 12) % 12;
   const octave = Math.floor(midiNote / 12) - 1;
-  const letter = noteLetters[pitchClass];
-  const accidental = accidentals[pitchClass] || null;
-  const key = `${letter}/${octave}`;
-  return { key, accidental };
+  const alterations = KEY_SIGNATURE_ALTERATIONS[keySignature] || {};
+
+  // Standard C-major pitch classes for natural letters
+  const naturalPitch: Record<string, number> = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 };
+
+  // 1. Check if pitchClass directly matches a note letter in this key signature
+  for (const letter of ["c", "d", "e", "f", "g", "a", "b"] as const) {
+    const alt = alterations[letter] || "";
+    const expectedPitch = (naturalPitch[letter] + (alt === "#" ? 1 : alt === "b" ? -1 : 0) + 12) % 12;
+    if (pitchClass === expectedPitch) {
+      // Note is exactly in key signature: no accidental needed on the stave notehead!
+      return { key: `${letter}/${octave}`, accidental: null };
+    }
+  }
+
+  // 2. Note is an accidental relative to key signature
+  // Check if it's a natural alteration of a letter that has a sharp or flat in the key
+  for (const letter of ["c", "d", "e", "f", "g", "a", "b"] as const) {
+    if (alterations[letter] && pitchClass === naturalPitch[letter]) {
+      // In key with sharp/flat, but this note is the natural degree
+      return { key: `${letter}/${octave}`, accidental: "n" };
+    }
+  }
+
+  // 3. Fallback to standard chromatic accidentals
+  const defaultLetters = ["c", "c", "d", "e", "e", "f", "f", "g", "g", "a", "b", "b"];
+  const defaultAccidentals = ["", "#", "", "b", "", "", "#", "", "#", "", "b", ""];
+  const letter = defaultLetters[pitchClass];
+  const accidental = defaultAccidentals[pitchClass] || null;
+  return { key: `${letter}/${octave}`, accidental };
 }
 
 /**
@@ -481,6 +540,7 @@ export class SpotlightScoreVisualizer {
       const section = piece?.sections.find(s => s.id === this.currentSectionId);
       const sectionName = section?.name || "Instrument";
       const clef = getClefForSection(this.currentSectionId);
+      const keySig = piece?.keySignature || "C";
 
     const transport = this.getTransport();
     const cursorBeat = transport ? transport.getCursorBeat() : 0;
@@ -506,6 +566,7 @@ export class SpotlightScoreVisualizer {
           <span class="score-card-icon">🎻</span>
           <span class="score-card-section-name">${sectionName}</span>
           <span class="score-card-badge clef-badge">${clefBadge}</span>
+          ${keySig !== "C" ? `<span class="score-card-badge key-badge">${keySig}</span>` : ""}
         </div>
         <div class="score-card-meta">
           <span class="score-card-badge bar-badge">m. ${bar1 + 1}–${bar2 + 1}</span>
@@ -528,9 +589,13 @@ export class SpotlightScoreVisualizer {
     renderer.resize(totalW, totalH);
     const context = renderer.getContext();
 
-    // Stave 1 (Bar 1) with Clef, Time Signature, and Start/End barlines
+    // Stave 1 (Bar 1) with Clef, Key Signature, Time Signature, and Start/End barlines
     const stave1 = new Stave(10, 0, barWidth);
-    stave1.addClef(clef).addTimeSignature(this.timeSignatureText);
+    stave1.addClef(clef);
+    if (keySig && keySig !== "C") {
+      stave1.addKeySignature(keySig);
+    }
+    stave1.addTimeSignature(this.timeSignatureText);
     stave1.setBegBarType(Barline.type.SINGLE);
     stave1.setEndBarType(Barline.type.SINGLE);
     stave1.setSection(`m. ${bar1 + 1}`, 0);
@@ -552,7 +617,8 @@ export class SpotlightScoreVisualizer {
       clef,
       stave1,
       context,
-      barWidth
+      barWidth,
+      keySig
     );
 
     // Render Bar 2 notes
@@ -562,7 +628,8 @@ export class SpotlightScoreVisualizer {
       clef,
       stave2,
       context,
-      barWidth
+      barWidth,
+      keySig
     );
 
     // Append Playhead Group directly into VexFlow's SVG element
@@ -611,7 +678,8 @@ export class SpotlightScoreVisualizer {
     clef: ClefType,
     stave: Stave,
     context: any,
-    barWidth: number
+    barWidth: number,
+    keySig: string = "C"
   ): void {
     const barNotes = this.currentSectionNotes.filter(
       n => n.beat >= startBeat - 0.05 && n.beat < endBeat
@@ -642,7 +710,7 @@ export class SpotlightScoreVisualizer {
       const seenKeys = new Set<string>();
 
       for (const n of group.notes) {
-        const { key, accidental } = midiNoteToVexKey(n.midiNote);
+        const { key, accidental } = midiNoteToVexKey(n.midiNote, keySig);
         if (!seenKeys.has(key)) {
           seenKeys.add(key);
           keys.push(key);

@@ -63,6 +63,12 @@ export type UICallbacks = {
   onPartyModeChange?: (isParty: boolean) => void;
   onLoveModeChange?: (isLove: boolean) => void;
   onFocusChange?: (telemetry: FocusTelemetry) => void;
+  onCameraMotionSample?: (sample: {
+    tempoBpm?: number;
+    dynamicLevel?: string;
+    dynamicContinuous?: number;
+    isHandsRaised?: boolean;
+  }) => void;
 };
 
 // ─── ExperienceController ───────────────────────────────────────────────────
@@ -129,6 +135,7 @@ export class ExperienceController {
   private startPlaybackPromise: Promise<void> | null = null;
   private cutoffInitiatedPause: boolean = false;
   private isCameraInitializing: boolean = false;
+  private isWarmingUp: boolean = false;
 
   constructor(callbacks: UICallbacks) {
     this.uiCallbacks = callbacks;
@@ -256,7 +263,12 @@ export class ExperienceController {
     return this.audioEngine;
   }
 
+  isWarmupActive(): boolean {
+    return this.isWarmingUp;
+  }
+
   startConducting(): void {
+    this.isWarmingUp = false;
     this.currentGesturalBpm = this.nominalPieceBpm;
     this.clock.setBpm(this.nominalPieceBpm);
     this.indicatedBpm = Math.round(this.nominalPieceBpm);
@@ -277,6 +289,7 @@ export class ExperienceController {
       return this.loadWithCoordinator(coordinator, pieceId);
     }
 
+    this.isWarmingUp = false;
     this.setState("loading");
     this.currentPieceId = pieceId;
     const piece = getPieceById(pieceId) || REPERTOIRE[0];
@@ -341,6 +354,7 @@ export class ExperienceController {
     coordinator: LoadingCoordinator,
     pieceId: string = DEFAULT_PIECE_ID
   ): Promise<void> {
+    this.isWarmingUp = true;
     this.activeCoordinator = coordinator;
     this.setState("loading");
     this.currentPieceId = pieceId;
@@ -565,6 +579,11 @@ export class ExperienceController {
             this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
           }
         }
+
+        this.uiCallbacks.onCameraMotionSample?.({
+          dynamicLevel: dyn.level,
+          dynamicContinuous: dyn.value,
+        });
       });
 
       // Wire Instrument Focus Mode telemetry & dynamic section mixing
@@ -664,9 +683,18 @@ export class ExperienceController {
               if (hist.length > this.HAND_Y_HISTORY_LEN) hist.shift();
             }
 
+            const isRaised = samples.some(s => s.conductorPoint.y >= 0.10);
+            const tempoMultiplier = this.calculateGesturalTempoMultiplier(samples);
+            const liveTempoBpm = Math.round((this.basePieceBpm || 108) * tempoMultiplier);
+
+            // Always broadcast live gestural motion sample for warmup & UI meters
+            this.uiCallbacks.onCameraMotionSample?.({
+              tempoBpm: liveTempoBpm,
+              isHandsRaised: isRaised,
+            });
+
             // Mode E: Auto-start instantly as soon as user raises hands in front of camera
-            if (this.state === "ready" || this.state === "paused" || this.state === "completed") {
-              const isRaised = samples.some(s => s.conductorPoint.y >= 0.10);
+            if (!this.isWarmingUp && (this.state === "ready" || this.state === "paused" || this.state === "completed")) {
               if (isRaised) {
                 if (this.state === "completed") {
                   this.restart();
@@ -674,95 +702,6 @@ export class ExperienceController {
                 this.startPlayback();
               }
             } else if (this.state === "playing") {
-              let tempoMultiplier = 1.0;
-
-              if (this.cameraAxisMapping === "flipped") {
-                // ── FLIPPED: Horizontal Span (Width) modulates Tempo ──
-                // Spreading hands apart -> Accelerando (up to 1.65x piece BPM)
-                // Bringing hands together -> Rallentando (down to 0.35x piece BPM)
-                if (samples.length >= 2) {
-                  const s0 = samples[0];
-                  const s1 = samples[1];
-                  const centerSpan = Math.abs(s0.conductorPoint.x - s1.conductorPoint.x);
-
-                  // Estimate hand scale from landmarks if available
-                  let avgHandSize = 0.10;
-                  if (s0.landmarks && s1.landmarks && s0.landmarks.length >= 5 && s1.landmarks.length >= 5) {
-                    const xs0 = s0.landmarks.map(p => p.x);
-                    const xs1 = s1.landmarks.map(p => p.x);
-                    const size0 = Math.max(...xs0) - Math.min(...xs0);
-                    const size1 = Math.max(...xs1) - Math.min(...xs1);
-                    avgHandSize = (size0 + size1) / 2;
-                  }
-
-                  const touchingSpan = Math.max(0.04, avgHandSize * 0.95);
-                  const neutralSpan = touchingSpan + 0.18 + avgHandSize * 0.35;
-                  const maxSpan = neutralSpan + 0.26 + avgHandSize * 0.40;
-                  const DEADBAND = 0.03; // Deadband around resting shoulder width
-
-                  if (centerSpan > neutralSpan + DEADBAND) {
-                    const norm = Math.min(1.0, (centerSpan - (neutralSpan + DEADBAND)) / Math.max(0.05, maxSpan - (neutralSpan + DEADBAND)));
-                    tempoMultiplier = 1.0 + 0.65 * norm; // [1.00, 1.65]
-                  } else if (centerSpan < neutralSpan - DEADBAND) {
-                    const norm = Math.min(1.0, ((neutralSpan - DEADBAND) - centerSpan) / Math.max(0.05, (neutralSpan - DEADBAND) - touchingSpan));
-                    tempoMultiplier = 1.0 - 0.65 * norm; // [1.00, 0.35]
-                  } else {
-                    tempoMultiplier = 1.0;
-                  }
-                } else if (samples.length === 1) {
-                  // 1 hand: distance from horizontal center (x=0.50)
-                  const dx = Math.abs(samples[0].conductorPoint.x - 0.50);
-                  if (dx > 0.25) {
-                    tempoMultiplier = 1.0 + 0.65 * Math.min(1.0, (dx - 0.25) / 0.25);
-                  } else if (dx < 0.10) {
-                    tempoMultiplier = 1.0 - 0.65 * Math.min(1.0, (0.10 - dx) / 0.10);
-                  } else {
-                    tempoMultiplier = 1.0;
-                  }
-                }
-              } else {
-                // ── CLASSIC (DEFAULT): Vertical Height (Y) modulates Tempo ──
-                // Raising hands up -> Accelerando (up to 1.65x piece BPM)
-                // Lowering hands down -> Rallentando (down to 0.35x piece BPM)
-                let effectiveY: number;
-                if (samples.length === 2) {
-                  const stats = samples.map(s => {
-                    const hist = this.handYHistory.get(s.handIndex) ?? [s.conductorPoint.y];
-                    const mean = hist.reduce((a, b) => a + b, 0) / hist.length;
-                    const variance = hist.reduce((a, b) => a + (b - mean) ** 2, 0) / hist.length;
-                    return { y: s.conductorPoint.y, mean, variance };
-                  });
-
-                  const [h0, h1] = stats;
-                  const h0Beating = h0.variance > 0.0006 && h0.variance > 2.0 * h1.variance;
-                  const h1Beating = h1.variance > 0.0006 && h1.variance > 2.0 * h0.variance;
-
-                  if (h0Beating && !h1Beating) {
-                    effectiveY = h1.mean;
-                  } else if (h1Beating && !h0Beating) {
-                    effectiveY = h0.mean;
-                  } else {
-                    effectiveY = (h0.mean + h1.mean) / 2;
-                  }
-                } else {
-                  const hist = this.handYHistory.get(samples[0].handIndex) ?? [samples[0].conductorPoint.y];
-                  effectiveY = hist.reduce((a, b) => a + b, 0) / hist.length;
-                }
-
-                const NEUTRAL_Y = 0.40;
-                const DEADBAND = 0.03;
-
-                if (effectiveY > NEUTRAL_Y + DEADBAND) {
-                  const norm = Math.min(1.0, (effectiveY - (NEUTRAL_Y + DEADBAND)) / (0.85 - (NEUTRAL_Y + DEADBAND)));
-                  tempoMultiplier = 1.0 + 0.65 * norm;
-                } else if (effectiveY < NEUTRAL_Y - DEADBAND) {
-                  const norm = Math.min(1.0, ((NEUTRAL_Y - DEADBAND) - effectiveY) / ((NEUTRAL_Y - DEADBAND) - 0.10));
-                  tempoMultiplier = 1.0 - 0.65 * norm;
-                } else {
-                  tempoMultiplier = 1.0;
-                }
-              }
-
               const targetBpm = Math.max(40, Math.min(240, this.basePieceBpm * tempoMultiplier));
               const now = performance.now();
               if (this.lastGesturalUpdateMs === 0) this.lastGesturalUpdateMs = now;
@@ -809,6 +748,98 @@ export class ExperienceController {
     this.isCameraInitializing = false;
   }
 }
+
+  calculateGesturalTempoMultiplier(samples: import("../camera/cameraTypes").HandSample[]): number {
+    if (samples.length === 0) return 1.0;
+    let tempoMultiplier = 1.0;
+
+    if (this.cameraAxisMapping === "flipped") {
+      // ── FLIPPED: Horizontal Span (Width) modulates Tempo ──
+      // Spreading hands apart -> Accelerando (up to 1.65x piece BPM)
+      // Bringing hands together -> Rallentando (down to 0.35x piece BPM)
+      if (samples.length >= 2) {
+        const s0 = samples[0];
+        const s1 = samples[1];
+        const centerSpan = Math.abs(s0.conductorPoint.x - s1.conductorPoint.x);
+
+        let avgHandSize = 0.10;
+        if (s0.landmarks && s1.landmarks && s0.landmarks.length >= 5 && s1.landmarks.length >= 5) {
+          const xs0 = s0.landmarks.map(p => p.x);
+          const xs1 = s1.landmarks.map(p => p.x);
+          const size0 = Math.max(...xs0) - Math.min(...xs0);
+          const size1 = Math.max(...xs1) - Math.min(...xs1);
+          avgHandSize = (size0 + size1) / 2;
+        }
+
+        const touchingSpan = Math.max(0.04, avgHandSize * 0.95);
+        const neutralSpan = touchingSpan + 0.18 + avgHandSize * 0.35;
+        const maxSpan = neutralSpan + 0.26 + avgHandSize * 0.40;
+        const DEADBAND = 0.03;
+
+        if (centerSpan > neutralSpan + DEADBAND) {
+          const norm = Math.min(1.0, (centerSpan - (neutralSpan + DEADBAND)) / Math.max(0.05, maxSpan - (neutralSpan + DEADBAND)));
+          tempoMultiplier = 1.0 + 0.65 * norm;
+        } else if (centerSpan < neutralSpan - DEADBAND) {
+          const norm = Math.min(1.0, ((neutralSpan - DEADBAND) - centerSpan) / Math.max(0.05, (neutralSpan - DEADBAND) - touchingSpan));
+          tempoMultiplier = 1.0 - 0.65 * norm;
+        } else {
+          tempoMultiplier = 1.0;
+        }
+      } else if (samples.length === 1) {
+        const dx = Math.abs(samples[0].conductorPoint.x - 0.50);
+        if (dx > 0.25) {
+          tempoMultiplier = 1.0 + 0.65 * Math.min(1.0, (dx - 0.25) / 0.25);
+        } else if (dx < 0.10) {
+          tempoMultiplier = 1.0 - 0.65 * Math.min(1.0, (0.10 - dx) / 0.10);
+        } else {
+          tempoMultiplier = 1.0;
+        }
+      }
+    } else {
+      // ── CLASSIC (DEFAULT): Vertical Height (Y) modulates Tempo ──
+      // Raising hands up -> Accelerando (up to 1.65x piece BPM)
+      // Lowering hands down -> Rallentando (down to 0.35x piece BPM)
+      let effectiveY: number;
+      if (samples.length >= 2) {
+        const stats = samples.map(s => {
+          const hist = this.handYHistory.get(s.handIndex) ?? [s.conductorPoint.y];
+          const mean = hist.reduce((a, b) => a + b, 0) / hist.length;
+          const variance = hist.reduce((a, b) => a + (b - mean) ** 2, 0) / hist.length;
+          return { y: s.conductorPoint.y, mean, variance };
+        });
+
+        const [h0, h1] = stats;
+        const h0Beating = h0.variance > 0.0006 && h0.variance > 2.0 * h1.variance;
+        const h1Beating = h1.variance > 0.0006 && h1.variance > 2.0 * h0.variance;
+
+        if (h0Beating && !h1Beating) {
+          effectiveY = h1.mean;
+        } else if (h1Beating && !h0Beating) {
+          effectiveY = h0.mean;
+        } else {
+          effectiveY = (h0.mean + h1.mean) / 2;
+        }
+      } else {
+        const hist = this.handYHistory.get(samples[0].handIndex) ?? [samples[0].conductorPoint.y];
+        effectiveY = hist.reduce((a, b) => a + b, 0) / hist.length;
+      }
+
+      const NEUTRAL_Y = 0.40;
+      const DEADBAND = 0.03;
+
+      if (effectiveY > NEUTRAL_Y + DEADBAND) {
+        const norm = Math.min(1.0, (effectiveY - (NEUTRAL_Y + DEADBAND)) / (0.85 - (NEUTRAL_Y + DEADBAND)));
+        tempoMultiplier = 1.0 + 0.65 * norm;
+      } else if (effectiveY < NEUTRAL_Y - DEADBAND) {
+        const norm = Math.min(1.0, ((NEUTRAL_Y - DEADBAND) - effectiveY) / ((NEUTRAL_Y - DEADBAND) - 0.10));
+        tempoMultiplier = 1.0 - 0.65 * norm;
+      } else {
+        tempoMultiplier = 1.0;
+      }
+    }
+
+    return tempoMultiplier;
+  }
 
   getInputSource(): InputSource {
     return this.inputSource;
@@ -1101,6 +1132,10 @@ export class ExperienceController {
     source: "keyboard" | "camera";
     confidence: number;
   }): Promise<void> {
+    if (this.isWarmingUp) {
+      return;
+    }
+
     // If state is completed, reset to ready so conducting restarts cleanly
     if (this.state === "completed") {
       this.restart();
@@ -1166,6 +1201,7 @@ export class ExperienceController {
   // ── Playback ─────────────────────────────────────────────────────────────
 
   private async startPlayback(): Promise<void> {
+    if (this.isWarmingUp) return;
     if (this.state === "playing") return;
     if (this.startPlaybackPromise) {
       return this.startPlaybackPromise;

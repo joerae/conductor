@@ -24,6 +24,7 @@ export interface PieceDefinition {
   midiUrl: string;
   defaultBpm: number;
   timeSignature: string;
+  keySignature?: string;
   beatsPerTap: number;       // 1 = in 4 / normal, 2 = cut time / alla breve
   conductMode: string;
   layout: "chamber_strings" | "full_orchestra";
@@ -45,6 +46,7 @@ export const REPERTOIRE: PieceDefinition[] = [
     midiUrl: "/midi/Eine-Kleine-Nachtmusik1.mid",
     defaultBpm: 140,
     timeSignature: "4/4",
+    keySignature: "G",
     beatsPerTap: 1,
     conductMode: "In 4 (1 tap = 1 beat)",
     layout: "chamber_strings",
@@ -67,6 +69,7 @@ export const REPERTOIRE: PieceDefinition[] = [
     midiUrl: "/midi/5th-Symphony-Part-1.mid",
     defaultBpm: 108,
     timeSignature: "2/4",
+    keySignature: "Cm",
     beatsPerTap: 2,
     conductMode: "Cut Time / Alla Breve (1 tap = 2 beats / 1 bar)",
     layout: "full_orchestra",

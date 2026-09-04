@@ -77,6 +77,40 @@ describe("SpotlightScoreVisualizer - Clef & VexFlow Mapping", () => {
       const res = midiNoteToVexKey(43);
       expect(res.key).toBe("g/2");
     });
+
+    it("suppresses redundant accidental for notes within key signature (e.g. F# in G major)", () => {
+      // In G major, F# (MIDI 66) is the key degree -> no accidental on notehead
+      const inKey = midiNoteToVexKey(66, "G");
+      expect(inKey.key).toBe("f/4");
+      expect(inKey.accidental).toBeNull();
+
+      // F natural (MIDI 65) in G major is an alteration -> requires natural accidental "n"
+      const altered = midiNoteToVexKey(65, "G");
+      expect(altered.key).toBe("f/4");
+      expect(altered.accidental).toBe("n");
+    });
+
+    it("suppresses redundant accidentals for C minor key signature (Bb, Eb, Ab)", () => {
+      // Eb4 (MIDI 63) is in key -> accidental is null
+      const eb = midiNoteToVexKey(63, "Cm");
+      expect(eb.key).toBe("e/4");
+      expect(eb.accidental).toBeNull();
+
+      // Bb4 (MIDI 70) is in key -> accidental is null
+      const bb = midiNoteToVexKey(70, "Cm");
+      expect(bb.key).toBe("b/4");
+      expect(bb.accidental).toBeNull();
+
+      // Ab4 (MIDI 68) is in key -> accidental is null
+      const ab = midiNoteToVexKey(68, "Cm");
+      expect(ab.key).toBe("a/4");
+      expect(ab.accidental).toBeNull();
+
+      // B natural (MIDI 71) in C minor is altered leading tone -> requires natural "n"
+      const bNat = midiNoteToVexKey(71, "Cm");
+      expect(bNat.key).toBe("b/4");
+      expect(bNat.accidental).toBe("n");
+    });
   });
 
   describe("VexFlow Duration Quantization (Quavers, Semiquavers, Dots)", () => {

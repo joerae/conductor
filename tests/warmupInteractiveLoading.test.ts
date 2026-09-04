@@ -11,6 +11,7 @@ function createMockDOMNode(tagName: string = "div"): any {
   const classes = new Set<string>();
   const children: any[] = [];
   const attributes: Record<string, string> = {};
+  const queryMap: Record<string, any> = {};
 
   const node: any = {
     tagName: tagName.toUpperCase(),
@@ -61,19 +62,20 @@ function createMockDOMNode(tagName: string = "div"): any {
       return child;
     }),
     querySelector: vi.fn((selector: string) => {
-      if (selector === "#warmup-progress-fill") return createMockDOMNode("div");
-      if (selector === "#warmup-progress-pct") return createMockDOMNode("span");
-      if (selector === "#warmup-status-text") return createMockDOMNode("span");
-      if (selector === "#warmup-step-badge") return createMockDOMNode("span");
-      if (selector === "#warmup-headline") return createMockDOMNode("h3");
-      if (selector === "#warmup-copy") return createMockDOMNode("p");
-      if (selector === "#warmup-primary-btn") return createMockDOMNode("button");
-      if (selector === "#warmup-skip-btn") return createMockDOMNode("button");
-      if (selector === "#warmup-step-next-btn") return createMockDOMNode("button");
-      if (selector === "#warmup-live-badge") return createMockDOMNode("div");
-      if (selector === ".warmup-overlay") return createMockDOMNode("div");
-      if (selector === ".warmup-hands-svg") return createMockDOMNode("svg");
-      return createMockDOMNode("div");
+      if (queryMap[selector]) return queryMap[selector];
+      let created: any;
+      if (selector === "#warmup-progress-fill") created = createMockDOMNode("div");
+      else if (selector === "#warmup-progress-pct") created = createMockDOMNode("span");
+      else if (selector === "#warmup-status-text") created = createMockDOMNode("span");
+      else if (selector === "#warmup-step-badge") created = createMockDOMNode("span");
+      else if (selector === "#warmup-headline") created = createMockDOMNode("h3");
+      else if (selector === "#warmup-copy") created = createMockDOMNode("p");
+      else if (selector.includes("btn")) created = createMockDOMNode("button");
+      else if (selector === "#pill-tempo" || selector === "#pill-dynamics") created = createMockDOMNode("button");
+      else if (selector === ".warmup-hands-svg") created = createMockDOMNode("svg");
+      else created = createMockDOMNode("div");
+      queryMap[selector] = created;
+      return created;
     }),
     querySelectorAll: vi.fn((_selector: string) => []),
     click: () => {
@@ -283,6 +285,174 @@ describe("Warming Up Interactive Loading Experience", () => {
       manager.replayWarmup(container);
       expect(manager.getCurrentLesson()).toBe("tempo");
       manager.dispose();
+    });
+
+    it("drives tempo and dynamics with deliberate values and enables manual lesson switching", () => {
+      const onStartWarmup = vi.fn();
+      const onSkipWarmup = vi.fn();
+      const onStartConducting = vi.fn();
+      const onContinueKeyboard = vi.fn();
+      const onRetryCamera = vi.fn();
+      const onToggleMute = vi.fn();
+
+      const visuals = new WarmupVisuals({
+        onStartWarmup,
+        onSkipWarmup,
+        onStartConducting,
+        onContinueKeyboard,
+        onRetryCamera,
+        onToggleMute,
+      });
+
+      const tempoSyncValues: number[] = [];
+      const dynamicsSyncLevels: string[] = [];
+      const dynamicsSyncVals: number[] = [];
+
+      visuals.onTempoSync = (bpm) => tempoSyncValues.push(bpm);
+      visuals.onDynamicsSync = (level, continuous) => {
+        dynamicsSyncLevels.push(level);
+        dynamicsSyncVals.push(continuous);
+      };
+
+      visuals.mount(container);
+
+      // Simulate animation steps for tempo lesson
+      visuals.setLesson("tempo");
+      (visuals as any).animateStep(1000);
+      (visuals as any).animateStep(2350);
+      (visuals as any).animateStep(3700);
+
+      expect(tempoSyncValues.length).toBeGreaterThan(0);
+      tempoSyncValues.forEach((bpm) => {
+        expect(bpm).toBeGreaterThanOrEqual(52);
+        expect(bpm).toBeLessThanOrEqual(162);
+      });
+
+      // Switch to dynamics lesson
+      visuals.setLesson("dynamics");
+      (visuals as any).animateStep(1000);
+      (visuals as any).animateStep(2350);
+      (visuals as any).animateStep(3700);
+
+      expect(dynamicsSyncVals.length).toBeGreaterThan(0);
+      dynamicsSyncVals.forEach((val) => {
+        expect(val).toBeGreaterThanOrEqual(0.05);
+        expect(val).toBeLessThanOrEqual(0.95);
+      });
+
+      // Verify ready state transition
+      visuals.setDisplayState("ready");
+      visuals.unmount();
+    });
+
+    it("returning conductor flow hides synthetic animation stage and lesson pills", () => {
+      const visuals = new WarmupVisuals();
+      visuals.setReturningUser(true);
+      const overlay = visuals.mount(container);
+
+      const animStage = overlay.querySelector("#warmup-animation-stage");
+      const pills = overlay.querySelector("#warmup-lesson-pills");
+      const skipBtn = overlay.querySelector("#warmup-skip-btn");
+
+      expect(animStage.style.display).toBe("none");
+      expect(pills.style.display).toBe("none");
+      expect(skipBtn.style.display).toBe("none");
+
+      // Animate step does not emit synthetic tempo sync when returning user
+      const tempoSyncSpy = vi.fn();
+      visuals.onTempoSync = tempoSyncSpy;
+      visuals.setLesson("tempo");
+      (visuals as any).animateStep(1000);
+      expect(tempoSyncSpy).not.toHaveBeenCalled();
+
+      visuals.unmount();
+    });
+
+    it("prompts 'Raise your hands to begin' in camera mode and 'Press SPACE to begin' in keyboard mode", () => {
+      let currentMode: "camera" | "keyboard" = "camera";
+      const visuals = new WarmupVisuals({}, () => "classic", () => currentMode);
+      const overlay = visuals.mount(container);
+
+      visuals.setDisplayState("ready");
+      const copy = overlay.querySelector("#warmup-copy");
+      const readyBtn = overlay.querySelector("#warmup-ready-btn");
+
+      expect(copy.textContent).toBe("Raise your hands to begin");
+      expect(readyBtn.textContent).toContain("RAISE HANDS TO BEGIN");
+      expect(copy.textContent).not.toContain("SPACE");
+
+      // Now switch to keyboard mode
+      currentMode = "keyboard";
+      visuals.setDisplayState("ready");
+      expect(copy.textContent).toBe("Press SPACE to begin");
+      expect(readyBtn.textContent).toContain("PRESS SPACE TO BEGIN");
+
+      visuals.unmount();
+    });
+
+    it("exits warm up into live conducting when hands are raised and coordinator is ready", () => {
+      const onStartConducting = vi.fn();
+      const manager = new WarmupManager({ onStartConducting });
+      manager.mount(container);
+
+      // Raise hands before coordinator is ready
+      manager.handleLiveSample({ isHandsRaised: true });
+      expect(onStartConducting).not.toHaveBeenCalled();
+
+      // Complete coordinator tasks to become ready
+      manager.getCoordinator().updateTask("shell", "ready");
+      manager.getCoordinator().updateTask("warmupViolin", "ready");
+      manager.getCoordinator().updateTask("cameraPermission", "ready");
+      manager.getCoordinator().updateTask("handTracking", "ready");
+      manager.getCoordinator().updateTask("score", "ready");
+      manager.getCoordinator().updateTask("instruments", "ready");
+      expect(manager.getCoordinator().getState().isReady).toBe(true);
+
+      // Now raising hands triggers live conducting exit
+      manager.handleLiveSample({ isHandsRaised: true });
+      expect(onStartConducting).toHaveBeenCalled();
+
+      manager.dispose();
+    });
+
+    it("dynamically modulates warm up audio tempo and dynamic level from live camera samples", () => {
+      const onTempo = vi.fn();
+      const onDyn = vi.fn();
+      const manager = new WarmupManager({
+        onTempoDemonstration: onTempo,
+        onDynamicsDemonstration: onDyn,
+      });
+      manager.mount(container);
+
+      manager.handleLiveSample({
+        tempoBpm: 156,
+        dynamicLevel: "ff",
+        dynamicContinuous: 0.88,
+      });
+
+      expect(manager.getAudioPlayer().getTempo()).toBe(156);
+      expect(onTempo).toHaveBeenCalledWith(156, false);
+      expect(onDyn).toHaveBeenCalledWith("ff", 0.88);
+
+      manager.dispose();
+    });
+
+    it("does not include a sound toggle button in the warmup template", () => {
+      const visuals = new WarmupVisuals();
+      visuals.mount(container);
+      expect(container.innerHTML).not.toContain("warmup-mute-btn");
+      visuals.unmount();
+    });
+  });
+
+  describe("Piece Definitions Key Signatures", () => {
+    it("defines key signatures in repertoire definitions", async () => {
+      const { REPERTOIRE } = await import("../src/score/repertoire");
+      const eineKleine = REPERTOIRE.find(p => p.id === "eine-kleine");
+      const beethoven5 = REPERTOIRE.find(p => p.id === "beethoven-5");
+
+      expect(eineKleine?.keySignature).toBe("G");
+      expect(beethoven5?.keySignature).toBe("Cm");
     });
   });
 });
