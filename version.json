@@ -1,9 +1,22 @@
 {
-  "version": "0.27.0",
+  "version": "0.28.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.28.0",
+      "date": "2026-09-04",
+      "summary": "Spotlight Mode Score Visualizer & Extra 25% Background Instrument Attenuation",
+      "details": [
+        "Spotlight Mode Score Visualizer: Real-time musical stave score HUD docked directly next to the spotlighted instrument section on stage",
+        "Authentic Musical Notation: Renders 5-line staff, instrument-specific clefs (Treble 𝄞, Bass 𝄢, Alto 𝄡), time signatures, bar lines, measure numbering, diatonic noteheads, stems, accidentals, and ledger lines",
+        "2-Bar Moving Lookahead: Displays current measure and upcoming measure dynamically mapped from loaded MIDI score note events",
+        "Synchronized Playhead & Live Note Highlights: Golden timeline beam sweeping across measures in sync with conductor tempo, highlighting sounding notes in radiant gold with trailing past notes and crisp upcoming notes",
+        "Dynamic Docking: Automatically positions the score card adjacent to whichever instrument section is pointed at without viewport clipping or camera obstruction",
+        "25% Quieter Backgrounded Instruments: Attenuated background section gain multiplier from 0.72x (-2.8 dB) to 0.54x (-5.35 dB) during spotlight focus for dramatic solo prominence"
+      ]
+    },
     {
       "version": "0.27.0",
       "date": "2026-09-04",

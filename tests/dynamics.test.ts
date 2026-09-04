@@ -195,7 +195,7 @@ describe("AudioEngine Section Focus & Spatial Stereo DSP", () => {
     engine.setSectionFocus([0], 1.0);
     expect(engine.getFocusAmount()).toBeCloseTo(1.0);
     expect(engine.getChannelFocusMultiplier(0)).toBeCloseTo(1.35); // Forte (+2.6 dB)
-    expect(engine.getChannelFocusMultiplier(1)).toBeCloseTo(0.72); // Gentle Background (-2.8 dB)
+    expect(engine.getChannelFocusMultiplier(1)).toBeCloseTo(0.54); // Background (-5.35 dB, extra 25% quieter)
 
     // Reset spotlight
     engine.setSectionFocus(null, 0);

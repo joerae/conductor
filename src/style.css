@@ -102,14 +102,16 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: var(--spacing-lg);
+  justify-content: flex-start;
+  gap: clamp(12px, 2vh, 24px);
   background:
     radial-gradient(ellipse 80% 60% at 50% 80%, rgba(201,168,76,0.06) 0%, transparent 70%),
     radial-gradient(ellipse 100% 100% at 50% 100%, rgba(26,22,18,0.8) 0%, transparent 60%),
     var(--bg-stage);
-  padding: var(--spacing-xl) var(--spacing-lg);
+  padding: clamp(16px, 2.5vh, 28px) var(--spacing-lg) clamp(16px, 2.5vh, 24px);
   transition: background var(--transition-slow);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* State-based ambience */
@@ -209,6 +211,7 @@ html, body {
   gap: var(--spacing-lg);
   width: min(880px, 94vw);
   position: relative;
+  margin-top: clamp(80px, 12vh, 125px);
 }
 
 #orchestra-silhouette {
@@ -312,6 +315,65 @@ html, body {
 /* ── Piece info ─────────────────────────────────────────────────────────────── */
 #piece-info {
   text-align: center;
+  margin-bottom: clamp(6px, 1.2vh, 16px);
+}
+
+.piece-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.repertoire-pill-btn,
+.score-pill-btn {
+  background: rgba(14, 18, 28, 0.85);
+  border: 1px solid rgba(255, 213, 107, 0.40);
+  color: #ffd56b;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  backdrop-filter: blur(8px);
+}
+
+.repertoire-pill-btn:hover {
+  background: rgba(255, 213, 107, 0.15);
+  border-color: #ffd56b;
+  box-shadow: 0 0 16px rgba(255, 213, 107, 0.35);
+  transform: translateY(-1px);
+}
+
+.score-pill-btn {
+  border-color: rgba(255, 213, 107, 0.45);
+}
+
+.score-pill-btn.active {
+  background: rgba(255, 213, 107, 0.18);
+  border-color: #ffd56b;
+  color: #ffd56b;
+  box-shadow: 0 0 14px rgba(255, 213, 107, 0.30);
+}
+
+.score-pill-btn:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
+  box-shadow: none;
+}
+
+.score-pill-btn:hover {
+  border-color: #ffd56b;
+  transform: translateY(-1px);
 }
 
 #piece-title {
@@ -1969,6 +2031,225 @@ body.debug-mode-active .section-debug-hud {
 
 #stage.focus-mode-active.has-grabbed-section .instrument-section:not(.focus-grabbed) {
   opacity: 0.55 !important;
+}
+
+.stage-center-column {
+  position: relative;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ── Spotlight Mode Score Visualizer Panel ───────────────────────────────── */
+.spotlight-score-panel {
+  position: fixed;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  background: rgba(14, 18, 29, 0.96);
+  border: 1.5px solid rgba(255, 213, 107, 0.60);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.80), 0 0 24px rgba(255, 213, 107, 0.25);
+  backdrop-filter: blur(20px);
+  padding: 6px 12px 6px 12px;
+  pointer-events: none;
+  opacity: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  transform: translateY(-6px) scale(0.97);
+  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.spotlight-score-panel.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.score-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid rgba(255, 213, 107, 0.18);
+}
+
+.score-card-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.score-card-icon {
+  font-size: 13px;
+}
+
+.score-card-section-name {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #ffffff;
+  text-transform: uppercase;
+}
+
+.score-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.score-card-badge {
+  font-family: var(--font-ui);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  border-radius: 12px;
+  padding: 1px 7px;
+  user-select: none;
+}
+
+.score-card-badge.clef-badge {
+  background: rgba(255, 213, 107, 0.16);
+  border: 1px solid rgba(255, 213, 107, 0.40);
+  color: #ffd56b;
+}
+
+.score-card-badge.bar-badge {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  color: #e2e8f0;
+}
+
+.score-svg-wrap {
+  width: 100%;
+  overflow: hidden;
+}
+
+.score-svg-wrap svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: hidden;
+}
+
+/* VexFlow SVG element styling */
+.score-svg-wrap svg path {
+  fill: #f1f5f9;
+  stroke: #f1f5f9;
+}
+
+.score-svg-wrap svg text {
+  fill: #e2e8f0 !important;
+}
+
+/* Stave lines in VexFlow */
+.score-svg-wrap svg .vf-stave path {
+  stroke: rgba(226, 232, 240, 0.45) !important;
+  fill: none !important;
+  stroke-width: 1;
+}
+
+/* Barlines (measure dividers) in VexFlow are rendered as <rect> elements */
+.score-svg-wrap svg .vf-stavebarline rect,
+.score-svg-wrap svg .vf-barline rect {
+  fill: rgba(226, 232, 240, 0.70) !important;
+  stroke: none !important;
+}
+
+/* Clefs (Bravura SMuFL glyphs) */
+.score-svg-wrap svg .vf-clef text,
+.score-svg-wrap svg .vf-clef path {
+  fill: #ffd56b !important;
+  stroke: none;
+  filter: drop-shadow(0 0 4px rgba(255, 213, 107, 0.4));
+}
+
+/* Time Signatures (Bravura SMuFL numbers - e.g. 4/4) */
+.score-svg-wrap svg .vf-timesignature text,
+.score-svg-wrap svg .vf-timesignature path,
+.score-svg-wrap svg .vf-timesignote text,
+.score-svg-wrap svg .vf-timesignote path,
+.score-svg-wrap svg .vf-timesig text,
+.score-svg-wrap svg .vf-timesig path {
+  fill: #e2e8f0 !important;
+  stroke: none !important;
+}
+
+/* Accidentals (Sharps / Flats) */
+.score-svg-wrap svg .vf-accidental text,
+.score-svg-wrap svg .vf-accidental path {
+  fill: #ffd56b !important;
+  stroke: none;
+}
+
+/* Noteheads & Stems */
+.score-svg-wrap svg .vf-stavenote text,
+.score-svg-wrap svg .vf-notehead text {
+  fill: #f1f5f9 !important;
+  stroke: none;
+  transition: fill 0.08s ease, filter 0.08s ease;
+}
+
+.score-svg-wrap svg .vf-stavenote path {
+  fill: #f1f5f9;
+  stroke: #f1f5f9;
+  transition: fill 0.08s ease, stroke 0.08s ease, filter 0.08s ease;
+}
+
+/* Beams connecting quavers / semiquavers */
+.score-svg-wrap svg .vf-beam path {
+  fill: #f1f5f9 !important;
+  stroke: #f1f5f9 !important;
+}
+
+/* VexFlow Stave Text / Section Header only (Measure number e.g. m. 14) */
+.score-svg-wrap svg .vf-stavetext text,
+.score-svg-wrap svg .vf-stavesection text {
+  fill: rgba(201, 168, 76, 0.85) !important;
+  font-family: var(--font-ui) !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+}
+
+/* Note States - Sounding (Active) */
+.score-svg-wrap svg .vf-stavenote.sounding text,
+.score-svg-wrap svg .vf-stavenote.sounding .vf-notehead text {
+  fill: #ffffff !important;
+  filter: drop-shadow(0 0 6px #ffd56b) drop-shadow(0 0 12px rgba(255, 213, 107, 0.9)) !important;
+}
+
+.score-svg-wrap svg .vf-stavenote.sounding path {
+  fill: #ffffff !important;
+  stroke: #ffd56b !important;
+  stroke-width: 1.5 !important;
+  filter: drop-shadow(0 0 6px #ffd56b) drop-shadow(0 0 12px rgba(255, 213, 107, 0.9)) !important;
+}
+
+/* Note States - Past (Already played) */
+.score-svg-wrap svg .vf-stavenote.past text,
+.score-svg-wrap svg .vf-stavenote.past .vf-notehead text {
+  fill: rgba(201, 168, 76, 0.70) !important;
+}
+
+.score-svg-wrap svg .vf-stavenote.past path {
+  fill: rgba(201, 168, 76, 0.70) !important;
+  stroke: rgba(201, 168, 76, 0.70) !important;
+}
+
+/* Note States - Upcoming */
+.score-svg-wrap svg .vf-stavenote.upcoming text,
+.score-svg-wrap svg .vf-stavenote.upcoming .vf-notehead text {
+  fill: #f1f5f9 !important;
+}
+
+.score-svg-wrap svg .vf-stavenote.upcoming path {
+  fill: #f1f5f9 !important;
+  stroke: #f1f5f9 !important;
 }
 
 

@@ -1,342 +1,361 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Conductor — Eine Kleine Nachtmusik</title>
-    <meta name="description" content="An interactive orchestral experience where you control tempo in real time. Tap Space to conduct." />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
-  </head>
-  <body>
 
-    <!-- Loading screen -->
-    <div id="loading-screen">
-      <div class="loading-inner">
-        <div class="loading-spinner"></div>
-        <p>Preparing the orchestra…</p>
-      </div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Conductor — Eine Kleine Nachtmusik</title>
+  <meta name="description"
+    content="An interactive orchestral experience where you control the orchestra with your hands." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@300;400;500;600&display=swap"
+    rel="stylesheet" />
+</head>
+
+<body>
+
+  <!-- Loading screen -->
+  <div id="loading-screen">
+    <div class="loading-inner">
+      <div class="loading-spinner"></div>
+      <p>Preparing the orchestra…</p>
+    </div>
+  </div>
+
+  <!-- Stage (hidden until loaded) -->
+  <div id="stage" style="display:none" data-state="ready">
+
+    <!-- Beat flash overlay -->
+    <div id="beat-flash"></div>
+
+    <!-- Live Expressive Gesture Banner (Cutoff & Fermata) -->
+    <div id="gesture-banner" class="gesture-banner" style="display: none;">
+      <span id="gesture-banner-icon" class="gesture-banner-icon">👎</span>
+      <span id="gesture-banner-text" class="gesture-banner-text">DRAMATIC CUTOFF</span>
     </div>
 
-    <!-- Stage (hidden until loaded) -->
-    <div id="stage" style="display:none" data-state="ready">
+    <!-- Love Mode Banner (ILoveYou 🤟 Gesture) -->
+    <div id="love-banner" class="love-banner" style="display: none;">
+      <span class="love-emoji">🤟</span>
+      <span class="love-title">LOVE MODE • PIANISSIMO (pp) &amp; MAX REVERB</span>
+      <span class="love-emoji">💖✨</span>
+    </div>
 
-      <!-- Beat flash overlay -->
-      <div id="beat-flash"></div>
+    <!-- Party Mode Celebratory Banner (Double Peace Signs) -->
+    <div id="party-banner" class="party-banner" style="display: none;">
+      <span class="party-emoji">✌️✌️</span>
+      <span class="party-title">PARTY MODE</span>
+      <span class="party-emoji">🎉✨</span>
+    </div>
 
-      <!-- Live Expressive Gesture Banner (Cutoff & Fermata) -->
-      <div id="gesture-banner" class="gesture-banner" style="display: none;">
-        <span id="gesture-banner-icon" class="gesture-banner-icon">👎</span>
-        <span id="gesture-banner-text" class="gesture-banner-text">DRAMATIC CUTOFF</span>
+
+
+    <!-- Piece info & Repertoire button -->
+    <div id="piece-info">
+      <div class="piece-title-row">
+        <h1 id="piece-title">Eine Kleine Nachtmusik</h1>
+        <button id="repertoire-btn" class="repertoire-pill-btn" aria-label="Open repertoire selector"
+          title="Choose a piece from repertoire">
+          🎵 Repertoire
+        </button>
+      </div>
+      <p id="piece-subtitle">W.A. Mozart — I. Allegro • In 4 (1 tap = 1 beat)</p>
+    </div>
+
+    <!-- Stage Performance Area: Hero Camera View + BPM Gauge + Orchestra + Dynamics Ladder -->
+    <div class="stage-performance-area" id="stage-main-area">
+      <!-- Center Column: Musician Silhouette (Top) + Hero Camera (Middle) + Dynamics Ribbon (Bottom) -->
+      <div id="stage-center-column" class="stage-center-column">
+        <!-- Spotlight Mode Score Visualizer (Docked next to pointed instrument) -->
+        <div id="spotlight-score-panel" class="spotlight-score-panel" style="display: none;"></div>
+
+        <!-- Orchestra silhouette with instrument sections (Positioned above the camera) -->
+        <div id="orchestra-silhouette" aria-hidden="true">
+          <svg viewBox="0 0 1000 140" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <filter id="glow-gold" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+              <radialGradient id="egg-glow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#ffd56b" stop-opacity="1" />
+                <stop offset="60%" stop-color="#c9a84c" stop-opacity="0.8" />
+                <stop offset="100%" stop-color="#2a2e3a" stop-opacity="0.2" />
+              </radialGradient>
+            </defs>
+
+            <!-- Section 1: Violin I (Left) -->
+            <g id="section-0" class="instrument-section" data-track="0" data-track-name="Violin I">
+              <g class="section-debug-hud">
+                <rect x="85" y="0" width="150" height="52" rx="6" class="debug-vel-pill" />
+                <text x="160" y="17" text-anchor="middle" class="debug-vel-main">v: —</text>
+                <text x="160" y="31" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
+                <text x="160" y="43" text-anchor="middle" class="debug-vel-history">History: —</text>
+              </g>
+              <ellipse cx="115" cy="74" rx="22" ry="32" class="musician violin1 egg-0" />
+              <ellipse cx="160" cy="65" rx="25" ry="36" class="musician violin1 egg-1" />
+              <ellipse cx="205" cy="74" rx="22" ry="32" class="musician violin1 egg-2" />
+              <text x="160" y="122" text-anchor="middle" class="section-label">Violin I</text>
+            </g>
+
+            <!-- Section 2: Violin II (Center-Left) -->
+            <g id="section-1" class="instrument-section" data-track="1" data-track-name="Violin II">
+              <g class="section-debug-hud">
+                <rect x="305" y="0" width="150" height="52" rx="6" class="debug-vel-pill" />
+                <text x="380" y="17" text-anchor="middle" class="debug-vel-main">v: —</text>
+                <text x="380" y="31" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
+                <text x="380" y="43" text-anchor="middle" class="debug-vel-history">History: —</text>
+              </g>
+              <ellipse cx="335" cy="68" rx="22" ry="32" class="musician violin2 egg-0" />
+              <ellipse cx="380" cy="60" rx="25" ry="36" class="musician violin2 egg-1" />
+              <ellipse cx="425" cy="68" rx="22" ry="32" class="musician violin2 egg-2" />
+              <text x="380" y="122" text-anchor="middle" class="section-label">Violin II</text>
+            </g>
+
+            <!-- Section 3: Viola (Center-Right) -->
+            <g id="section-2" class="instrument-section" data-track="2" data-track-name="Viola">
+              <g class="section-debug-hud">
+                <rect x="545" y="0" width="150" height="52" rx="6" class="debug-vel-pill" />
+                <text x="620" y="17" text-anchor="middle" class="debug-vel-main">v: —</text>
+                <text x="620" y="31" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
+                <text x="620" y="43" text-anchor="middle" class="debug-vel-history">History: —</text>
+              </g>
+              <ellipse cx="575" cy="68" rx="22" ry="32" class="musician viola egg-0" />
+              <ellipse cx="620" cy="60" rx="25" ry="36" class="musician viola egg-1" />
+              <ellipse cx="665" cy="68" rx="22" ry="32" class="musician viola egg-2" />
+              <text x="620" y="122" text-anchor="middle" class="section-label">Viola</text>
+            </g>
+
+            <!-- Section 4: Violoncello & Bass (Right) -->
+            <g id="section-3" class="instrument-section" data-track="3" data-track-name="Violoncello">
+              <g class="section-debug-hud">
+                <rect x="765" y="0" width="150" height="52" rx="6" class="debug-vel-pill" />
+                <text x="840" y="17" text-anchor="middle" class="debug-vel-main">v: —</text>
+                <text x="840" y="31" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
+                <text x="840" y="43" text-anchor="middle" class="debug-vel-history">History: —</text>
+              </g>
+              <ellipse cx="795" cy="74" rx="22" ry="32" class="musician cello egg-0" />
+              <ellipse cx="840" cy="65" rx="25" ry="36" class="musician cello egg-1" />
+              <ellipse cx="885" cy="74" rx="22" ry="32" class="musician cello egg-2" />
+              <text x="840" y="122" text-anchor="middle" class="section-label">Cello / Bass</text>
+            </g>
+
+            <!-- Stage floor -->
+            <rect x="20" y="134" width="960" height="4" rx="2" class="stage-floor" />
+          </svg>
+        </div>
+
+        <!-- Stage Spotlight Laser Ray Overlay (Connects pointing finger out of camera box to orchestra) -->
+        <svg id="stage-spotlight-ray-overlay" class="stage-spotlight-ray-overlay" aria-hidden="true">
+          <defs>
+            <linearGradient id="spotlight-ray-gradient" x1="0%" y1="100%" x2="0%" y2="0%">
+              <stop offset="0%" stop-color="#ffd56b" stop-opacity="0.95" />
+              <stop offset="30%" stop-color="#ffe696" stop-opacity="0.80" />
+              <stop offset="85%" stop-color="#ffffff" stop-opacity="0.90" />
+              <stop offset="100%" stop-color="#ffd56b" stop-opacity="0.95" />
+            </linearGradient>
+          </defs>
+          <line id="spotlight-stage-outer-ray" x1="0" y1="0" x2="0" y2="0" stroke="rgba(255, 213, 107, 0.40)"
+            stroke-width="7" stroke-linecap="round" />
+          <line id="spotlight-stage-ray" x1="0" y1="0" x2="0" y2="0" stroke="url(#spotlight-ray-gradient)"
+            stroke-width="3" stroke-linecap="round" />
+          <line id="spotlight-stage-core" x1="0" y1="0" x2="0" y2="0" stroke="#ffffff" stroke-width="1.5"
+            stroke-linecap="round" />
+          <circle id="spotlight-stage-target-glow" cx="0" cy="0" r="18" fill="rgba(255, 213, 107, 0.35)" />
+          <circle id="spotlight-stage-target-ring" cx="0" cy="0" r="10" fill="none" stroke="#ffd56b" stroke-width="2" />
+          <circle id="spotlight-stage-target-pip" cx="0" cy="0" r="4" fill="#ffffff" />
+        </svg>
+
+        <!-- Hero Camera Container (Big Picture of Person in Middle of Screen) -->
+        <div id="camera-hero-slot" class="camera-hero-slot"></div>
+
+        <!-- Horizontal Orchestral Dynamics Ribbon (Directly Below the Picture) -->
+        <div id="dynamic-ladder-container" class="dynamic-ladder-container dynamic-horizontal-ribbon"
+          title="Orchestral Dynamics: Use ←/→ arrows, mouse wheel, or click to shape dynamic expression">
+          <div class="dynamic-ladder-header">
+            <span class="dynamic-icon">𝄢</span>
+            <span class="dynamic-title">DYNAMICS</span>
+            <span id="dynamic-current-badge" class="dynamic-current-badge">MF (50%)</span>
+          </div>
+          <div class="dynamic-ladder-wrap">
+            <div class="dynamic-ladder" id="dynamic-ladder" role="group" aria-label="Orchestral dynamic levels">
+              <button class="dynamic-step" data-dynamic="pp" title="Pianissimo (Very soft)">
+                <span class="dynamic-symbol">pp</span>
+                <span class="accent-badge-icon">&gt;</span>
+              </button>
+              <button class="dynamic-step" data-dynamic="p" title="Piano (Soft)">
+                <span class="dynamic-symbol">p</span>
+                <span class="accent-badge-icon">&gt;</span>
+              </button>
+              <button class="dynamic-step" data-dynamic="mp" title="Mezzo-piano (Moderately soft)">
+                <span class="dynamic-symbol">mp</span>
+                <span class="accent-badge-icon">&gt;</span>
+              </button>
+              <button class="dynamic-step active" data-dynamic="mf" title="Mezzo-forte (Default)">
+                <span class="dynamic-symbol">mf</span>
+                <span class="accent-badge-icon">&gt;</span>
+              </button>
+              <button class="dynamic-step" data-dynamic="f" title="Forte (Loud)">
+                <span class="dynamic-symbol">f</span>
+                <span class="accent-badge-icon">&gt;</span>
+              </button>
+              <button class="dynamic-step" data-dynamic="ff" title="Fortissimo (Very Loud)">
+                <span class="dynamic-symbol">ff</span>
+                <span class="accent-badge-icon">&gt;</span>
+              </button>
+              <button class="dynamic-step" data-dynamic="fff" title="Fortississimo (Overburn ⚡)">
+                <span class="dynamic-symbol">fff</span>
+                <span class="dynamic-sparkle">⚡</span>
+                <span class="accent-badge-icon">&gt;</span>
+              </button>
+            </div>
+            <!-- Continuous Analogue Dynamics Track & Marker Indicator (Horizontal) -->
+            <div id="dynamic-analogue-track" class="dynamic-analogue-track"
+              title="Continuous Interpolated Dynamic Level (Analogue hand separation)">
+              <div id="dynamic-analogue-marker" class="dynamic-analogue-marker" style="left: 50%;">
+                <div class="analogue-pip">▲</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- Love Mode Banner (ILoveYou 🤟 Gesture) -->
-      <div id="love-banner" class="love-banner" style="display: none;">
-        <span class="love-emoji">🤟</span>
-        <span class="love-title">LOVE MODE • PIANISSIMO (pp) &amp; MAX REVERB</span>
-        <span class="love-emoji">💖✨</span>
-      </div>
+      <!-- Vertical Tempo Speedometer (To the Right of the picture) -->
+      <aside id="bpm-gauge-container" class="bpm-gauge-container bpm-vertical-gauge"
+        title="Tempo Speedometer: Shows your actively indicated conducting BPM">
+        <div class="bpm-gauge-header">
+          <span class="bpm-gauge-title">TEMPO</span>
+          <div class="bpm-current-val-wrap">
+            <span id="val-indicated-bpm" class="bpm-current-val">—</span>
+            <span class="bpm-current-unit">BPM</span>
+          </div>
+        </div>
+        <div class="bpm-gauge-track-wrap">
+          <div class="bpm-gauge-track">
+            <!-- Green target zone band (±20 BPM around intended piece BPM) — shown in Mode E -->
+            <div id="bpm-green-zone" class="bpm-green-zone" style="display:none;"></div>
+            <div class="bpm-zone-bands">
+              <span class="bpm-zone" style="bottom: 77.78%; height: 22.22%;">Presto</span>
+              <span class="bpm-zone" style="bottom: 55.56%; height: 22.22%;">Allegro</span>
+              <span class="bpm-zone" style="bottom: 37.78%; height: 17.78%;">Moderato</span>
+              <span class="bpm-zone" style="bottom: 14.44%; height: 23.33%;">Andante</span>
+              <span class="bpm-zone" style="bottom: 0%; height: 14.44%;">Largo</span>
+            </div>
+            <!-- Orchestra Playback Needle (Cyan Beacon — Debug D Toggle) -->
+            <div id="bpm-marker-orchestra" class="bpm-needle orchestra-needle" style="bottom: 50%;">
+              <div class="needle-pip"></div>
+            </div>
+            <!-- Conductor Indicated Needle (Translucent Gold Frosted Glass Pill) -->
+            <div id="bpm-marker-indicated" class="bpm-needle indicated-needle" style="bottom: 50%;">
+              <div class="needle-pip"></div>
+            </div>
+          </div>
+          <div class="bpm-gauge-ticks">
+            <span class="bpm-tick" style="bottom: 100%;">220</span>
+            <span class="bpm-tick" style="bottom: 77.78%;">180</span>
+            <span class="bpm-tick" style="bottom: 55.56%;">140</span>
+            <span class="bpm-tick" style="bottom: 37.78%;">108</span>
+            <span class="bpm-tick" style="bottom: 19.44%;">75</span>
+            <span class="bpm-tick" style="bottom: 0%;">40</span>
+          </div>
+        </div>
+        <div class="bpm-gauge-footer-hint">
+          <span>↑↓ Tempo • P Pause</span>
+        </div>
+      </aside>
+    </div>
 
-      <!-- Party Mode Celebratory Banner (Double Peace Signs) -->
-      <div id="party-banner" class="party-banner" style="display: none;">
-        <span class="party-emoji">✌️✌️</span>
-        <span class="party-title">PARTY MODE</span>
-        <span class="party-emoji">🎉✨</span>
-      </div>
-
-      <!-- Instrument Spotlight Mode Banner -->
-      <div id="focus-banner" class="focus-banner" style="display: none;">
-        <span class="focus-banner-icon">✨</span>
-        <span id="focus-banner-text" class="focus-banner-text">INSTRUMENT SPOTLIGHT</span>
-        <span id="focus-banner-badge" class="focus-banner-badge">POINT TO SPOTLIGHT</span>
-      </div>
-
-      <!-- Piece info & Repertoire button -->
-      <div id="piece-info">
-        <div class="piece-title-row">
-          <h1 id="piece-title">Eine Kleine Nachtmusik</h1>
-          <button id="repertoire-btn" class="repertoire-pill-btn" aria-label="Open repertoire selector" title="Choose a piece from repertoire">
-            🎵 Repertoire
+    <!-- Control Bars: Input Source & Tempo Mode Switcher -->
+    <div class="control-bars-wrap">
+      <div id="input-source-selector" class="mode-selector-container">
+        <span class="mode-label">Input:</span>
+        <div class="mode-pill-group">
+          <button id="input-btn-keyboard" class="mode-pill" data-input-source="keyboard"
+            title="Keyboard mode: Conduct using keyboard shortcuts and spacebar">
+            ⌨️ Keyboard
+          </button>
+          <button id="input-btn-camera" class="mode-pill active" data-input-source="camera"
+            title="Camera mode: Conduct with hand gestures in front of webcam">
+            📷 Camera
           </button>
         </div>
-        <p id="piece-subtitle">W.A. Mozart — I. Allegro • In 4 (1 tap = 1 beat)</p>
+        <span id="input-hint-text" class="mode-shortcut-hint">Press <strong>C</strong> to switch</span>
       </div>
 
-      <!-- Stage Performance Area: Hero Camera View + BPM Gauge + Orchestra + Dynamics Ladder -->
-      <div class="stage-performance-area" id="stage-main-area">
-        <!-- Center Column: Musician Silhouette (Top) + Hero Camera (Middle) + Dynamics Ribbon (Bottom) -->
-        <div id="stage-center-column" class="stage-center-column">
-          <!-- Orchestra silhouette with instrument sections (Positioned above the camera) -->
-          <div id="orchestra-silhouette" aria-hidden="true">
-            <svg viewBox="0 0 1000 140" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
-              <defs>
-                <filter id="glow-gold" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-                <radialGradient id="egg-glow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stop-color="#ffd56b" stop-opacity="1" />
-                  <stop offset="60%" stop-color="#c9a84c" stop-opacity="0.8" />
-                  <stop offset="100%" stop-color="#2a2e3a" stop-opacity="0.2" />
-                </radialGradient>
-              </defs>
-
-              <!-- Section 1: Violin I (Left) -->
-              <g id="section-0" class="instrument-section" data-track="0" data-track-name="Violin I">
-                <g class="section-debug-hud">
-                  <rect x="85" y="0" width="150" height="52" rx="6" class="debug-vel-pill" />
-                  <text x="160" y="17" text-anchor="middle" class="debug-vel-main">v: —</text>
-                  <text x="160" y="31" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
-                  <text x="160" y="43" text-anchor="middle" class="debug-vel-history">History: —</text>
-                </g>
-                <ellipse cx="115" cy="74" rx="22" ry="32" class="musician violin1 egg-0" />
-                <ellipse cx="160" cy="65" rx="25" ry="36" class="musician violin1 egg-1" />
-                <ellipse cx="205" cy="74" rx="22" ry="32" class="musician violin1 egg-2" />
-                <text x="160" y="122" text-anchor="middle" class="section-label">Violin I</text>
-              </g>
-
-              <!-- Section 2: Violin II (Center-Left) -->
-              <g id="section-1" class="instrument-section" data-track="1" data-track-name="Violin II">
-                <g class="section-debug-hud">
-                  <rect x="305" y="0" width="150" height="52" rx="6" class="debug-vel-pill" />
-                  <text x="380" y="17" text-anchor="middle" class="debug-vel-main">v: —</text>
-                  <text x="380" y="31" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
-                  <text x="380" y="43" text-anchor="middle" class="debug-vel-history">History: —</text>
-                </g>
-                <ellipse cx="335" cy="68" rx="22" ry="32" class="musician violin2 egg-0" />
-                <ellipse cx="380" cy="60" rx="25" ry="36" class="musician violin2 egg-1" />
-                <ellipse cx="425" cy="68" rx="22" ry="32" class="musician violin2 egg-2" />
-                <text x="380" y="122" text-anchor="middle" class="section-label">Violin II</text>
-              </g>
-
-              <!-- Section 3: Viola (Center-Right) -->
-              <g id="section-2" class="instrument-section" data-track="2" data-track-name="Viola">
-                <g class="section-debug-hud">
-                  <rect x="545" y="0" width="150" height="52" rx="6" class="debug-vel-pill" />
-                  <text x="620" y="17" text-anchor="middle" class="debug-vel-main">v: —</text>
-                  <text x="620" y="31" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
-                  <text x="620" y="43" text-anchor="middle" class="debug-vel-history">History: —</text>
-                </g>
-                <ellipse cx="575" cy="68" rx="22" ry="32" class="musician viola egg-0" />
-                <ellipse cx="620" cy="60" rx="25" ry="36" class="musician viola egg-1" />
-                <ellipse cx="665" cy="68" rx="22" ry="32" class="musician viola egg-2" />
-                <text x="620" y="122" text-anchor="middle" class="section-label">Viola</text>
-              </g>
-
-              <!-- Section 4: Violoncello & Bass (Right) -->
-              <g id="section-3" class="instrument-section" data-track="3" data-track-name="Violoncello">
-                <g class="section-debug-hud">
-                  <rect x="765" y="0" width="150" height="52" rx="6" class="debug-vel-pill" />
-                  <text x="840" y="17" text-anchor="middle" class="debug-vel-main">v: —</text>
-                  <text x="840" y="31" text-anchor="middle" class="debug-vel-decomp">Raw — ➔ Macro —</text>
-                  <text x="840" y="43" text-anchor="middle" class="debug-vel-history">History: —</text>
-                </g>
-                <ellipse cx="795" cy="74" rx="22" ry="32" class="musician cello egg-0" />
-                <ellipse cx="840" cy="65" rx="25" ry="36" class="musician cello egg-1" />
-                <ellipse cx="885" cy="74" rx="22" ry="32" class="musician cello egg-2" />
-                <text x="840" y="122" text-anchor="middle" class="section-label">Cello / Bass</text>
-              </g>
-
-              <!-- Stage floor -->
-              <rect x="20" y="134" width="960" height="4" rx="2" class="stage-floor" />
-            </svg>
-          </div>
-
-          <!-- Stage Spotlight Laser Ray Overlay (Connects pointing finger out of camera box to orchestra) -->
-          <svg id="stage-spotlight-ray-overlay" class="stage-spotlight-ray-overlay" aria-hidden="true">
-            <defs>
-              <linearGradient id="spotlight-ray-gradient" x1="0%" y1="100%" x2="0%" y2="0%">
-                <stop offset="0%" stop-color="#ffd56b" stop-opacity="0.95" />
-                <stop offset="30%" stop-color="#ffe696" stop-opacity="0.80" />
-                <stop offset="85%" stop-color="#ffffff" stop-opacity="0.90" />
-                <stop offset="100%" stop-color="#ffd56b" stop-opacity="0.95" />
-              </linearGradient>
-            </defs>
-            <line id="spotlight-stage-outer-ray" x1="0" y1="0" x2="0" y2="0" stroke="rgba(255, 213, 107, 0.40)" stroke-width="7" stroke-linecap="round" />
-            <line id="spotlight-stage-ray" x1="0" y1="0" x2="0" y2="0" stroke="url(#spotlight-ray-gradient)" stroke-width="3" stroke-linecap="round" />
-            <line id="spotlight-stage-core" x1="0" y1="0" x2="0" y2="0" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" />
-            <circle id="spotlight-stage-target-glow" cx="0" cy="0" r="18" fill="rgba(255, 213, 107, 0.35)" />
-            <circle id="spotlight-stage-target-ring" cx="0" cy="0" r="10" fill="none" stroke="#ffd56b" stroke-width="2" />
-            <circle id="spotlight-stage-target-pip" cx="0" cy="0" r="4" fill="#ffffff" />
-          </svg>
-
-          <!-- Hero Camera Container (Big Picture of Person in Middle of Screen) -->
-          <div id="camera-hero-slot" class="camera-hero-slot"></div>
-
-          <!-- Horizontal Orchestral Dynamics Ribbon (Directly Below the Picture) -->
-          <div id="dynamic-ladder-container" class="dynamic-ladder-container dynamic-horizontal-ribbon" title="Orchestral Dynamics: Use ←/→ arrows, mouse wheel, or click to shape dynamic expression">
-            <div class="dynamic-ladder-header">
-              <span class="dynamic-icon">𝄢</span>
-              <span class="dynamic-title">DYNAMICS</span>
-              <span id="dynamic-current-badge" class="dynamic-current-badge">MF (50%)</span>
-            </div>
-            <div class="dynamic-ladder-wrap">
-              <div class="dynamic-ladder" id="dynamic-ladder" role="group" aria-label="Orchestral dynamic levels">
-                <button class="dynamic-step" data-dynamic="pp" title="Pianissimo (Very soft)">
-                  <span class="dynamic-symbol">pp</span>
-                  <span class="accent-badge-icon">&gt;</span>
-                </button>
-                <button class="dynamic-step" data-dynamic="p" title="Piano (Soft)">
-                  <span class="dynamic-symbol">p</span>
-                  <span class="accent-badge-icon">&gt;</span>
-                </button>
-                <button class="dynamic-step" data-dynamic="mp" title="Mezzo-piano (Moderately soft)">
-                  <span class="dynamic-symbol">mp</span>
-                  <span class="accent-badge-icon">&gt;</span>
-                </button>
-                <button class="dynamic-step active" data-dynamic="mf" title="Mezzo-forte (Default)">
-                  <span class="dynamic-symbol">mf</span>
-                  <span class="accent-badge-icon">&gt;</span>
-                </button>
-                <button class="dynamic-step" data-dynamic="f" title="Forte (Loud)">
-                  <span class="dynamic-symbol">f</span>
-                  <span class="accent-badge-icon">&gt;</span>
-                </button>
-                <button class="dynamic-step" data-dynamic="ff" title="Fortissimo (Very Loud)">
-                  <span class="dynamic-symbol">ff</span>
-                  <span class="accent-badge-icon">&gt;</span>
-                </button>
-                <button class="dynamic-step" data-dynamic="fff" title="Fortississimo (Overburn ⚡)">
-                  <span class="dynamic-symbol">fff</span>
-                  <span class="dynamic-sparkle">⚡</span>
-                  <span class="accent-badge-icon">&gt;</span>
-                </button>
-              </div>
-              <!-- Continuous Analogue Dynamics Track & Marker Indicator (Horizontal) -->
-              <div id="dynamic-analogue-track" class="dynamic-analogue-track" title="Continuous Interpolated Dynamic Level (Analogue hand separation)">
-                <div id="dynamic-analogue-marker" class="dynamic-analogue-marker" style="left: 50%;">
-                  <div class="analogue-pip">▲</div>
-                </div>
-              </div>
-            </div>
-          </div>
+      <div id="tempo-mode-selector" class="mode-selector-container">
+        <span class="mode-label">Mode:</span>
+        <div class="mode-pill-group">
+          <button id="mode-btn-e" class="mode-pill active" data-mode="gestural"
+            title="Expressive Mode (Default): Continuous Gestural Conducting (Raise hands to start, height modulates speed, width modulates volume, drop hands to stop)">
+            🪄 Expressive
+          </button>
+          <button id="mode-btn-d" class="mode-pill" data-mode="inertial"
+            title="Beat Mode: Conduct in cut time (1 stroke = 2 beats in Camera, 1 tap = 1 beat in Keyboard). Steer tempo with beats">
+            🥁 Beat
+          </button>
         </div>
-
-        <!-- Vertical Tempo Speedometer (To the Right of the picture) -->
-        <aside id="bpm-gauge-container" class="bpm-gauge-container bpm-vertical-gauge" title="Tempo Speedometer: Shows your actively indicated conducting BPM">
-          <div class="bpm-gauge-header">
-            <span class="bpm-gauge-title">TEMPO</span>
-            <div class="bpm-current-val-wrap">
-              <span id="val-indicated-bpm" class="bpm-current-val">—</span>
-              <span class="bpm-current-unit">BPM</span>
-            </div>
-          </div>
-          <div class="bpm-gauge-track-wrap">
-            <div class="bpm-gauge-track">
-              <!-- Green target zone band (±20 BPM around intended piece BPM) — shown in Mode E -->
-              <div id="bpm-green-zone" class="bpm-green-zone" style="display:none;"></div>
-              <div class="bpm-zone-bands">
-                <span class="bpm-zone" style="bottom: 77.78%; height: 22.22%;">Presto</span>
-                <span class="bpm-zone" style="bottom: 55.56%; height: 22.22%;">Allegro</span>
-                <span class="bpm-zone" style="bottom: 37.78%; height: 17.78%;">Moderato</span>
-                <span class="bpm-zone" style="bottom: 14.44%; height: 23.33%;">Andante</span>
-                <span class="bpm-zone" style="bottom: 0%; height: 14.44%;">Largo</span>
-              </div>
-              <!-- Orchestra Playback Needle (Cyan Beacon — Debug D Toggle) -->
-              <div id="bpm-marker-orchestra" class="bpm-needle orchestra-needle" style="bottom: 50%;">
-                <div class="needle-pip"></div>
-              </div>
-              <!-- Conductor Indicated Needle (Translucent Gold Frosted Glass Pill) -->
-              <div id="bpm-marker-indicated" class="bpm-needle indicated-needle" style="bottom: 50%;">
-                <div class="needle-pip"></div>
-              </div>
-            </div>
-            <div class="bpm-gauge-ticks">
-              <span class="bpm-tick" style="bottom: 100%;">220</span>
-              <span class="bpm-tick" style="bottom: 77.78%;">180</span>
-              <span class="bpm-tick" style="bottom: 55.56%;">140</span>
-              <span class="bpm-tick" style="bottom: 37.78%;">108</span>
-              <span class="bpm-tick" style="bottom: 19.44%;">75</span>
-              <span class="bpm-tick" style="bottom: 0%;">40</span>
-            </div>
-          </div>
-          <div class="bpm-gauge-footer-hint">
-            <span>↑↓ Tempo • P Pause</span>
-          </div>
-        </aside>
-      </div>
-
-      <!-- Control Bars: Input Source & Tempo Mode Switcher -->
-      <div class="control-bars-wrap">
-        <div id="input-source-selector" class="mode-selector-container">
-          <span class="mode-label">Input:</span>
-          <div class="mode-pill-group">
-            <button id="input-btn-keyboard" class="mode-pill" data-input-source="keyboard" title="Keyboard mode: Conduct using keyboard shortcuts and spacebar">
-              ⌨️ Keyboard
-            </button>
-            <button id="input-btn-camera" class="mode-pill active" data-input-source="camera" title="Camera mode: Conduct with hand gestures in front of webcam">
-              📷 Camera
-            </button>
-          </div>
-          <span id="input-hint-text" class="mode-shortcut-hint">Press <strong>C</strong> to switch</span>
-        </div>
-
-        <div id="tempo-mode-selector" class="mode-selector-container">
-          <span class="mode-label">Mode:</span>
-          <div class="mode-pill-group">
-            <button id="mode-btn-e" class="mode-pill active" data-mode="gestural" title="Expressive Mode (Default): Continuous Gestural Conducting (Raise hands to start, height modulates speed, width modulates volume, drop hands to stop)">
-              🪄 Expressive
-            </button>
-            <button id="mode-btn-d" class="mode-pill" data-mode="inertial" title="Beat Mode: Conduct in cut time (1 stroke = 2 beats in Camera, 1 tap = 1 beat in Keyboard). Steer tempo with beats">
-              🥁 Beat
-            </button>
-          </div>
-          <span id="mode-hint-text" class="mode-shortcut-hint">🪄 <strong>Expressive (Camera)</strong>: Height ↕ controls Tempo • Width ↔ controls Volume • Drop to stop</span>
-        </div>
-      </div>
-
-      <!-- Prompt -->
-      <div id="prompt-area">
-        <p id="prompt">Tap SPACE twice to set the pulse.</p>
-        <div id="space-key-hint" aria-hidden="true">
-          <span class="key">SPACE</span>
-        </div>
-      </div>
-
-      <!-- Stage Action Controls (Always accessible, high contrast) -->
-      <div id="stage-actions">
-        <button id="restart-btn" class="stage-action-btn" aria-label="Restart piece">↺ Restart from Top</button>
-        <button id="repertoire-switch-btn" class="stage-action-btn" aria-label="Choose another piece">🎵 Switch Piece</button>
-      </div>
-
-      <!-- Footer controls -->
-      <footer id="stage-footer">
-        <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.26.0</button>
-        <span class="footer-divider">•</span>
-        <span id="debug-hint" class="debug-hint">Press D for debug overlay & A/B DSP</span>
-      </footer>
-    </div>
-
-    <!-- Repertoire Selection Modal -->
-    <div id="repertoire-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="repertoire-title">
-      <div class="modal-card repertoire-card">
-        <div class="modal-header">
-          <h2 id="repertoire-title">Orchestral Repertoire</h2>
-          <button id="close-repertoire-btn" class="close-btn" aria-label="Close modal">✕</button>
-        </div>
-        <div id="repertoire-list" class="modal-body repertoire-grid">
-          <!-- Populated from REPERTOIRE catalog -->
-        </div>
+        <span id="mode-hint-text" class="mode-shortcut-hint">🪄 <strong>Expressive (Camera)</strong>: Height ↕ controls
+          Tempo • Width ↔ controls Volume • Drop to stop</span>
       </div>
     </div>
 
-    <!-- Version & Updates Modal -->
-    <div id="version-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="version-title">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h2 id="version-title">Conductor Version History</h2>
-          <button id="close-modal-btn" class="close-btn" aria-label="Close modal">✕</button>
-        </div>
-        <div id="modal-content" class="modal-body">
-          <!-- Populated from version.json -->
-        </div>
+    <!-- Prompt -->
+    <div id="prompt-area">
+      <p id="prompt">Tap SPACE twice to set the pulse.</p>
+      <div id="space-key-hint" aria-hidden="true">
+        <span class="key">SPACE</span>
       </div>
     </div>
 
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+    <!-- Stage Action Controls (Always accessible, high contrast) -->
+    <div id="stage-actions">
+      <button id="restart-btn" class="stage-action-btn" aria-label="Restart piece">↺ Restart from Top</button>
+      <button id="repertoire-switch-btn" class="stage-action-btn" aria-label="Choose another piece">🎵 Switch
+        Piece</button>
+    </div>
+
+    <!-- Footer controls -->
+    <footer id="stage-footer">
+      <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.28.0</button>
+      <span class="footer-divider">•</span>
+      <span id="debug-hint" class="debug-hint">Press D for debug overlay & A/B DSP</span>
+    </footer>
+  </div>
+
+  <!-- Repertoire Selection Modal -->
+  <div id="repertoire-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true"
+    aria-labelledby="repertoire-title">
+    <div class="modal-card repertoire-card">
+      <div class="modal-header">
+        <h2 id="repertoire-title">Orchestral Repertoire</h2>
+        <button id="close-repertoire-btn" class="close-btn" aria-label="Close modal">✕</button>
+      </div>
+      <div id="repertoire-list" class="modal-body repertoire-grid">
+        <!-- Populated from REPERTOIRE catalog -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Version & Updates Modal -->
+  <div id="version-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true"
+    aria-labelledby="version-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="version-title">Conductor Version History</h2>
+        <button id="close-modal-btn" class="close-btn" aria-label="Close modal">✕</button>
+      </div>
+      <div id="modal-content" class="modal-body">
+        <!-- Populated from version.json -->
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
 </html>

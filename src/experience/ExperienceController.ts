@@ -100,6 +100,7 @@ export class ExperienceController {
   private isLoveMode: boolean = false;
   private isThumbsUpVFXEnabled: boolean = false; // Feature flag (Default: OFF)
   private isFocusModeEnabled: boolean = true; // Feature flag (Default: ON)
+  private isScoreVisualizerEnabled: boolean = true; // Feature flag (Default: ON)
 
   // Overburn decay timer (for ff/fff dynamic)
   private overburnTimer: ReturnType<typeof setTimeout> | null = null;
@@ -131,6 +132,18 @@ export class ExperienceController {
   constructor(callbacks: UICallbacks) {
     this.uiCallbacks = callbacks;
     this.audioEngine = new AudioEngine();
+
+    // Restore feature flag preference from localStorage if available
+    try {
+      if (typeof localStorage !== "undefined") {
+        const saved = localStorage.getItem("conductor_feature_score_visualizer");
+        if (saved !== null) {
+          this.isScoreVisualizerEnabled = saved === "true";
+        }
+      }
+    } catch {
+      // Ignore storage errors in restricted contexts
+    }
 
     // Clock uses AudioEngine's time function for audio scheduling
     this.clock = new ConductorClock({
@@ -172,8 +185,13 @@ export class ExperienceController {
       },
       (enabled: boolean) => {
         this.setFocusModeEnabled(enabled);
+      },
+      (enabled: boolean) => {
+        this.setScoreVisualizerEnabled(enabled);
       }
     );
+
+    this.debug.setScoreVisualizerCheckbox(this.isScoreVisualizerEnabled);
 
     this.keyboardInput = new KeyboardBeatInput();
     this.midiScore = new MidiScore();
@@ -888,6 +906,26 @@ export class ExperienceController {
     return this.isFocusModeEnabled;
   }
 
+  setScoreVisualizerEnabled(enabled: boolean): void {
+    this.isScoreVisualizerEnabled = enabled;
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("conductor_feature_score_visualizer", String(enabled));
+      }
+    } catch {
+      // Ignore storage errors in restricted contexts
+    }
+    this.debug?.setScoreVisualizerCheckbox(enabled);
+  }
+
+  isScoreVisualizerActive(): boolean {
+    return this.isScoreVisualizerEnabled;
+  }
+
+  getDebugOverlay(): DebugOverlay {
+    return this.debug;
+  }
+
   async resumeAudio(): Promise<void> {
     await this.audioEngine.resume();
   }
@@ -1208,6 +1246,14 @@ export class ExperienceController {
 
   getCurrentPieceId(): string {
     return this.currentPieceId;
+  }
+
+  getMidiScore(): MidiScore {
+    return this.midiScore;
+  }
+
+  getTransport(): ScoreTransport {
+    return this.transport;
   }
 
   getMidiMetadata() {

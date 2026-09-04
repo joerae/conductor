@@ -11,6 +11,7 @@ import type { PieceDefinition } from "./score/repertoire";
 import type { DynamicLevel } from "./audio/dynamicsTypes";
 import { NoteVisualManager } from "./ui/NoteVisualManager";
 import { bpmToPercent, initBpmGaugeTicks } from "./ui/bpmGauge";
+import { SpotlightScoreVisualizer } from "./ui/SpotlightScoreVisualizer";
 import "./style.css";
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
@@ -268,6 +269,8 @@ export function clearAllNoteVisuals(): void {
   noteVisualManager.clearAll();
 }
 
+let spotlightScoreVisualizer: SpotlightScoreVisualizer | null = null;
+
 // ── Experience setup ──────────────────────────────────────────────────────────
 
 const controller = new ExperienceController({
@@ -373,9 +376,6 @@ const controller = new ExperienceController({
     lastRenderedGrabbedSectionId = telemetry.grabbedSectionId;
     lastRenderedHoveredSectionId = telemetry.hoveredSectionId;
 
-    const focusBanner = document.getElementById("focus-banner");
-    const focusText = document.getElementById("focus-banner-text");
-    const focusBadge = document.getElementById("focus-banner-badge");
     const currentPiece = getPieceById(controller.getCurrentPieceId()) || REPERTOIRE[0];
 
     if (telemetry.isActive) {
@@ -384,13 +384,9 @@ const controller = new ExperienceController({
       // Background non-selected sections when one is spotlighted
       if (telemetry.grabbedSectionId) {
         stageEl.classList.add("has-grabbed-section");
-        focusBanner?.classList.add("grabbed");
       } else {
         stageEl.classList.remove("has-grabbed-section");
-        focusBanner?.classList.remove("grabbed");
       }
-
-      if (focusBanner) focusBanner.style.display = "flex";
 
       // Clear previous focus highlight classes
       document.querySelectorAll(".instrument-section").forEach(el => {
@@ -408,11 +404,15 @@ const controller = new ExperienceController({
             labelEl.textContent = `${sec.name} • SPOTLIGHT (f)`;
           }
         }
+        spotlightScoreVisualizer?.show(telemetry.grabbedSectionId);
       } else if (telemetry.hoveredSectionId) {
         const hoveredEl = document.getElementById(`section-${telemetry.hoveredSectionId}`);
         if (hoveredEl) {
           hoveredEl.classList.add("focus-hover");
         }
+        spotlightScoreVisualizer?.show(telemetry.hoveredSectionId);
+      } else {
+        spotlightScoreVisualizer?.hide();
       }
 
       // Restore normal labels for non-grabbed sections
@@ -424,20 +424,16 @@ const controller = new ExperienceController({
         }
       });
 
-      // Update prompts & banner badges
+      // Update prompt
       if (telemetry.grabbedSectionId) {
         const sec = currentPiece?.sections.find(s => s.id === telemetry.grabbedSectionId);
-        if (focusText) focusText.textContent = `SPOTLIGHT: ${sec?.name || "SECTION"}`;
-        if (focusBadge) focusBadge.textContent = "CENTER STAGE • FORTE (f)";
-        promptEl.textContent = `✨ Spotlight: ${sec?.name} (Forte / Center Stage) • Point at another section or lower hand to restore ensemble balance`;
+        promptEl.textContent = `✨ ${sec?.name} (Forte / Center Stage) • Point at another section or lower hand to restore ensemble balance`;
       } else {
-        if (focusText) focusText.textContent = "INSTRUMENT SPOTLIGHT";
-        if (focusBadge) focusBadge.textContent = "AIM AT SECTION";
-        promptEl.textContent = "🪄 Instrument Spotlight • Point your index finger at any section to bring it forward in the mix";
+        promptEl.textContent = "🪄 Point your index finger at any section to bring it forward in the mix";
       }
     } else {
+      spotlightScoreVisualizer?.hide();
       stageEl.classList.remove("focus-mode-active", "has-grabbed-section");
-      if (focusBanner) focusBanner.style.display = "none";
       document.querySelectorAll(".instrument-section").forEach(el => {
         el.classList.remove("focus-hover", "focus-grabbed");
       });
@@ -447,6 +443,10 @@ const controller = new ExperienceController({
         if (labelEl) labelEl.textContent = sec.name;
       });
       promptEl.textContent = getPromptText(controller.getState(), controller.getPausedBeat(), controller.getInputSource());
+    }
+
+    if (spotlightScoreVisualizer) {
+      controller.getDebugOverlay()?.updateScoreVisualizerTelemetry(spotlightScoreVisualizer.getDebugTelemetry());
     }
   },
   onBeat: () => {
@@ -506,6 +506,25 @@ const controller = new ExperienceController({
       },
     });
   },
+});
+
+spotlightScoreVisualizer = new SpotlightScoreVisualizer({
+  getMidiScore: () => controller.getMidiScore(),
+  getTransport: () => controller.getTransport(),
+  getCurrentPiece: () => controller.getCurrentPiece() || getPieceById(controller.getCurrentPieceId()) || REPERTOIRE[0],
+});
+
+// Synchronize initial score visualizer state with controller feature flag
+spotlightScoreVisualizer.setEnabled(controller.isScoreVisualizerActive());
+if (spotlightScoreVisualizer) {
+  controller.getDebugOverlay()?.updateScoreVisualizerTelemetry(spotlightScoreVisualizer.getDebugTelemetry());
+}
+
+window.addEventListener("resize", () => {
+  spotlightScoreVisualizer?.updatePosition();
+  if (spotlightScoreVisualizer) {
+    controller.getDebugOverlay()?.updateScoreVisualizerTelemetry(spotlightScoreVisualizer.getDebugTelemetry());
+  }
 });
 
 // ── Input Source Controls ───────────────────────────────────────────────────
@@ -735,6 +754,14 @@ window.addEventListener("keydown", (e) => {
     setMode("inertial");
   } else if (e.code === "KeyP" && !e.repeat) {
     controller.togglePause();
+  } else if (e.code === "KeyS" && !e.repeat) {
+    // S toggles the score visualizer feature flag
+    const next = !controller.isScoreVisualizerActive();
+    controller.setScoreVisualizerEnabled(next);
+    spotlightScoreVisualizer?.setEnabled(next);
+    if (spotlightScoreVisualizer) {
+      controller.getDebugOverlay()?.updateScoreVisualizerTelemetry(spotlightScoreVisualizer.getDebugTelemetry());
+    }
   } else if (e.code === "ArrowUp") {
     // Up arrow: increase target Tempo
     e.preventDefault();
@@ -806,6 +833,7 @@ function openRepertoireModal(): void {
 
 async function switchPiece(pieceId: string): Promise<void> {
   clearAllNoteVisuals();
+  spotlightScoreVisualizer?.hide();
   loadingEl.style.display = "flex";
   try {
     await controller.loadPiece(pieceId);

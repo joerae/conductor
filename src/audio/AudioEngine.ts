@@ -715,7 +715,7 @@ export class AudioEngine {
    * When focusAmount > 0 and focusedChannels is provided:
    * - Spotlighted section: Volume boosted to forte tier (~1.35x, +2.6dB),
    *   stereo pan pulls smoothly to center stage (0.0), and presence opens up (+2.5dB).
-   * - Other sections: Backgrounded to piano tier (~0.72x, -2.8dB),
+   * - Other sections: Backgrounded to piano tier (~0.54x, -5.35dB, extra 25% quieter),
    *   stereo pan disperses outward to the stereo sides (up to ±0.85), and presence softens.
    * - Applied entirely via persistent per-channel bus gains and filters (O(channels), NOT O(active voices)).
    */
@@ -792,8 +792,8 @@ export class AudioEngine {
       // Forte foreground boost: 1.0 -> 1.35 (+2.6 dB)
       return 1.0 + 0.35 * this.focusAmount;
     } else {
-      // Gentle background reduction (halved): 1.0 -> 0.72 (-2.8 dB)
-      return 1.0 - 0.28 * this.focusAmount;
+      // Background reduction (extra 25% quieter): 1.0 -> 0.54 (-5.35 dB)
+      return 1.0 - 0.46 * this.focusAmount;
     }
   }
 

@@ -73,6 +73,7 @@ export class DebugOverlay {
   private onAutoplayInTempo?: () => void;
   private onThumbsUpVFXToggle?: (enabled: boolean) => void;
   private onFocusModeToggle?: (enabled: boolean) => void;
+  private onScoreVisualizerToggle?: (enabled: boolean) => void;
 
   // Cached DOM elements for live text updates without innerHTML thrashing
   private elements: Record<string, HTMLElement> = {};
@@ -135,7 +136,8 @@ export class DebugOverlay {
     onTempoModeChange?: (mode: "balanced" | "instant" | "autoplay" | "inertial" | "gestural") => void,
     onAutoplayInTempo?: () => void,
     onThumbsUpVFXToggle?: (enabled: boolean) => void,
-    onFocusModeToggle?: (enabled: boolean) => void
+    onFocusModeToggle?: (enabled: boolean) => void,
+    onScoreVisualizerToggle?: (enabled: boolean) => void
   ) {
     this.onDSPToggle = onDSPToggle;
     this.onTogglePause = onTogglePause;
@@ -147,6 +149,7 @@ export class DebugOverlay {
     this.onAutoplayInTempo = onAutoplayInTempo;
     this.onThumbsUpVFXToggle = onThumbsUpVFXToggle;
     this.onFocusModeToggle = onFocusModeToggle;
+    this.onScoreVisualizerToggle = onScoreVisualizerToggle;
     this.container = this.createContainer();
     document.body.appendChild(this.container);
 
@@ -196,6 +199,12 @@ export class DebugOverlay {
       "sched-tick",
       "sched-examined",
       "sched-late",
+      "score-flag",
+      "score-sec",
+      "score-notes",
+      "score-pos",
+      "score-z",
+      "score-state",
     ];
 
     keys.forEach((key) => {
@@ -252,6 +261,14 @@ export class DebugOverlay {
     focusModeCb?.addEventListener("change", () => {
       if (this.onFocusModeToggle) {
         this.onFocusModeToggle(focusModeCb.checked);
+      }
+    });
+
+    // Wire up Spotlight Score Visualizer toggle (Feature Flag, Default: ON)
+    const scoreVisCb = this.container.querySelector<HTMLInputElement>("#dbg-score-visualizer-cb");
+    scoreVisCb?.addEventListener("change", () => {
+      if (this.onScoreVisualizerToggle) {
+        this.onScoreVisualizerToggle(scoreVisCb.checked);
       }
     });
 
@@ -465,6 +482,53 @@ export class DebugOverlay {
 
   isVisible(): boolean {
     return this.visible;
+  }
+
+  setScoreVisualizerCheckbox(enabled: boolean): void {
+    const cb = this.container.querySelector<HTMLInputElement>("#dbg-score-visualizer-cb");
+    if (cb) cb.checked = enabled;
+    if (this.elements["score-flag"]) {
+      this.elements["score-flag"].textContent = enabled ? "Enabled (ON)" : "Disabled (OFF)";
+      this.elements["score-flag"].style.color = enabled ? "#ffd56b" : "#888888";
+    }
+  }
+
+  updateScoreVisualizerTelemetry(telemetry: {
+    isEnabled: boolean;
+    isVisible: boolean;
+    sectionId: string | null;
+    notesCount: number;
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    display: string;
+    hasVisibleClass: boolean;
+    zIndex: string;
+  }): void {
+    if (this.elements["score-flag"]) {
+      this.elements["score-flag"].textContent = telemetry.isEnabled ? "Enabled (ON)" : "Disabled (OFF)";
+      this.elements["score-flag"].style.color = telemetry.isEnabled ? "#ffd56b" : "#888888";
+    }
+    if (this.elements["score-sec"]) {
+      this.elements["score-sec"].textContent = telemetry.sectionId ? telemetry.sectionId.toUpperCase() : "—";
+    }
+    if (this.elements["score-notes"]) {
+      this.elements["score-notes"].textContent = `${telemetry.notesCount} notes`;
+    }
+    if (this.elements["score-pos"]) {
+      this.elements["score-pos"].textContent = telemetry.isVisible
+        ? `X: ${telemetry.left}px, Y: ${telemetry.top}px (${telemetry.width}×${telemetry.height}px)`
+        : "— (hidden)";
+    }
+    if (this.elements["score-z"]) {
+      this.elements["score-z"].textContent = telemetry.zIndex;
+    }
+    if (this.elements["score-state"]) {
+      this.elements["score-state"].innerHTML = telemetry.isVisible
+        ? `<strong style="color:#5cd87e;">VISIBLE</strong> (display: ${telemetry.display})`
+        : `<span style="color:#888888;">hidden (display: ${telemetry.display})</span>`;
+    }
   }
 
   // ── Private ─────────────────────────────────────────────────────────────
@@ -874,15 +938,44 @@ export class DebugOverlay {
           <input type="checkbox" id="dbg-show-orchestra-needle-cb" style="accent-color:#ffd56b; margin-right:6px;">
           <span><strong>📊 Show Orchestra Speed Needle</strong> (Cyan Clock Beacon)</span>
         </label>
-        <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Trigger a sparkling celestial particle starburst on the camera preview when showing a Thumbs Up gesture (Feature Flag)">
-          <input type="checkbox" id="dbg-thumbsup-vfx-cb" style="accent-color:#ffd56b; margin-right:6px;">
-          <span><strong>✨ Thumbs Up Camera VFX Burst</strong> (Sparkle Starburst)</span>
-        </label>
         <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Enable Camera Instrument Spotlight Focus Mode (Point Up gesture to spotlight and bring instrument section forward in mix)">
           <input type="checkbox" id="dbg-focus-mode-cb" checked style="accent-color:#ffd56b; margin-right:6px;">
           <span><strong>🪄 Instrument Spotlight Focus Mode</strong> (Point Up to Mix Section)</span>
         </label>
+        <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Toggle Real-Time Musical Score Visualizer in Spotlight Mode (Feature Flag, S key)">
+          <input type="checkbox" id="dbg-score-visualizer-cb" checked style="accent-color:#ffd56b; margin-right:6px;">
+          <span><strong>🎼 Spotlight Score Visualizer</strong> (2-Bar VexFlow Notation)</span>
+        </label>
       </div>
+
+      <!-- Spotlight Score Visualizer Diagnostics -->
+      <div class="debug-section-header" style="margin-top: 10px;" title="Real-time rendering, pixel placement, and z-index ordering of the spotlight score visualizer">SPOTLIGHT SCORE VISUALIZER DIAGNOSTICS</div>
+      <table class="debug-table">
+        <tr title="Feature flag status (enabled or disabled via S key or checkbox)">
+          <td>Feature Flag (S key)</td>
+          <td id="dbg-score-flag" style="color:#ffd56b;">Enabled (ON)</td>
+        </tr>
+        <tr title="Targeted orchestra instrument section">
+          <td>Target Section</td>
+          <td id="dbg-score-sec">—</td>
+        </tr>
+        <tr title="Total notes extracted for this section in current score">
+          <td>Section Notes</td>
+          <td id="dbg-score-notes">0 notes</td>
+        </tr>
+        <tr title="Exact computed screen coordinate pixel placement (left, top, width, height)">
+          <td>Pixel Placement</td>
+          <td id="dbg-score-pos">—</td>
+        </tr>
+        <tr title="CSS position, stacking context, and z-index ordering">
+          <td>Z-Index &amp; Stacking</td>
+          <td id="dbg-score-z">z-index: 120 (position: fixed)</td>
+        </tr>
+        <tr title="Current DOM visibility state and display property">
+          <td>DOM Visibility</td>
+          <td id="dbg-score-state">hidden</td>
+        </tr>
+      </table>
 
       <!-- Camera Kinematics & Beat Event Diagnostics -->
       <div class="debug-section-header" style="margin-top: 10px;" title="Real-time motion tracking and ictus turnaround detection data from the webcam">CAMERA KINEMATICS & BEAT LOG</div>
