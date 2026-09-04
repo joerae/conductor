@@ -38,18 +38,26 @@ export class WarmupVisuals {
   private animStartTime: number = 0;
   private isLiveTracking: boolean = false;
   private userSelectedLesson: boolean = false;
+  private liveHandPoints: { x: number; y: number }[] | null = null;
+  private hasLiveConductorInput: boolean = false;
 
   // External sync callbacks
   public onTempoSync?: (bpm: number, isDemo: boolean) => void;
   public onDynamicsSync?: (level: string, continuous: number) => void;
-  public onSpotlightSync?: (sectionId: string | null) => void;
 
   constructor(
-    callbacks: WarmupVisualsCallbacks,
+    callbacks?: Partial<WarmupVisualsCallbacks>,
     getAxisMapping: () => CameraAxisMapping = () => "classic",
     getInputMode: () => "camera" | "keyboard" = () => "camera"
   ) {
-    this.callbacks = callbacks;
+    this.callbacks = {
+      onStartWarmup: () => {},
+      onSkipWarmup: () => {},
+      onStartConducting: () => {},
+      onContinueKeyboard: () => {},
+      onRetryCamera: () => {},
+      ...callbacks,
+    };
     this.getAxisMapping = getAxisMapping;
     this.getInputMode = getInputMode;
 
@@ -66,6 +74,15 @@ export class WarmupVisuals {
 
   getCurrentLesson(): WarmupLessonId {
     return this.currentLesson;
+  }
+
+  getDisplayState(): WarmupDisplayState {
+    return this.displayState;
+  }
+
+  setLiveHandPoints(points: { x: number; y: number }[] | null): void {
+    this.liveHandPoints = points && points.length > 0 ? points : null;
+    this.hasLiveConductorInput = !!(this.liveHandPoints && this.liveHandPoints.length > 0);
   }
 
   setReturningUser(isReturning: boolean): void {
@@ -99,6 +116,14 @@ export class WarmupVisuals {
 
   isSoundMuted(): boolean {
     return this.isMuted;
+  }
+
+  isLiveTrackingActive(): boolean {
+    return this.isLiveTracking;
+  }
+
+  isConductorInputActive(): boolean {
+    return this.hasLiveConductorInput;
   }
 
   setLiveTrackingActive(active: boolean): void {
@@ -177,22 +202,13 @@ export class WarmupVisuals {
           </defs>
 
           <!-- Left Hand Silhouette Group -->
-          <g id="warmup-hand-left" class="warmup-hand-group">
+          <g id="warmup-hand-left" class="warmup-hand-group" transform="translate(220, 200)">
             <path class="hand-silhouette" d="M -25,35 C -30,15 -25,-15 -20,-30 C -18,-35 -12,-35 -10,-28 C -7,-18 -7,5 -10,18 C -5,-15 2,-25 6,-25 C 9,-25 12,-18 9,0 C 13,-12 18,-18 22,-18 C 26,-18 28,-12 25,8 C 28,-5 34,-8 37,-6 C 40,-3 39,8 33,22 C 25,40 10,55 -5,55 C -18,55 -22,48 -25,35 Z" fill="rgba(255, 213, 107, 0.12)" stroke="url(#warmup-gold-grad)" stroke-width="2.2" filter="url(#gold-glow-filter)" />
           </g>
 
           <!-- Right Hand Silhouette Group -->
-          <g id="warmup-hand-right" class="warmup-hand-group">
+          <g id="warmup-hand-right" class="warmup-hand-group" transform="translate(380, 200)">
             <path class="hand-silhouette" d="M 25,35 C 30,15 25,-15 20,-30 C 18,-35 12,-35 10,-28 C 7,-18 7,5 10,18 C 5,-15 -2,-25 -6,-25 C -9,-25 -12,-18 -9,0 C -13,-12 -18,-18 -22,-18 C -26,-18 -28,-12 -25,8 C -28,-5 -34,-8 -37,-6 C -40,-3 -39,8 -33,22 C -25,40 -10,55 5,55 C 18,55 22,48 25,35 Z" fill="rgba(255, 213, 107, 0.12)" stroke="url(#warmup-gold-grad)" stroke-width="2.2" filter="url(#gold-glow-filter)" />
-          </g>
-
-          <!-- Spotlight Pointing Hand Silhouette Group (Hidden by default) -->
-          <g id="warmup-hand-pointer" class="warmup-hand-group" style="display: none;">
-            <path class="hand-silhouette" d="M 0,45 C -15,45 -22,35 -20,15 C -18,-5 -5,-25 0,-55 C 2,-62 8,-62 10,-55 C 14,-25 15,10 18,25 C 22,12 28,12 28,25 C 25,42 12,45 0,45 Z" fill="rgba(255, 213, 107, 0.18)" stroke="url(#warmup-gold-grad)" stroke-width="2.5" filter="url(#gold-glow-filter)" />
-            <!-- Laser Ray Demonstration -->
-            <line id="warmup-ray" x1="5" y1="-58" x2="160" y2="-120" stroke="#ffd56b" stroke-width="2.5" stroke-dasharray="6,4" opacity="0.85" />
-            <circle cx="160" cy="-120" r="10" fill="none" stroke="#ffd56b" stroke-width="2" />
-            <circle cx="160" cy="-120" r="3" fill="#ffffff" />
           </g>
         </svg>
       </div>
@@ -361,7 +377,6 @@ export class WarmupVisuals {
     const copy = this.overlayEl.querySelector("#warmup-copy");
     const handLeft = this.overlayEl.querySelector("#warmup-hand-left") as SVGElement | null;
     const handRight = this.overlayEl.querySelector("#warmup-hand-right") as SVGElement | null;
-    const handPointer = this.overlayEl.querySelector("#warmup-hand-pointer") as SVGElement | null;
 
     const pillTempo = this.overlayEl.querySelector("#pill-tempo");
     const pillDynamics = this.overlayEl.querySelector("#pill-dynamics");
@@ -385,7 +400,6 @@ export class WarmupVisuals {
       if (copy) copy.textContent = "Preparing instruments for your performance.";
       if (handLeft) handLeft.style.display = "none";
       if (handRight) handRight.style.display = "none";
-      if (handPointer) handPointer.style.display = "none";
       return;
     }
 
@@ -402,7 +416,6 @@ export class WarmupVisuals {
         }
         if (handLeft) handLeft.style.display = "block";
         if (handRight) handRight.style.display = "block";
-        if (handPointer) handPointer.style.display = "none";
         break;
 
       case "dynamics":
@@ -417,16 +430,6 @@ export class WarmupVisuals {
         }
         if (handLeft) handLeft.style.display = "block";
         if (handRight) handRight.style.display = "block";
-        if (handPointer) handPointer.style.display = "none";
-        break;
-
-      case "spotlight":
-        if (badge) badge.textContent = "TUTORIAL: SPOTLIGHT";
-        if (headline) headline.textContent = "Spotlight the orchestra";
-        if (copy) copy.textContent = "Hold one finger upright, then aim at a section to bring it forward.";
-        if (handLeft) handLeft.style.display = "none";
-        if (handRight) handRight.style.display = "none";
-        if (handPointer) handPointer.style.display = "block";
         break;
     }
   }
@@ -445,8 +448,35 @@ export class WarmupVisuals {
   private animateStep(now: number): void {
     if (!this.overlayEl) return;
 
-    // If returning user or live tracking is active, don't drive needle/audio with synthetic animation
-    if (this.isReturningUser || this.isLiveTracking) return;
+    // If returning user, don't display tutorial animations
+    if (this.isReturningUser) return;
+
+    const handLeft = this.overlayEl.querySelector("#warmup-hand-left") as SVGElement | null;
+    const handRight = this.overlayEl.querySelector("#warmup-hand-right") as SVGElement | null;
+
+    // If live hand points are actively present from camera tracking, follow user's hands!
+    if (this.liveHandPoints && this.liveHandPoints.length > 0) {
+      const sorted = [...this.liveHandPoints].sort((a, b) => a.x - b.x);
+      const leftPt = sorted[0];
+      const rightPt = sorted.length > 1 ? sorted[1] : null;
+
+      if (handLeft) {
+        handLeft.style.display = "block";
+        handLeft.setAttribute("transform", `translate(${Math.round(leftPt.x)}, ${Math.round(leftPt.y)})`);
+      }
+      if (handRight) {
+        handRight.style.display = "block";
+        if (rightPt) {
+          handRight.setAttribute("transform", `translate(${Math.round(rightPt.x)}, ${Math.round(rightPt.y)})`);
+        } else {
+          // If only 1 hand visible, mirror across center
+          const mirrorX = Math.max(320, 600 - leftPt.x);
+          handRight.setAttribute("transform", `translate(${Math.round(mirrorX)}, ${Math.round(leftPt.y)})`);
+        }
+      }
+      // Live hands are actively driving; do not override with synthetic demo updates
+      return;
+    }
 
     const elapsed = (now - this.animStartTime) / 1000;
     const mapping = this.getAxisMapping();
@@ -458,15 +488,10 @@ export class WarmupVisuals {
       return;
     }
 
-    const handLeft = this.overlayEl.querySelector("#warmup-hand-left") as SVGElement | null;
-    const handRight = this.overlayEl.querySelector("#warmup-hand-right") as SVGElement | null;
-    const handPointer = this.overlayEl.querySelector("#warmup-hand-pointer") as SVGElement | null;
-
     if (this.prefersReducedMotion) {
       // In reduced motion, stay at clean stationary demonstration poses
       if (handLeft) handLeft.setAttribute("transform", "translate(220, 200)");
       if (handRight) handRight.setAttribute("transform", "translate(380, 200)");
-      if (handPointer) handPointer.setAttribute("transform", "translate(300, 220)");
       return;
     }
 
@@ -515,15 +540,6 @@ export class WarmupVisuals {
         continuous >= 0.14 ? "p" : "pp";
 
       this.onDynamicsSync?.(level, continuous);
-    } else if (this.currentLesson === "spotlight") {
-      // Hand pointer ray sweeps across stage (~4.0s cycle)
-      const phaseSpot = (elapsed % 4.0) / 4.0;
-      const sweepX = 260 + Math.sin(phaseSpot * Math.PI * 2) * 90;
-      if (handPointer) {
-        handPointer.setAttribute("transform", `translate(${sweepX}, 220)`);
-      }
-      const targetSec = sweepX < 280 ? "violin1" : sweepX < 320 ? "violin2" : "viola";
-      this.onSpotlightSync?.(targetSec);
     }
   }
 

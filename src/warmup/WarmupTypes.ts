@@ -21,7 +21,7 @@ export interface ConductorLoadState {
   failedOptionalTasks: string[];
 }
 
-export type WarmupLessonId = "tempo" | "dynamics" | "spotlight";
+export type WarmupLessonId = "tempo" | "dynamics";
 
 export interface WarmupLessonConfig {
   id: WarmupLessonId;
@@ -46,7 +46,6 @@ export interface WarmupManagerOptions {
   onRetryCamera?: () => void;
   onMuteToggle?: (muted: boolean) => void;
   getCameraAxisMapping?: () => CameraAxisMapping;
-  onSpotlightSection?: (sectionId: string | null) => void;
   onTempoDemonstration?: (bpm: number, isDemonstration: boolean) => void;
   onDynamicsDemonstration?: (level: string, continuous: number) => void;
 }

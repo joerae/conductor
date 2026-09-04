@@ -249,13 +249,11 @@ describe("Warming Up Interactive Loading Experience", () => {
       const onStartConducting = vi.fn();
       const onTempoDemo = vi.fn();
       const onDynamicsDemo = vi.fn();
-      const onSpotlightDemo = vi.fn();
 
       const manager = new WarmupManager({
         onStartConducting,
         onTempoDemonstration: onTempoDemo,
         onDynamicsDemonstration: onDynamicsDemo,
-        onSpotlightSection: onSpotlightDemo,
       });
 
       manager.mount(container);
@@ -263,9 +261,6 @@ describe("Warming Up Interactive Loading Experience", () => {
 
       manager.advanceLesson();
       expect(manager.getCurrentLesson()).toBe("dynamics");
-
-      manager.advanceLesson();
-      expect(manager.getCurrentLesson()).toBe("spotlight");
 
       manager.advanceLesson();
       expect(manager.getCurrentLesson()).toBe("ready");
@@ -276,7 +271,6 @@ describe("Warming Up Interactive Loading Experience", () => {
     it("supports replayWarmup after completion", () => {
       const manager = new WarmupManager();
       manager.mount(container);
-      manager.advanceLesson();
       manager.advanceLesson();
       manager.advanceLesson();
       expect(manager.getCurrentLesson()).toBe("ready");
@@ -442,6 +436,54 @@ describe("Warming Up Interactive Loading Experience", () => {
       visuals.mount(container);
       expect(container.innerHTML).not.toContain("warmup-mute-btn");
       visuals.unmount();
+    });
+
+    it("positions visual hand silhouettes based on live camera hand points", () => {
+      const visuals = new WarmupVisuals();
+      const overlay = visuals.mount(container);
+
+      // Supply 2 live hand points
+      visuals.setLiveHandPoints([
+        { x: 180, y: 140 },
+        { x: 420, y: 150 },
+      ]);
+
+      (visuals as any).animateStep(1000);
+
+      const leftHand = overlay?.querySelector("#warmup-hand-left");
+      const rightHand = overlay?.querySelector("#warmup-hand-right");
+      expect(leftHand?.getAttribute("transform")).toBe("translate(180, 140)");
+      expect(rightHand?.getAttribute("transform")).toBe("translate(420, 150)");
+
+      visuals.unmount();
+    });
+
+    it("does not prematurely exit warmup while user is practicing during lessons", () => {
+      const onStartConducting = vi.fn();
+      const manager = new WarmupManager({ onStartConducting });
+      manager.mount(container);
+
+      // Loading finishes in background
+      manager.getCoordinator().updateTask("shell", "ready");
+      manager.getCoordinator().updateTask("warmupViolin", "ready");
+      manager.getCoordinator().updateTask("score", "ready");
+      manager.getCoordinator().updateTask("instruments", "ready");
+      manager.getCoordinator().updateTask("cameraPermission", "ready");
+      manager.getCoordinator().updateTask("handTracking", "ready");
+
+      // But user is in the middle of lesson 1
+      (manager as any).visuals?.setDisplayState("lesson");
+
+      // Raising hands during lesson does NOT exit
+      manager.handleLiveSample({ isHandsRaised: true });
+      expect(onStartConducting).not.toHaveBeenCalled();
+
+      // When ready state is reached, raising hands exits
+      (manager as any).visuals?.setDisplayState("ready");
+      manager.handleLiveSample({ isHandsRaised: true });
+      expect(onStartConducting).toHaveBeenCalled();
+
+      manager.dispose();
     });
   });
 

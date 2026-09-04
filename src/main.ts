@@ -549,6 +549,11 @@ const controller = new ExperienceController({
       },
     });
   },
+  onAudioReady: (audioCtx) => {
+    if (warmupManager) {
+      warmupManager.startWarmupAudio(audioCtx);
+    }
+  },
   onCameraMotionSample: (sample) => {
     if (stageEl.classList.contains("stage-warming-up")) {
       warmupManager?.handleLiveSample(sample);
@@ -559,7 +564,7 @@ const controller = new ExperienceController({
         demoContinuous = sample.dynamicContinuous;
         demoDynamicLevel = sample.dynamicLevel as DynamicLevel;
       }
-      if (sample.isHandsRaised && warmupManager?.getCoordinator().getState().isReady) {
+      if (sample.isHandsRaised && warmupManager?.isReadyToExit()) {
         exitWarmupAndStartConducting();
       }
     }
@@ -1064,9 +1069,6 @@ function createWarmupManager(): WarmupManager {
       updateAnalogueDynamicUI(continuous, level);
       updateDynamicLadderUI(level as DynamicLevel);
     },
-    onSpotlightSection: () => {
-      pulseWarmupViolin();
-    },
   });
   return manager;
 }
@@ -1150,7 +1152,7 @@ const handleWarmupUserGesture = () => {
   controller.resumeAudio().then(() => {
     const audioCtx = controller.getAudioEngine().getAudioContext();
     if (audioCtx && warmupManager) {
-      void warmupManager.handleStartWarmupWithGesture(audioCtx);
+      warmupManager.startWarmupAudio(audioCtx);
     }
   }).catch(() => {});
 };

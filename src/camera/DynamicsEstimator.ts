@@ -255,14 +255,16 @@ export class DynamicsEstimator {
         confidence = Math.min(1.0, (s0.confidence + s1.confidence) / 1.6);
         this.lastVisibleTimestampMs = timestampMs;
       } else if (samples.length === 1) {
-        // 1 hand visible in spread mode: hold current dynamics
+        // 1 hand visible in spread mode: distance from center modulates dynamics smoothly
         this.lastSpan = -1;
         this.smoothedSpanVelocity = 0;
         this.isActivelyChangingState = false;
         this.belowReleaseSinceMs = 0;
 
+        const dx = Math.abs(samples[0].conductorPoint.x - 0.50);
+        targetValue = Math.max(0.05, Math.min(1.0, (dx - 0.06) / 0.32));
         reportingY = samples[0].conductorPoint.y;
-        confidence = samples[0].confidence * 0.7;
+        confidence = samples[0].confidence * 0.8;
         this.lastVisibleTimestampMs = timestampMs;
       } else {
         // 0 hands visible: hold, then slowly drift back to neutral 0.50 (mf)

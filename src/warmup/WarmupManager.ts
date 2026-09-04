@@ -25,7 +25,7 @@ export class WarmupManager {
   private isReturningUser: boolean = false;
   private currentLessonIndex: number = 0;
   private lessonTimerId: ReturnType<typeof setTimeout> | null = null;
-  private lessons: WarmupLessonId[] = ["tempo", "dynamics", "spotlight"];
+  private lessons: WarmupLessonId[] = ["tempo", "dynamics"];
 
   constructor(options: Partial<WarmupManagerOptions> = {}) {
     this.options = {
@@ -66,9 +66,33 @@ export class WarmupManager {
     this.presentCurrentLesson();
   }
 
+  isReadyToExit(): boolean {
+    const isReady = this.coordinator.getState().isReady;
+    if (this.isReturningUser) {
+      return isReady;
+    }
+    return isReady && this.visuals?.getDisplayState() === "ready";
+  }
+
+  startWarmupAudio(audioCtx: AudioContext): void {
+    this.audioPlayer.init(audioCtx);
+    if (!this.isRunning) {
+      this.audioPlayer.start();
+      this.isRunning = true;
+    }
+    if (this.visuals && this.visuals.getDisplayState() === "awaiting_interaction") {
+      this.visuals.setDisplayState("lesson");
+      this.startLessonSequence();
+    }
+  }
+
   mount(container: HTMLElement, audioCtx?: AudioContext): void {
     if (audioCtx) {
       this.audioPlayer.init(audioCtx);
+      if (audioCtx.state === "running") {
+        this.audioPlayer.start();
+        this.isRunning = true;
+      }
     }
 
     this.visuals = new WarmupVisuals(
@@ -97,11 +121,6 @@ export class WarmupManager {
     this.visuals.onDynamicsSync = (level, continuous) => {
       this.audioPlayer.setDynamic(level, continuous);
       this.options.onDynamicsDemonstration?.(level, continuous);
-    };
-
-    this.visuals.onSpotlightSync = (sectionId) => {
-      this.audioPlayer.setSpotlightSection(sectionId);
-      this.options.onSpotlightSection?.(sectionId);
     };
 
     // Subscribe to loading state
@@ -161,15 +180,24 @@ export class WarmupManager {
     this.visuals.setLesson(lesson);
 
     // Give each lesson a deliberate 5.4s duration to complete a full deliberate gesture
-    const duration = lesson === "spotlight" ? 4000 : 5400;
+    const duration = 5400;
     this.lessonTimerId = setTimeout(() => {
       this.currentLessonIndex++;
       this.presentCurrentLesson();
     }, duration);
   }
 
-  handleLiveSample(sample: { tempoBpm?: number; dynamicLevel?: string; dynamicContinuous?: number; isHandsRaised?: boolean }): void {
+  handleLiveSample(sample: {
+    tempoBpm?: number;
+    dynamicLevel?: string;
+    dynamicContinuous?: number;
+    isHandsRaised?: boolean;
+    handPoints?: { x: number; y: number }[];
+  }): void {
     this.visuals?.setLiveTrackingActive(true);
+    if (sample.handPoints) {
+      this.visuals?.setLiveHandPoints(sample.handPoints);
+    }
 
     if (sample.tempoBpm) {
       this.audioPlayer.setTempo(sample.tempoBpm);
@@ -180,8 +208,8 @@ export class WarmupManager {
       this.options.onDynamicsDemonstration?.(sample.dynamicLevel, sample.dynamicContinuous);
     }
 
-    // Exiting Warm Up: Once user raises hands and loading is ready, exit the tutorial
-    if (sample.isHandsRaised && this.coordinator.getState().isReady) {
+    // Exiting Warm Up: Only exit once user raises hands AND is ready to exit
+    if (sample.isHandsRaised && this.isReadyToExit()) {
       void this.handleStartConducting();
     }
   }

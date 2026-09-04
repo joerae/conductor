@@ -63,11 +63,13 @@ export type UICallbacks = {
   onPartyModeChange?: (isParty: boolean) => void;
   onLoveModeChange?: (isLove: boolean) => void;
   onFocusChange?: (telemetry: FocusTelemetry) => void;
+  onAudioReady?: (ctx: AudioContext) => void;
   onCameraMotionSample?: (sample: {
     tempoBpm?: number;
     dynamicLevel?: string;
     dynamicContinuous?: number;
     isHandsRaised?: boolean;
+    handPoints?: { x: number; y: number }[];
   }) => void;
 };
 
@@ -532,6 +534,10 @@ export class ExperienceController {
         // Pre-warm / resume AudioContext on camera activation
         try {
           await this.audioEngine.resume();
+          const ctx = this.audioEngine.getAudioContext();
+          if (ctx) {
+            this.uiCallbacks.onAudioReady?.(ctx);
+          }
         } catch {
           // Ignored
         }
@@ -686,11 +692,16 @@ export class ExperienceController {
             const isRaised = samples.some(s => s.conductorPoint.y >= 0.10);
             const tempoMultiplier = this.calculateGesturalTempoMultiplier(samples);
             const liveTempoBpm = Math.round((this.basePieceBpm || 108) * tempoMultiplier);
+            const handPoints = samples.map(s => ({
+              x: Math.round(Math.max(40, Math.min(560, s.conductorPoint.x * 600))),
+              y: Math.round(Math.max(40, Math.min(360, (1.0 - s.conductorPoint.y) * 400))),
+            }));
 
             // Always broadcast live gestural motion sample for warmup & UI meters
             this.uiCallbacks.onCameraMotionSample?.({
               tempoBpm: liveTempoBpm,
               isHandsRaised: isRaised,
+              handPoints,
             });
 
             // Mode E: Auto-start instantly as soon as user raises hands in front of camera
