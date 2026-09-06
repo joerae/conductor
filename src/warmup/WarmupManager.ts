@@ -66,6 +66,10 @@ export class WarmupManager {
     this.presentCurrentLesson();
   }
 
+  getIsReturningUser(): boolean {
+    return this.isReturningUser;
+  }
+
   isReadyToExit(): boolean {
     const isReady = this.coordinator.getState().isReady;
     if (this.isReturningUser) {

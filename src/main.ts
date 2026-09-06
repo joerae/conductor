@@ -66,7 +66,7 @@ function getPromptText(state: ExperienceState, pausedBeat: number, inputSource: 
         case "loading":
           return "Preparing orchestra and loading hand tracking AI model…";
         case "ready":
-          return "Camera active. Raise your hands to start playing at intended tempo!";
+          return "Raise your hands to begin";
         case "preparing":
           return "Hands raised — starting orchestra…";
         case "playing":
@@ -1098,52 +1098,80 @@ loadRepertoireCatalog().then(() => {
   const initialPiece = controller.getCurrentPiece();
   titleEl.textContent = initialPiece.title;
   subtitleEl.textContent = `${initialPiece.composer} — ${initialPiece.movement} • ${initialPiece.conductMode || ""}`;
-  renderWarmupOrchestraStage();
 
-  // Immediate Shell Render: Stage is active immediately in warming-up mode
-  stageEl.style.display = "flex";
-  stageEl.classList.add("stage-warming-up");
-  if (loadingEl) loadingEl.style.display = "none";
+  // Check if returning user (has previously completed warm-up onboarding)
+  const isReturningUser = typeof localStorage !== "undefined" &&
+    localStorage.getItem("conductor:onboarding-version") === "1";
 
-  // Sync UI buttons & hint text with initial controller state (Camera + Mode E)
-  updateInputSourceButtons(controller.getInputSource());
-  updateModeButtons(controller.getTempoMode());
-  initBpmGaugeTicks();
+  if (isReturningUser) {
+    // Returning user fast-path: "Just straight into it", no warmup panel or warming-up hold
+    renderOrchestraStage(initialPiece);
+    stageEl.style.display = "flex";
+    stageEl.classList.remove("stage-warming-up");
+    if (loadingEl) loadingEl.style.display = "none";
 
-  // Continuous smooth update loop for BPM gauge & Analogue Dynamics Marker
-  function gaugeRenderLoop(): void {
-    if (stageEl.classList.contains("stage-warming-up")) {
-      updateBpmGaugeUI(demoBpm);
-      updateAnalogueDynamicUI(demoContinuous, demoDynamicLevel);
-      if (demoDynamicLevel) {
-        updateDynamicLadderUI(demoDynamicLevel);
-      }
-    } else {
+    updateInputSourceButtons(controller.getInputSource());
+    updateModeButtons(controller.getTempoMode());
+    initBpmGaugeTicks();
+
+    function gaugeRenderLoop(): void {
       updateBpmGaugeUI();
       updateAnalogueDynamicUI();
+      requestAnimationFrame(gaugeRenderLoop);
     }
-    requestAnimationFrame(gaugeRenderLoop);
-  }
-  gaugeRenderLoop();
+    gaugeRenderLoop();
 
-  // Instantiate and mount WarmupManager inside camera hero slot
-  if (cameraHeroSlot) {
-    warmupManager = createWarmupManager();
-    const audioCtx = controller.getAudioEngine().getAudioContext() ?? undefined;
-    warmupManager.mount(cameraHeroSlot, audioCtx);
-    wireWarmupAudioEvents();
-
-    // Kick off background piece loading with coordinator
-    controller.loadWithCoordinator(warmupManager.getCoordinator()).catch(err => {
-      console.error("Conductor loadWithCoordinator error:", err);
+    controller.load().catch(err => {
+      console.error("Conductor load error:", err);
     });
   } else {
-    // Fallback if camera slot missing
-    renderOrchestraStage(initialPiece);
-    stageEl.classList.remove("stage-warming-up");
-    controller.load().catch(err => {
-      console.error("Conductor fallback load error:", err);
-    });
+    renderWarmupOrchestraStage();
+
+    // Immediate Shell Render: Stage is active immediately in warming-up mode
+    stageEl.style.display = "flex";
+    stageEl.classList.add("stage-warming-up");
+    if (loadingEl) loadingEl.style.display = "none";
+
+    // Sync UI buttons & hint text with initial controller state (Camera + Mode E)
+    updateInputSourceButtons(controller.getInputSource());
+    updateModeButtons(controller.getTempoMode());
+    initBpmGaugeTicks();
+
+    // Continuous smooth update loop for BPM gauge & Analogue Dynamics Marker
+    function gaugeRenderLoop(): void {
+      if (stageEl.classList.contains("stage-warming-up")) {
+        updateBpmGaugeUI(demoBpm);
+        updateAnalogueDynamicUI(demoContinuous, demoDynamicLevel);
+        if (demoDynamicLevel) {
+          updateDynamicLadderUI(demoDynamicLevel);
+        }
+      } else {
+        updateBpmGaugeUI();
+        updateAnalogueDynamicUI();
+      }
+      requestAnimationFrame(gaugeRenderLoop);
+    }
+    gaugeRenderLoop();
+
+    // Instantiate and mount WarmupManager inside camera hero slot
+    if (cameraHeroSlot) {
+      warmupManager = createWarmupManager();
+      const audioCtx = controller.getAudioEngine().getAudioContext() ?? undefined;
+      warmupManager.mount(cameraHeroSlot, audioCtx);
+      wireWarmupAudioEvents();
+
+      // Kick off background piece loading with coordinator
+      controller.loadWithCoordinator(warmupManager.getCoordinator()).catch(err => {
+        console.error("Conductor loadWithCoordinator error:", err);
+      });
+    } else {
+      // Fallback if camera slot missing
+      renderOrchestraStage(initialPiece);
+      stageEl.classList.remove("stage-warming-up");
+      controller.load().catch(err => {
+        console.error("Conductor fallback load error:", err);
+      });
+    }
   }
 });
 

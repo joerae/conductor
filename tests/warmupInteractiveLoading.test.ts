@@ -339,15 +339,17 @@ describe("Warming Up Interactive Loading Experience", () => {
       visuals.unmount();
     });
 
-    it("returning conductor flow hides synthetic animation stage and lesson pills", () => {
+    it("returning conductor flow hides synthetic animation stage, lesson pills, and card panel", () => {
       const visuals = new WarmupVisuals();
       visuals.setReturningUser(true);
       const overlay = visuals.mount(container);
 
+      const card = overlay.querySelector("#warmup-card");
       const animStage = overlay.querySelector("#warmup-animation-stage");
       const pills = overlay.querySelector("#warmup-lesson-pills");
       const skipBtn = overlay.querySelector("#warmup-skip-btn");
 
+      expect(card.style.display).toBe("none");
       expect(animStage.style.display).toBe("none");
       expect(pills.style.display).toBe("none");
       expect(skipBtn.style.display).toBe("none");
@@ -483,6 +485,12 @@ describe("Warming Up Interactive Loading Experience", () => {
       manager.handleLiveSample({ isHandsRaised: true });
       expect(onStartConducting).toHaveBeenCalled();
 
+      manager.dispose();
+    });
+
+    it("reports whether user is a returning conductor", () => {
+      const manager = new WarmupManager();
+      expect(typeof manager.getIsReturningUser()).toBe("boolean");
       manager.dispose();
     });
   });

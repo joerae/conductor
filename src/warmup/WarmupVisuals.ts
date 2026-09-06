@@ -89,6 +89,8 @@ export class WarmupVisuals {
     this.isReturningUser = isReturning;
     if (this.overlayEl) {
       this.overlayEl.classList.toggle("returning-user", isReturning);
+      const card = this.overlayEl.querySelector("#warmup-card") as HTMLElement | null;
+      if (card) card.style.display = isReturning ? "none" : "block";
       const animStage = this.overlayEl.querySelector("#warmup-animation-stage") as HTMLElement | null;
       if (animStage) animStage.style.display = isReturning ? "none" : "block";
       const pills = this.overlayEl.querySelector("#warmup-lesson-pills") as HTMLElement | null;

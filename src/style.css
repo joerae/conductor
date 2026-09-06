@@ -2394,6 +2394,10 @@ body.debug-mode-active .section-debug-hud {
   box-sizing: border-box;
 }
 
+.warmup-overlay.returning-user .warmup-card {
+  display: none !important;
+}
+
 .warmup-card-header {
   display: flex;
   align-items: center;

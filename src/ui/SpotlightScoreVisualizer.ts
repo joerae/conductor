@@ -213,7 +213,8 @@ export class SpotlightScoreVisualizer {
 
   // Track rendered VexFlow notes and playhead metrics
   private currentNoteRefs: NoteRef[] = [];
-  private staveMetrics = { startX: 10, totalWidth: 360 };
+  private bar1Metrics = { startX: 10, endX: 280 };
+  private bar2Metrics = { startX: 280, endX: 550 };
 
   // Dependencies provided dynamically by ExperienceController / main.ts
   private getMidiScore: () => MidiScore | null;
@@ -457,7 +458,7 @@ export class SpotlightScoreVisualizer {
 
     const winW = typeof window !== "undefined" ? window.innerWidth : 1000;
     const winH = typeof window !== "undefined" ? window.innerHeight : 800;
-    const cardWidth = Math.min(580, winW - 32);
+    const cardWidth = Math.min(600, winW - 32);
     const cardHeight = this.container.offsetHeight || 135;
 
     let secRect: DOMRect | { left: number; right: number; top: number; bottom: number };
@@ -579,10 +580,22 @@ export class SpotlightScoreVisualizer {
     if (!svgWrap) return;
 
     // Dimensions: generous width to fit all notes comfortably
-    const totalW = Math.max(500, Math.min(580, this.container.clientWidth || 560));
+    const totalW = Math.max(520, Math.min(600, this.container.clientWidth || 580));
     const totalH = 100;
-    const barWidth = Math.floor((totalW - 20) / 2);
-    this.staveMetrics = { startX: 10, totalWidth: barWidth * 2 };
+    const availableTotalW = totalW - 20;
+
+    // Allocate preamble space for stave 1 (Clef ~35px, KeySig ~20-30px, TimeSig ~30px)
+    let preambleWidth = 72;
+    if (keySig && keySig !== "C") {
+      preambleWidth += 22;
+    }
+    if (this.timeSignatureText) {
+      preambleWidth += 22;
+    }
+    // Available note width across both bars
+    const noteAreaWidth = Math.floor((availableTotalW - preambleWidth) / 2);
+    const bar1Width = noteAreaWidth + preambleWidth;
+    const bar2Width = availableTotalW - bar1Width;
 
     // Initialize VexFlow SVG Renderer
     const renderer = new Renderer(svgWrap as HTMLDivElement, Renderer.Backends.SVG);
@@ -590,7 +603,7 @@ export class SpotlightScoreVisualizer {
     const context = renderer.getContext();
 
     // Stave 1 (Bar 1) with Clef, Key Signature, Time Signature, and Start/End barlines
-    const stave1 = new Stave(10, 0, barWidth);
+    const stave1 = new Stave(10, 0, bar1Width);
     stave1.addClef(clef);
     if (keySig && keySig !== "C") {
       stave1.addKeySignature(keySig);
@@ -602,11 +615,14 @@ export class SpotlightScoreVisualizer {
     stave1.setContext(context).draw();
 
     // Stave 2 (Bar 2) with Start barline and Double end barline
-    const stave2 = new Stave(10 + barWidth, 0, barWidth);
+    const stave2 = new Stave(10 + bar1Width, 0, bar2Width);
     stave2.setBegBarType(Barline.type.SINGLE);
     stave2.setEndBarType(Barline.type.DOUBLE);
     stave2.setSection(`m. ${bar2 + 1}`, 0);
     stave2.setContext(context).draw();
+
+    this.bar1Metrics = { startX: stave1.getNoteStartX(), endX: stave1.getNoteEndX() };
+    this.bar2Metrics = { startX: stave2.getNoteStartX(), endX: stave2.getNoteEndX() };
 
     this.currentNoteRefs = [];
 
@@ -617,7 +633,6 @@ export class SpotlightScoreVisualizer {
       clef,
       stave1,
       context,
-      barWidth,
       keySig
     );
 
@@ -628,7 +643,6 @@ export class SpotlightScoreVisualizer {
       clef,
       stave2,
       context,
-      barWidth,
       keySig
     );
 
@@ -678,7 +692,6 @@ export class SpotlightScoreVisualizer {
     clef: ClefType,
     stave: Stave,
     context: any,
-    barWidth: number,
     keySig: string = "C"
   ): void {
     const barNotes = this.currentSectionNotes.filter(
@@ -692,7 +705,8 @@ export class SpotlightScoreVisualizer {
       const voice = new Voice({ numBeats: this.timeSigNum, beatValue: this.timeSigDen });
       voice.setMode(Voice.Mode.SOFT);
       voice.addTickables([restNote]);
-      new Formatter().joinVoices([voice]).format([voice], Math.max(60, barWidth - 40));
+      const availWidth = Math.max(50, stave.getNoteEndX() - stave.getNoteStartX() - Stave.defaultPadding);
+      new Formatter().joinVoices([voice]).format([voice], availWidth, { context });
       voice.draw(context, stave);
       return;
     }
@@ -775,7 +789,8 @@ export class SpotlightScoreVisualizer {
     voice.setMode(Voice.Mode.SOFT);
     voice.addTickables(staveNotes);
 
-    new Formatter().joinVoices([voice]).format([voice], Math.max(80, barWidth - 35));
+    const availWidth = Math.max(60, stave.getNoteEndX() - stave.getNoteStartX() - Stave.defaultPadding);
+    new Formatter().joinVoices([voice]).format([voice], availWidth, { context });
 
     // Draw voice AFTER beams are linked (so VexFlow knows to suppress individual flags!)
     voice.draw(context, stave);
@@ -804,11 +819,18 @@ export class SpotlightScoreVisualizer {
       return;
     }
 
-    // Update playhead X coordinate
+    // Update playhead X coordinate accurately tracking the note region of each measure
     const bar1StartBeat = currentBar * this.beatsPerBar;
     const beatInSystem = cursorBeat - bar1StartBeat;
-    const playheadFrac = Math.max(0, Math.min(1.0, beatInSystem / (2 * this.beatsPerBar)));
-    const playheadX = this.staveMetrics.startX + playheadFrac * this.staveMetrics.totalWidth;
+
+    let playheadX: number;
+    if (beatInSystem < this.beatsPerBar) {
+      const frac = Math.max(0, Math.min(1.0, beatInSystem / this.beatsPerBar));
+      playheadX = this.bar1Metrics.startX + frac * (this.bar1Metrics.endX - this.bar1Metrics.startX);
+    } else {
+      const frac = Math.max(0, Math.min(1.0, (beatInSystem - this.beatsPerBar) / this.beatsPerBar));
+      playheadX = this.bar2Metrics.startX + frac * (this.bar2Metrics.endX - this.bar2Metrics.startX);
+    }
 
     const playheadEl = this.container.querySelector("#score-playhead");
     if (playheadEl) {

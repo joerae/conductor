@@ -330,5 +330,54 @@ describe("SpotlightScoreVisualizer - Section Note Extraction & State", () => {
       expect(telemAfter.zIndex).toContain("120");
     });
   });
+
+  describe("2-Bar Stave Note Containment & Measure Separation", () => {
+    it("guarantees beat 4 quavers in measure 1 strictly stay within stave 1 and do not overlap into measure 2", () => {
+      const { Stave, Voice, StaveNote, Formatter } = require("vexflow");
+      const bar1Width = 320;
+      const stave1 = new Stave(10, 0, bar1Width);
+      stave1.addClef("bass");
+      stave1.addKeySignature("G");
+      stave1.addTimeSignature("4/4");
+
+      // Measure 9 cello/bass: 8 quavers (beat 1 to beat 4.5)
+      const m9Notes = [
+        new StaveNote({ keys: ["g/3"], duration: "8", clef: "bass" }),
+        new StaveNote({ keys: ["g/3"], duration: "8", clef: "bass" }),
+        new StaveNote({ keys: ["a/3"], duration: "8", clef: "bass" }),
+        new StaveNote({ keys: ["a/3"], duration: "8", clef: "bass" }),
+        new StaveNote({ keys: ["b/3"], duration: "8", clef: "bass" }),
+        new StaveNote({ keys: ["b/3"], duration: "8", clef: "bass" }),
+        new StaveNote({ keys: ["f/3"], duration: "8", clef: "bass" }),
+        new StaveNote({ keys: ["f/3"], duration: "8", clef: "bass" }),
+      ];
+
+      const voice1 = new Voice({ numBeats: 4, beatValue: 4 }).setMode(Voice.Mode.SOFT);
+      voice1.addTickables(m9Notes);
+      const availWidth1 = Math.max(60, stave1.getNoteEndX() - stave1.getNoteStartX() - Stave.defaultPadding);
+      new Formatter().joinVoices([voice1]).format([voice1], availWidth1);
+
+      // Measure 10 cello/bass: notes in bar 2
+      const stave2 = new Stave(10 + bar1Width, 0, 220);
+      const m10Notes = [
+        new StaveNote({ keys: ["g/3"], duration: "8", clef: "bass" }),
+        new StaveNote({ keys: ["g/3"], duration: "8", clef: "bass" }),
+      ];
+      const voice2 = new Voice({ numBeats: 4, beatValue: 4 }).setMode(Voice.Mode.SOFT);
+      voice2.addTickables(m10Notes);
+      const availWidth2 = Math.max(60, stave2.getNoteEndX() - stave2.getNoteStartX() - Stave.defaultPadding);
+      new Formatter().joinVoices([voice2]).format([voice2], availWidth2);
+
+      const lastNoteM9X = stave1.getNoteStartX() + m9Notes[7].getX();
+      const firstNoteM10X = stave2.getNoteStartX() + m10Notes[0].getX();
+
+      // 1. Last note in measure 9 must not exceed stave1's noteEndX
+      expect(lastNoteM9X).toBeLessThanOrEqual(stave1.getNoteEndX());
+
+      // 2. Measure 9 last note must be strictly to the left of Measure 10 first note (no visual collision)
+      expect(lastNoteM9X).toBeLessThan(firstNoteM10X);
+      expect(firstNoteM10X - lastNoteM9X).toBeGreaterThanOrEqual(15);
+    });
+  });
 });
 
