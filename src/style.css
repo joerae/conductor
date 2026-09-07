@@ -1236,13 +1236,24 @@ body.debug-mode-active .section-debug-hud {
 /* ── Layout Redesign: Hero Camera Center, BPM Gauge Below, Dynamics Right ── */
 .stage-performance-area {
   display: flex;
-  flex-direction: row;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: 10px;
   width: 100%;
   max-width: 1100px;
   margin: 0 auto;
+  position: relative;
+}
+
+.stage-camera-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  width: 100%;
+  position: relative;
 }
 
 .stage-center-column {
@@ -1531,6 +1542,158 @@ body.debug-mode-active .section-debug-hud {
 .telemetry-item .val {
   color: var(--accent-gold);
   font-weight: 600;
+}
+
+/* ── Vertical Dynamics Speedometer (Beside Camera on Left, Magic Finger Mode Only) ── */
+.dynamic-vertical-gauge {
+  width: 140px;
+  height: 616px;
+  max-height: calc(100vh - 200px);
+  min-height: 520px;
+  margin: 0;
+  background: rgba(14, 18, 28, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 213, 107, 0.22);
+  border-radius: 14px;
+  padding: 14px 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-sizing: border-box;
+  display: none; /* Hidden by default; visible in magic mode */
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  user-select: none;
+  transition: border-color var(--transition-med), box-shadow var(--transition-med);
+}
+
+.magic-mode-active .stage-camera-row {
+  align-items: stretch;
+}
+
+.magic-mode-active .dynamic-vertical-gauge {
+  display: flex;
+  height: auto;
+  min-height: 480px;
+  max-height: 560px;
+}
+
+.magic-mode-active .bpm-vertical-gauge {
+  height: auto;
+  min-height: 480px;
+  max-height: 560px;
+}
+
+.magic-mode-active #dynamic-ladder-container {
+  display: none !important;
+}
+
+.dynamic-vertical-gauge:hover {
+  border-color: rgba(255, 213, 107, 0.45);
+  box-shadow: 0 8px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(255, 213, 107, 0.15);
+}
+
+.dynamic-gauge-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+}
+
+.dynamic-gauge-title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dynamic-gauge-title {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.dynamic-gauge-track-wrap {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  gap: 12px;
+  flex: 1;
+  width: 100%;
+  min-height: 400px;
+  margin: 12px 0;
+  position: relative;
+}
+
+.dynamic-vertical-steps {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  width: 48px;
+  height: 100%;
+}
+
+.dynamic-vertical-steps .dynamic-step {
+  padding: 4px 6px;
+  font-size: 0.72rem;
+  min-height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dynamic-vertical-track {
+  position: relative;
+  width: 26px;
+  height: 100%;
+  background: linear-gradient(0deg, #102a45 0%, #17423c 25%, #4a401c 55%, #592e16 80%, #61131a 100%);
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  overflow: visible;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+  box-sizing: border-box;
+}
+
+.dynamic-vertical-marker {
+  position: absolute;
+  left: -8px;
+  transform: translateY(50%);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  pointer-events: none;
+  z-index: 12;
+  transition: bottom 0.08s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dynamic-vertical-marker .needle-pip {
+  width: 42px;
+  height: 14px;
+  border-radius: 7px;
+  background: rgba(255, 213, 107, 0.38);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 16px rgba(255, 213, 107, 0.65), 0 0 32px rgba(255, 213, 107, 0.3), inset 0 0 8px rgba(255, 255, 255, 0.4);
+  box-sizing: border-box;
+}
+
+.dynamic-gauge-footer-hint {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 6px;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-align: center;
+  width: 100%;
+  opacity: 0.85;
 }
 
 /* ── Vertical BPM Speedometer Gauge (Beside Camera, Full Video Height) ───────── */
@@ -1973,7 +2136,7 @@ body.debug-mode-active .section-debug-hud {
   pointer-events: none;
   z-index: 48;
   overflow: visible;
-  display: none;
+  visibility: hidden;
 }
 
 /* ── Spotlight Focus Mode Clean Elevation & Section Highlighting ───────── */
@@ -2001,6 +2164,7 @@ body.debug-mode-active .section-debug-hud {
 
 /* ── Magic Finger Targeting & Acquisition Highlights ─────────────────────── */
 .bpm-vertical-gauge.magic-hover,
+.dynamic-vertical-gauge.magic-hover,
 #dynamic-ladder-container.magic-hover {
   border-color: rgba(107, 231, 255, 0.7) !important;
   box-shadow: 0 0 20px rgba(107, 231, 255, 0.35) !important;
@@ -2008,6 +2172,7 @@ body.debug-mode-active .section-debug-hud {
 }
 
 .bpm-vertical-gauge.magic-acquired,
+.dynamic-vertical-gauge.magic-acquired,
 #dynamic-ladder-container.magic-acquired {
   border-color: rgba(255, 213, 107, 0.95) !important;
   box-shadow: 0 0 30px rgba(255, 213, 107, 0.6), 0 0 10px rgba(255, 255, 255, 0.4) !important;

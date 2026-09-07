@@ -568,9 +568,15 @@ const controller = new ExperienceController({
 
     // Dynamics ribbon highlight
     const dynRibbonEl = document.getElementById("dynamic-ladder-container");
+    const dynVerticalEl = document.getElementById("dynamic-vertical-gauge-container");
+    const isDynTarget = targetType === "dynamics";
     if (dynRibbonEl) {
-      dynRibbonEl.classList.toggle("magic-hover", targetType === "dynamics" && !isAcquired);
-      dynRibbonEl.classList.toggle("magic-acquired", targetType === "dynamics" && isAcquired);
+      dynRibbonEl.classList.toggle("magic-hover", isDynTarget && !isAcquired);
+      dynRibbonEl.classList.toggle("magic-acquired", isDynTarget && isAcquired);
+    }
+    if (dynVerticalEl) {
+      dynVerticalEl.classList.toggle("magic-hover", isDynTarget && !isAcquired);
+      dynVerticalEl.classList.toggle("magic-acquired", isDynTarget && isAcquired);
     }
 
     // Update prompt text if in magic mode
@@ -580,14 +586,14 @@ const controller = new ExperienceController({
           promptEl.textContent = `👆 Aiming at Tempo Gauge • Move finger up/down to adjust BPM (${telemetry.liveBpm ?? controller.getIndicatedBpm()} BPM)`;
         } else if (targetType === "dynamics") {
           const pct = Math.round((telemetry.liveDynamic ?? 0.5) * 100);
-          promptEl.textContent = `👆 Aiming at Dynamics Ribbon • Move finger left/right to adjust Dynamics (${pct}%)`;
+          promptEl.textContent = `👆 Aiming at Dynamics Gauge • Move finger up/down to adjust Dynamics (${pct}%)`;
         } else if (telemetry.targetedSectionId) {
           promptEl.textContent = `👆 Pointing at Orchestra • Section spotlighted!`;
         }
       } else if (targetType !== "open") {
-        promptEl.textContent = `👆 Hovering over ${targetType === "tempo" ? "Tempo Gauge" : (targetType === "dynamics" ? "Dynamics Ribbon" : "Orchestra")} • Hold steady to grab`;
+        promptEl.textContent = `👆 Hovering over ${targetType === "tempo" ? "Tempo Gauge" : (targetType === "dynamics" ? "Dynamics Gauge" : "Orchestra")} • Hold steady to grab`;
       } else {
-        promptEl.textContent = `👆 Magic Finger Active • Aim laser at Tempo Gauge, Dynamics Ribbon, or Orchestra Sections`;
+        promptEl.textContent = `👆 Magic Finger Active • Aim laser at Tempo Gauge, Dynamics Gauge, or Orchestra Sections`;
       }
     }
   },
@@ -606,7 +612,13 @@ const controller = new ExperienceController({
       }
     } else {
       if (sample.tempoBpm !== undefined) {
-        updateBpmGaugeUI(sample.tempoBpm);
+        if (controller.getTempoMode() === "magic") {
+          updateBpmGaugeUI(sample.tempoBpm);
+        } else if (controller.getState() === "playing") {
+          updateBpmGaugeUI();
+        } else {
+          updateBpmGaugeUI(sample.tempoBpm);
+        }
       }
       if (sample.dynamicContinuous !== undefined) {
         updateAnalogueDynamicUI(sample.dynamicContinuous, sample.dynamicLevel);
@@ -754,11 +766,11 @@ const valOrchestraBpm = document.getElementById("val-orchestra-bpm") as HTMLElem
 const valIndicatedBpm = document.getElementById("val-indicated-bpm") as HTMLElement;
 
 
-function updateBpmGaugeUI(overrideBpm?: number): void {
+function updateBpmGaugeUI(overrideIndicatedBpm?: number, overrideOrchestraBpm?: number): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const clockState = (controller as any).clock?.getState?.();
-  const orchestraBpm = overrideBpm ?? (clockState?.bpm || 0);
-  const indicatedBpm = overrideBpm ?? (controller.getIndicatedBpm() || orchestraBpm || 0);
+  const orchestraBpm = overrideOrchestraBpm ?? (clockState?.bpm || 0);
+  const indicatedBpm = overrideIndicatedBpm ?? (controller.getIndicatedBpm() || orchestraBpm || 0);
 
   if (orchestraBpm > 0) {
     if (valOrchestraBpm) valOrchestraBpm.textContent = `${orchestraBpm.toFixed(0)}`;
@@ -767,9 +779,10 @@ function updateBpmGaugeUI(overrideBpm?: number): void {
     if (valOrchestraBpm) valOrchestraBpm.textContent = `—`;
   }
 
-  if (indicatedBpm > 0) {
-    if (valIndicatedBpm) valIndicatedBpm.textContent = `${indicatedBpm.toFixed(0)}`;
-    if (markerIndicated) markerIndicated.style.bottom = `${bpmToPercent(indicatedBpm)}%`;
+  const clampedIndicated = indicatedBpm > 0 ? Math.max(40, Math.min(220, indicatedBpm)) : 0;
+  if (clampedIndicated > 0) {
+    if (valIndicatedBpm) valIndicatedBpm.textContent = `${clampedIndicated.toFixed(0)}`;
+    if (markerIndicated) markerIndicated.style.bottom = `${bpmToPercent(clampedIndicated)}%`;
   } else {
     if (valIndicatedBpm) valIndicatedBpm.textContent = `—`;
   }
@@ -797,6 +810,7 @@ const dynamicSteps = document.querySelectorAll<HTMLButtonElement>(".dynamic-step
 const dynamicCurrentBadge = document.getElementById("dynamic-current-badge") as HTMLElement | null;
 
 function updateDynamicLadderUI(level: DynamicLevel): void {
+  const dynamicVerticalContainer = document.getElementById("dynamic-vertical-gauge-container");
   dynamicSteps.forEach(btn => {
     const isMatch = btn.dataset.dynamic === level;
     btn.classList.toggle("active", isMatch);
@@ -804,15 +818,24 @@ function updateDynamicLadderUI(level: DynamicLevel): void {
 
   if (level === "fff") {
     dynamicLadderContainer?.classList.add("overburn");
+    dynamicVerticalContainer?.classList.add("overburn");
   } else {
     dynamicLadderContainer?.classList.remove("overburn");
+    dynamicVerticalContainer?.classList.remove("overburn");
   }
 
-  // Update dynamic badge
+  // Update dynamic badges
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const continuousVal = (controller as any).audioEngine?.getContinuousDynamic?.() ?? 0.5;
+  const pct = Math.round(continuousVal * 100);
+  const badgeText = `${level.toUpperCase()} (${pct}%)`;
+
   if (dynamicCurrentBadge) {
-    const continuousVal = (controller as any).audioEngine?.getContinuousDynamic?.() ?? 0.5;
-    const pct = Math.round(continuousVal * 100);
-    dynamicCurrentBadge.textContent = `${level.toUpperCase()} (${pct}%)`;
+    dynamicCurrentBadge.textContent = badgeText;
+  }
+  const valVerticalDynamic = document.getElementById("val-vertical-dynamic");
+  if (valVerticalDynamic) {
+    valVerticalDynamic.textContent = badgeText;
   }
 
   // Update stage ambient dynamic classes
@@ -1054,7 +1077,9 @@ let demoDynamicLevel: DynamicLevel | undefined;
 
 function updateAnalogueDynamicUI(overrideContinuous?: number, overrideLevel?: string): void {
   const analogueMarker = document.getElementById("dynamic-analogue-marker") as HTMLElement | null;
+  const verticalMarker = document.getElementById("dynamic-vertical-analogue-marker") as HTMLElement | null;
   const dynamicCurrentBadge = document.getElementById("dynamic-current-badge") as HTMLElement | null;
+  const valVerticalDynamic = document.getElementById("val-vertical-dynamic") as HTMLElement | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const continuousVal = overrideContinuous ?? (controller as any).audioEngine?.getContinuousDynamic?.() ?? 0.5;
 
@@ -1064,10 +1089,21 @@ function updateAnalogueDynamicUI(overrideContinuous?: number, overrideLevel?: st
     analogueMarker.style.left = `${pct}%`;
   }
 
+  if (verticalMarker) {
+    // Map continuousVal [0, 1] to vertical percentage [0%, 100%]
+    const pct = Math.max(0, Math.min(100, continuousVal * 100));
+    verticalMarker.style.bottom = `${pct}%`;
+  }
+
+  const level = overrideLevel ?? controller.getDynamicLevel();
+  const pct = Math.round(continuousVal * 100);
+  const badgeText = `${level.toUpperCase()} (${pct}%)`;
+
   if (dynamicCurrentBadge) {
-    const level = overrideLevel ?? controller.getDynamicLevel();
-    const pct = Math.round(continuousVal * 100);
-    dynamicCurrentBadge.textContent = `${level.toUpperCase()} (${pct}%)`;
+    dynamicCurrentBadge.textContent = badgeText;
+  }
+  if (valVerticalDynamic) {
+    valVerticalDynamic.textContent = badgeText;
   }
 }
 
@@ -1118,7 +1154,7 @@ function createWarmupManager(): WarmupManager {
     getCameraAxisMapping: () => controller.getCameraAxisMapping(),
     onTempoDemonstration: (bpm) => {
       demoBpm = bpm;
-      updateBpmGaugeUI(bpm);
+      updateBpmGaugeUI(bpm, bpm);
     },
     onDynamicsDemonstration: (level, continuous) => {
       demoDynamicLevel = level as DynamicLevel;
@@ -1197,7 +1233,7 @@ loadRepertoireCatalog().then(() => {
     // Continuous smooth update loop for BPM gauge & Analogue Dynamics Marker
     function gaugeRenderLoop(): void {
       if (stageEl.classList.contains("stage-warming-up")) {
-        updateBpmGaugeUI(demoBpm);
+        updateBpmGaugeUI(demoBpm, demoBpm);
         updateAnalogueDynamicUI(demoContinuous, demoDynamicLevel);
         if (demoDynamicLevel) {
           updateDynamicLadderUI(demoDynamicLevel);

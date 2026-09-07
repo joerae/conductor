@@ -728,9 +728,14 @@ export class ExperienceController {
               y: Math.round(Math.max(40, Math.min(360, (1.0 - s.conductorPoint.y) * 400))),
             }));
 
+            // Broadcast smoothed tempo when playing to prevent gauge jitter
+            const gesturalBroadcastBpm = this.state === "playing"
+              ? (this.indicatedBpm || Math.round(this.currentGesturalBpm) || liveTempoBpm)
+              : liveTempoBpm;
+
             // Always broadcast live gestural motion sample for warmup & UI meters
             this.uiCallbacks.onCameraMotionSample?.({
-              tempoBpm: liveTempoBpm,
+              tempoBpm: gesturalBroadcastBpm,
               isHandsRaised: isRaised,
               handPoints,
             });
@@ -1162,8 +1167,8 @@ export class ExperienceController {
    * Adjusts target base BPM so the change persists across subsequent camera samples.
    */
   nudgeGesturalBpm(deltaBpm: number): void {
-    this.basePieceBpm = Math.max(30, Math.min(240, this.basePieceBpm + deltaBpm));
-    this.currentGesturalBpm = Math.max(30, Math.min(240, this.currentGesturalBpm + deltaBpm));
+    this.basePieceBpm = Math.max(40, Math.min(220, this.basePieceBpm + deltaBpm));
+    this.currentGesturalBpm = Math.max(40, Math.min(220, this.currentGesturalBpm + deltaBpm));
     this.clock.setBpm(this.currentGesturalBpm);
     this.indicatedBpm = Math.round(this.currentGesturalBpm);
     this.transport.updatePeriod(this.audioEngine.getAudioTime(), 60 / this.currentGesturalBpm, 0);

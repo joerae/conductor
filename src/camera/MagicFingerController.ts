@@ -13,10 +13,11 @@ import { HAND_LANDMARK_INDICES, isPointingGesture } from "./cameraTypes";
 import { percentToBpm } from "../ui/bpmGauge";
 
 export const MAGIC_FINGER_TUNING = {
-  TEMPO_CAPTURE_BPM_DELTA: 22,
+  TEMPO_CAPTURE_BPM_DELTA: 35,
   TEMPO_RELEASE_PAD_PX: 65,
-  DYNAMICS_CAPTURE_DELTA: 0.16,
+  DYNAMICS_CAPTURE_DELTA: 0.25,
   DYNAMICS_RELEASE_PAD_PX: 60,
+  DWELL_ACQUIRE_MS: 280,
   SMOOTHING_ALPHA: 0.40,
   RAY_FREE_DISTANCE_PX: 360,
 };
@@ -83,7 +84,12 @@ export class DefaultDOMGeometryProvider implements MagicFingerGeometryProvider {
   getSvgOverlayRect(): ScreenRect | null {
     if (typeof document === "undefined") return null;
     const el = document.getElementById("stage-spotlight-ray-overlay");
-    return el ? el.getBoundingClientRect() : null;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0 && el.parentElement) {
+      return el.parentElement.getBoundingClientRect();
+    }
+    return rect;
   }
   getTempoTrackRect(): ScreenRect | null {
     if (typeof document === "undefined") return null;
@@ -92,6 +98,10 @@ export class DefaultDOMGeometryProvider implements MagicFingerGeometryProvider {
   }
   getDynamicsTrackRect(): ScreenRect | null {
     if (typeof document === "undefined") return null;
+    const verticalEl = document.getElementById("dynamic-vertical-analogue-track");
+    if (verticalEl && verticalEl.offsetParent !== null) {
+      return verticalEl.getBoundingClientRect();
+    }
     const el = document.getElementById("dynamic-analogue-track");
     return el ? el.getBoundingClientRect() : null;
   }
@@ -127,6 +137,11 @@ export class MagicFingerController {
   // Values preserved across releases
   private lastBpm: number = 100;
   private lastDynamic: number = 0.5;
+
+  // Dwell acquisition state
+  private hoverStartTime: number = 0;
+  private currentHoverTarget: "tempo" | "dynamics" | null = null;
+  private lastPointingHandIndex: number | null = null;
 
   // Ray direction smoothing
   private smoothedUnitX: number = 0;
@@ -176,8 +191,11 @@ export class MagicFingerController {
     this.state = "idle";
     this.activeTarget = null;
     this.hoverTarget = null;
+    this.currentHoverTarget = null;
+    this.hoverStartTime = 0;
     this.targetedSectionId = null;
     this.hasSmoothedDir = false;
+    this.lastPointingHandIndex = null;
     this.callbacks.onSpotlightChange?.(null);
   }
 
@@ -189,20 +207,78 @@ export class MagicFingerController {
     indicatedBpm: number;
     continuousDynamic: number;
     isMirrored?: boolean;
+    nowMs?: number;
   }): MagicFingerTelemetry {
-    const { samples, indicatedBpm, continuousDynamic, isMirrored = true } = options;
+    const { samples, indicatedBpm, continuousDynamic, isMirrored = true, nowMs } = options;
+    const now = nowMs ?? (typeof performance !== "undefined" ? performance.now() : Date.now());
 
     this.lastBpm = indicatedBpm;
     this.lastDynamic = continuousDynamic;
 
-    // Find the primary pointing hand
+    // 1. Gather all candidate pointing hands
+    const candidateSamples = samples.filter(
+      s => s.gesture && isPointingGesture(s.gesture) && s.landmarks && s.landmarks.length >= 21
+    );
+
     let pointingSample: HandSample | null = null;
-    for (const sample of samples) {
-      if (sample.gesture && isPointingGesture(sample.gesture)) {
-        pointingSample = sample;
-        break;
+
+    if (candidateSamples.length === 1) {
+      pointingSample = candidateSamples[0];
+    } else if (candidateSamples.length > 1) {
+      // Multiple pointing hands detected: apply directional emergent finger switching
+      const getMetrics = (s: HandSample) => {
+        const tip = s.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP];
+        const pip = s.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] || s.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
+        const screenX = isMirrored ? (1.0 - tip.x) : tip.x;
+        const tipY = tip.y;
+        const rawDirX = isMirrored ? -(tip.x - pip.x) : (tip.x - pip.x);
+        const rawDirY = tip.y - pip.y;
+        return { s, screenX, tipY, rawDirX, rawDirY };
+      };
+
+      const metrics = candidateSamples.map(getMetrics);
+
+      // If actively controlling or pointing towards Tempo (right edge): select finger closest to right edge (max screenX)
+      if (this.activeTarget === "tempo") {
+        metrics.sort((a, b) => b.screenX - a.screenX);
+        pointingSample = metrics[0].s;
+      }
+      // If actively controlling or pointing towards Dynamics (left edge): select finger closest to left edge (min screenX)
+      else if (this.activeTarget === "dynamics") {
+        metrics.sort((a, b) => a.screenX - b.screenX);
+        pointingSample = metrics[0].s;
+      }
+      else {
+        const rightward = metrics.filter(m => m.rawDirX > 0.10);
+        const leftward = metrics.filter(m => m.rawDirX < -0.10);
+        const upward = metrics.filter(m => m.rawDirY < -0.10);
+
+        if (rightward.length > 0 && leftward.length === 0) {
+          // Pointing towards Tempo (right edge): select the finger closest to the right edge
+          rightward.sort((a, b) => b.screenX - a.screenX);
+          pointingSample = rightward[0].s;
+        } else if (leftward.length > 0 && rightward.length === 0) {
+          // Pointing towards Dynamics (left edge): select the finger closest to the left edge
+          leftward.sort((a, b) => a.screenX - b.screenX);
+          pointingSample = leftward[0].s;
+        } else if (upward.length > 0) {
+          // Pointing towards Orchestra (top edge): select the finger closest to the top (lowest tipY / highest hand)
+          upward.sort((a, b) => a.tipY - b.tipY);
+          pointingSample = upward[0].s;
+        } else {
+          // General fallback: maintain previous pointing hand if still pointing
+          const prev = metrics.find(m => m.s.handIndex === this.lastPointingHandIndex);
+          if (prev) {
+            pointingSample = prev.s;
+          } else {
+            metrics.sort((a, b) => a.tipY - b.tipY);
+            pointingSample = metrics[0].s;
+          }
+        }
       }
     }
+
+    this.lastPointingHandIndex = pointingSample ? pointingSample.handIndex : null;
 
     // If finger is retracted, release everything immediately and hide laser
     if (!pointingSample || !pointingSample.landmarks || pointingSample.landmarks.length < 21) {
@@ -210,8 +286,11 @@ export class MagicFingerController {
       this.state = "idle";
       this.activeTarget = null;
       this.hoverTarget = null;
+      this.currentHoverTarget = null;
+      this.hoverStartTime = 0;
       this.targetedSectionId = null;
       this.hasSmoothedDir = false;
+      this.lastPointingHandIndex = null;
 
       if (wasSpotlighted) {
         this.callbacks.onSpotlightChange?.(null);
@@ -262,17 +341,18 @@ export class MagicFingerController {
     const pip = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] ||
                 pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
 
-    const tipScreenNormX = isMirrored ? 1.0 - tip.x : tip.x;
-    const pipScreenNormX = pip ? (isMirrored ? 1.0 - pip.x : pip.x) : tipScreenNormX;
-    const pipScreenNormY = pip ? pip.y : tip.y + 0.05;
+    const tipScreenNormX = Math.max(0, Math.min(1, isMirrored ? 1.0 - tip.x : tip.x));
+    const clampedTipY = Math.max(0, Math.min(1, tip.y));
+    const pipScreenNormX = pip ? Math.max(0, Math.min(1, isMirrored ? 1.0 - pip.x : pip.x)) : tipScreenNormX;
+    const pipScreenNormY = pip ? Math.max(0, Math.min(1, pip.y)) : clampedTipY + 0.05;
 
     // Start coordinates in SVG space
     const startX = (canvasRect.left - svgRect.left) + tipScreenNormX * canvasRect.width;
-    const startY = (canvasRect.top - svgRect.top) + tip.y * canvasRect.height;
+    const startY = (canvasRect.top - svgRect.top) + clampedTipY * canvasRect.height;
 
     // Raw ray direction vector in screen pixels
     const rawDirX = (tipScreenNormX - pipScreenNormX) * canvasRect.width;
-    const rawDirY = (tip.y - pipScreenNormY) * canvasRect.height;
+    const rawDirY = (clampedTipY - pipScreenNormY) * canvasRect.height;
     const rawLen = Math.hypot(rawDirX, rawDirY);
 
     let unitX = 0;
@@ -361,52 +441,95 @@ export class MagicFingerController {
         this.state = "tempo_acquired";
       }
     } else if (this.activeTarget === "dynamics" && dynamicsTrackRect) {
+      const isVertical = dynamicsTrackRect.height > dynamicsTrackRect.width;
       const dynTrackLeft = dynamicsTrackRect.left - svgRect.left;
       const dynTrackRight = dynamicsTrackRect.right - svgRect.left;
       const dynTrackTop = dynamicsTrackRect.top - svgRect.top;
       const dynTrackBottom = dynamicsTrackRect.bottom - svgRect.top;
+      const dynTrackCenterX = (dynTrackLeft + dynTrackRight) / 2;
       const dynTrackCenterY = (dynTrackTop + dynTrackBottom) / 2;
       const dynTrackWidth = Math.max(1, dynTrackRight - dynTrackLeft);
-
-      // Project ray onto horizontal line of dynamics ribbon
-      let hitX = startX;
-      if (Math.abs(rayDirY) > 0.02) {
-        const t = (dynTrackCenterY - startY) / rayDirY;
-        hitX = startX + rayDirX * t;
-      } else {
-        hitX = startX;
-      }
-
-      // Check padded zone for release
+      const dynTrackHeight = Math.max(1, dynTrackBottom - dynTrackTop);
       const pad = MAGIC_FINGER_TUNING.DYNAMICS_RELEASE_PAD_PX;
-      const projectedY = (Math.abs(rayDirY) > 0.02)
-        ? dynTrackCenterY
-        : startY + rayDirY * MAGIC_FINGER_TUNING.RAY_FREE_DISTANCE_PX;
 
-      const isOutsidePaddedZone =
-        hitX < dynTrackLeft - pad ||
-        hitX > dynTrackRight + pad ||
-        projectedY < dynTrackTop - pad ||
-        projectedY > dynTrackBottom + pad ||
-        rayDirY < -0.20; // clearly pointing upwards away
+      if (isVertical) {
+        // Project ray onto vertical line of left dynamics gauge
+        let hitY = startY;
+        if (Math.abs(rayDirX) > 0.02) {
+          const t = (dynTrackCenterX - startX) / rayDirX;
+          hitY = startY + rayDirY * t;
+        } else {
+          hitY = startY;
+        }
 
-      if (isOutsidePaddedZone) {
-        // Release dynamics control, preserve last dynamic
-        this.activeTarget = null;
-        this.state = "pointing";
+        const projectedX = (Math.abs(rayDirX) > 0.02)
+          ? dynTrackCenterX
+          : startX + rayDirX * MAGIC_FINGER_TUNING.RAY_FREE_DISTANCE_PX;
+
+        const isOutsidePaddedZone =
+          projectedX < dynTrackLeft - pad ||
+          projectedX > dynTrackRight + pad ||
+          hitY < dynTrackTop - pad ||
+          hitY > dynTrackBottom + pad ||
+          rayDirX > 0.15; // clearly pointing away to the right
+
+        if (isOutsidePaddedZone) {
+          // Release dynamics control, preserve last dynamic
+          this.activeTarget = null;
+          this.state = "pointing";
+        } else {
+          // Control continuous dynamics: Top is 1.0 (fff), Bottom is 0.0 (pp)
+          const clampedY = Math.max(dynTrackTop, Math.min(dynTrackBottom, hitY));
+          const continuousVal = Math.max(0, Math.min(1, (dynTrackBottom - clampedY) / dynTrackHeight));
+
+          this.lastDynamic = continuousVal;
+          liveDynamic = continuousVal;
+          this.callbacks.onDynamicChange?.(continuousVal);
+
+          endX = dynTrackCenterX;
+          endY = clampedY;
+          rayTargetType = "dynamics";
+          this.state = "dynamics_acquired";
+        }
       } else {
-        // Control continuous dynamics
-        const clampedX = Math.max(dynTrackLeft, Math.min(dynTrackRight, hitX));
-        const continuousVal = Math.max(0, Math.min(1, (clampedX - dynTrackLeft) / dynTrackWidth));
+        // Project ray onto horizontal line of bottom dynamics ribbon
+        let hitX = startX;
+        if (Math.abs(rayDirY) > 0.02) {
+          const t = (dynTrackCenterY - startY) / rayDirY;
+          hitX = startX + rayDirX * t;
+        } else {
+          hitX = startX;
+        }
 
-        this.lastDynamic = continuousVal;
-        liveDynamic = continuousVal;
-        this.callbacks.onDynamicChange?.(continuousVal);
+        const projectedY = (Math.abs(rayDirY) > 0.02)
+          ? dynTrackCenterY
+          : startY + rayDirY * MAGIC_FINGER_TUNING.RAY_FREE_DISTANCE_PX;
 
-        endX = clampedX;
-        endY = dynTrackCenterY;
-        rayTargetType = "dynamics";
-        this.state = "dynamics_acquired";
+        const isOutsidePaddedZone =
+          hitX < dynTrackLeft - pad ||
+          hitX > dynTrackRight + pad ||
+          projectedY < dynTrackTop - pad ||
+          projectedY > dynTrackBottom + pad ||
+          rayDirY < -0.20; // clearly pointing upwards away
+
+        if (isOutsidePaddedZone) {
+          // Release dynamics control, preserve last dynamic
+          this.activeTarget = null;
+          this.state = "pointing";
+        } else {
+          // Control continuous dynamics
+          const clampedX = Math.max(dynTrackLeft, Math.min(dynTrackRight, hitX));
+          const continuousVal = Math.max(0, Math.min(1, (clampedX - dynTrackLeft) / dynTrackWidth));
+
+          this.lastDynamic = continuousVal;
+          liveDynamic = continuousVal;
+          this.callbacks.onDynamicChange?.(continuousVal);
+
+          endX = clampedX;
+          endY = dynTrackCenterY;
+          rayTargetType = "dynamics";
+          this.state = "dynamics_acquired";
+        }
       }
     }
 
@@ -436,48 +559,110 @@ export class MagicFingerController {
             endY = clampedY;
             rayTargetType = "tempo";
 
-            // Safe Acquisition check: pointer must be within capture distance of current indicated marker
+            if (this.currentHoverTarget !== "tempo") {
+              this.currentHoverTarget = "tempo";
+              this.hoverStartTime = now;
+            }
+
+            // Safe Acquisition check:
+            // 1. Instant capture if within delta of current indicated marker
+            // 2. Dwell capture: holding steady on gauge grabs control automatically!
             const bpmDiff = Math.abs(hitBpm - indicatedBpm);
-            if (bpmDiff <= MAGIC_FINGER_TUNING.TEMPO_CAPTURE_BPM_DELTA) {
+            const isDwellHeld = (now - this.hoverStartTime) >= MAGIC_FINGER_TUNING.DWELL_ACQUIRE_MS;
+
+            if (bpmDiff <= MAGIC_FINGER_TUNING.TEMPO_CAPTURE_BPM_DELTA || isDwellHeld) {
               this.activeTarget = "tempo";
               this.state = "tempo_acquired";
               this.lastBpm = Math.round(hitBpm);
               liveBpm = this.lastBpm;
               this.callbacks.onBpmChange?.(this.lastBpm);
+              this.currentHoverTarget = null;
+              this.hoverStartTime = 0;
             }
           }
         }
       }
 
-      // ── B. Check Safe Acquisition on Dynamics Ribbon (Bottom) ────────────────
-      if (this.activeTarget === null && dynamicsTrackRect && rayDirY > 0.15) {
+      // ── B. Check Safe Acquisition on Dynamics Ribbon ─────────────────────────
+      if (this.activeTarget === null && dynamicsTrackRect) {
+        const isVertical = dynamicsTrackRect.height > dynamicsTrackRect.width;
         const dynTrackLeft = dynamicsTrackRect.left - svgRect.left;
         const dynTrackRight = dynamicsTrackRect.right - svgRect.left;
         const dynTrackTop = dynamicsTrackRect.top - svgRect.top;
         const dynTrackBottom = dynamicsTrackRect.bottom - svgRect.top;
+        const dynTrackCenterX = (dynTrackLeft + dynTrackRight) / 2;
         const dynTrackCenterY = (dynTrackTop + dynTrackBottom) / 2;
         const dynTrackWidth = Math.max(1, dynTrackRight - dynTrackLeft);
+        const dynTrackHeight = Math.max(1, dynTrackBottom - dynTrackTop);
 
-        const t = (dynTrackCenterY - startY) / rayDirY;
-        if (t > 0) {
-          const hitX = startX + rayDirX * t;
-          if (hitX >= dynTrackLeft - 35 && hitX <= dynTrackRight + 35) {
-            const clampedX = Math.max(dynTrackLeft, Math.min(dynTrackRight, hitX));
-            const hitVal = (clampedX - dynTrackLeft) / dynTrackWidth;
+        if (isVertical && rayDirX < -0.15) {
+          // Pointing LEFT towards left vertical dynamics gauge
+          const t = (dynTrackCenterX - startX) / rayDirX;
+          if (t > 0) {
+            const hitY = startY + rayDirY * t;
+            if (hitY >= dynTrackTop - 35 && hitY <= dynTrackBottom + 35) {
+              const clampedY = Math.max(dynTrackTop, Math.min(dynTrackBottom, hitY));
+              // Top is 1.0 (fff), Bottom is 0.0 (pp)
+              const hitVal = Math.max(0, Math.min(1, (dynTrackBottom - clampedY) / dynTrackHeight));
 
-            this.hoverTarget = "dynamics";
-            endX = clampedX;
-            endY = dynTrackCenterY;
-            rayTargetType = "dynamics";
+              this.hoverTarget = "dynamics";
+              endX = dynTrackCenterX;
+              endY = clampedY;
+              rayTargetType = "dynamics";
 
-            // Safe Acquisition check: pointer must be within capture distance of current dynamic marker
-            const dynDiff = Math.abs(hitVal - continuousDynamic);
-            if (dynDiff <= MAGIC_FINGER_TUNING.DYNAMICS_CAPTURE_DELTA) {
-              this.activeTarget = "dynamics";
-              this.state = "dynamics_acquired";
-              this.lastDynamic = hitVal;
-              liveDynamic = hitVal;
-              this.callbacks.onDynamicChange?.(hitVal);
+              if (this.currentHoverTarget !== "dynamics") {
+                this.currentHoverTarget = "dynamics";
+                this.hoverStartTime = now;
+              }
+
+              // Safe Acquisition check:
+              // 1. Instant capture if within delta of current dynamic marker
+              // 2. Dwell capture: holding steady on gauge grabs control!
+              const dynDiff = Math.abs(hitVal - continuousDynamic);
+              const isDwellHeld = (now - this.hoverStartTime) >= MAGIC_FINGER_TUNING.DWELL_ACQUIRE_MS;
+
+              if (dynDiff <= MAGIC_FINGER_TUNING.DYNAMICS_CAPTURE_DELTA || isDwellHeld) {
+                this.activeTarget = "dynamics";
+                this.state = "dynamics_acquired";
+                this.lastDynamic = hitVal;
+                liveDynamic = hitVal;
+                this.callbacks.onDynamicChange?.(hitVal);
+                this.currentHoverTarget = null;
+                this.hoverStartTime = 0;
+              }
+            }
+          }
+        } else if (!isVertical && rayDirY > 0.15) {
+          // Pointing DOWN towards bottom horizontal dynamics ribbon
+          const t = (dynTrackCenterY - startY) / rayDirY;
+          if (t > 0) {
+            const hitX = startX + rayDirX * t;
+            if (hitX >= dynTrackLeft - 35 && hitX <= dynTrackRight + 35) {
+              const clampedX = Math.max(dynTrackLeft, Math.min(dynTrackRight, hitX));
+              const hitVal = (clampedX - dynTrackLeft) / dynTrackWidth;
+
+              this.hoverTarget = "dynamics";
+              endX = clampedX;
+              endY = dynTrackCenterY;
+              rayTargetType = "dynamics";
+
+              if (this.currentHoverTarget !== "dynamics") {
+                this.currentHoverTarget = "dynamics";
+                this.hoverStartTime = now;
+              }
+
+              const dynDiff = Math.abs(hitVal - continuousDynamic);
+              const isDwellHeld = (now - this.hoverStartTime) >= MAGIC_FINGER_TUNING.DWELL_ACQUIRE_MS;
+
+              if (dynDiff <= MAGIC_FINGER_TUNING.DYNAMICS_CAPTURE_DELTA || isDwellHeld) {
+                this.activeTarget = "dynamics";
+                this.state = "dynamics_acquired";
+                this.lastDynamic = hitVal;
+                liveDynamic = hitVal;
+                this.callbacks.onDynamicChange?.(hitVal);
+                this.currentHoverTarget = null;
+                this.hoverStartTime = 0;
+              }
             }
           }
         }
@@ -535,6 +720,11 @@ export class MagicFingerController {
         this.targetedSectionId = null;
         this.callbacks.onSpotlightChange?.(null);
       }
+    }
+
+    if (this.hoverTarget === null) {
+      this.currentHoverTarget = null;
+      this.hoverStartTime = 0;
     }
 
     const isAcquired = this.activeTarget !== null;

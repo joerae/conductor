@@ -151,6 +151,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
           indicatedBpm: this.indicatedBpm,
           continuousDynamic: this.continuousDynamic,
           isMirrored,
+          nowMs: now,
         });
 
         // Synthesize focus telemetry for instrument spotlighting

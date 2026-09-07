@@ -398,8 +398,15 @@ export class CameraPreviewOverlay {
     // 7. Render Focus Mode or Magic Finger pointer & targeting visual cues
     const isMagicActive = Boolean(magicFingerTelemetry && magicFingerTelemetry.isActive && magicFingerTelemetry.ray);
     const isFocusActive = Boolean(focusTelemetry && focusTelemetry.isActive);
+    const isLaserActive = (isMagicActive || isFocusActive) && samples.length > 0;
 
-    if ((isMagicActive || isFocusActive) && samples.length > 0) {
+    // Darken camera video to black when finger lasers appear, just like Expressive Mode
+    if (this.videoEl) {
+      this.videoEl.style.transition = "opacity 0.3s ease";
+      this.videoEl.style.opacity = isLaserActive ? "0" : "1.0";
+    }
+
+    if (isLaserActive) {
       const pointingHandIndex = isMagicActive
         ? magicFingerTelemetry!.pointingHandIndex
         : focusTelemetry!.pointingHandIndex;
@@ -434,8 +441,15 @@ export class CameraPreviewOverlay {
 
             if (isMagicActive && magicFingerTelemetry?.ray) {
               const ray = magicFingerTelemetry.ray;
-              stageStartX = ray.startX;
-              stageStartY = ray.startY;
+              const canvasRect = this.canvasEl.getBoundingClientRect();
+              const svgRect = stageOverlay.getBoundingClientRect();
+              const isMirrored = this.mirror;
+
+              const screenNormX = Math.max(0, Math.min(1, isMirrored ? (1.0 - tip.x) : tip.x));
+              const clampedTipY = Math.max(0, Math.min(1, tip.y));
+
+              stageStartX = (canvasRect.left - svgRect.left) + screenNormX * canvasRect.width;
+              stageStartY = (canvasRect.top - svgRect.top) + clampedTipY * canvasRect.height;
               stageEndX = ray.endX;
               stageEndY = ray.endY;
               isAcquired = ray.isAcquired;
@@ -521,10 +535,11 @@ export class CameraPreviewOverlay {
               coreRay.setAttribute("stroke-width", "1.5");
             }
 
+            stageOverlay.style.visibility = "visible";
             stageOverlay.style.display = "block";
           }
         } else if (stageOverlay) {
-          stageOverlay.style.display = "none";
+          stageOverlay.style.visibility = "hidden";
         }
 
         // 2. Fingertip targeting reticle ring & glowing aura
@@ -567,7 +582,7 @@ export class CameraPreviewOverlay {
       }
     } else {
       const stageOverlay = document.getElementById("stage-spotlight-ray-overlay");
-      if (stageOverlay) stageOverlay.style.display = "none";
+      if (stageOverlay) stageOverlay.style.visibility = "hidden";
     }
   }
 
@@ -580,7 +595,7 @@ export class CameraPreviewOverlay {
     }
     const stageOverlay = document.getElementById("stage-spotlight-ray-overlay");
     if (!active && stageOverlay) {
-      stageOverlay.style.display = "none";
+      stageOverlay.style.visibility = "hidden";
     }
   }
 
