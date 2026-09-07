@@ -93,6 +93,19 @@ export class CameraPreviewOverlay {
     }
   }
 
+  triggerSparkleVFX(screenX?: number, screenY?: number): void {
+    let normX = 0.5;
+    let normY = 0.5;
+    if (this.canvasEl && screenX !== undefined && screenY !== undefined) {
+      const rect = this.canvasEl.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        normX = Math.max(0, Math.min(1, (screenX - rect.left) / rect.width));
+        normY = Math.max(0, Math.min(1, 1.0 - (screenY - rect.top) / rect.height));
+      }
+    }
+    this.triggerThumbsUpVFXBurst(normX, normY);
+  }
+
   mount(parentElement: HTMLElement = document.body): void {
     if (!this.containerEl) {
       const container = document.createElement("div");

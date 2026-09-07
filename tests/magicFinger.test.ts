@@ -50,8 +50,12 @@ function createSample(
   landmarks[8] = { x: tipX, y: tipY, z: 0 };
   // index finger pip is landmark 6
   landmarks[6] = { x: pipX, y: pipY, z: 0 };
+  // index finger mcp is landmark 5
+  landmarks[5] = { x: pipX, y: pipY + 0.05, z: 0 };
+  // middle finger mcp is landmark 9
+  landmarks[9] = { x: pipX + 0.03, y: pipY + 0.05, z: 0 };
   // wrist is landmark 0
-  landmarks[0] = { x: pipX, y: pipY + 0.1, z: 0 };
+  landmarks[0] = { x: pipX, y: pipY + 0.15, z: 0 };
 
   return {
     handIndex,
@@ -512,6 +516,198 @@ describe("MagicFingerController", () => {
     expect(telFlick.liveDynamic).toBeNull();
     expect(controller.getLastDynamic()).toBeCloseTo(0.75, 2);
     expect(controller.getLastDynamic()).not.toBe(1.0);
+  });
+
+  it("shake-to-lock-in gesture triggers lock-in, fires onLockIn event, and disables laser", () => {
+    const onLockIn = vi.fn();
+    controller.setCallbacks({ onLockIn });
+
+    // Step 1: Acquire tempo at 175 BPM
+    const aimSample = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+    const telAcquire = controller.update({
+      samples: [aimSample],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+    expect(telAcquire.state).toBe("tempo_acquired");
+    expect(telAcquire.activeTarget).toBe("tempo");
+
+    // Step 2: Shake hand (4 points oscillating with reversals)
+    const shakePoints = [0.5, 0.45, 0.53, 0.46];
+    let telShake;
+    for (let i = 0; i < shakePoints.length; i++) {
+      const s = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+      s.landmarks[0] = { x: shakePoints[i], y: 0.5, z: 0 };
+      s.conductorPoint = { x: shakePoints[i], y: 0.5 };
+      telShake = controller.update({
+        samples: [s],
+        indicatedBpm: 175,
+        continuousDynamic: 0.5,
+        isMirrored: false,
+        nowMs: 1000 + i * 50,
+      });
+    }
+
+    expect(controller.isLockInActive()).toBe(true);
+    expect(controller.getLockedTarget()).toBe("tempo");
+    expect(telShake?.isLockedIn).toBe(true);
+    expect(telShake?.isActive).toBe(false);
+    expect(telShake?.ray).toBeNull();
+    expect(onLockIn).toHaveBeenCalledWith(expect.objectContaining({
+      target: "tempo",
+      value: 175,
+    }));
+  });
+
+  it("clears lock-in when retracting finger", () => {
+    // Acquire and lock in
+    const aimSample = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+    controller.update({
+      samples: [aimSample],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+    const shakePoints = [0.5, 0.45, 0.53, 0.46];
+    for (let i = 0; i < shakePoints.length; i++) {
+      const s = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+      s.landmarks[0] = { x: shakePoints[i], y: 0.5, z: 0 };
+      controller.update({
+        samples: [s],
+        indicatedBpm: 175,
+        continuousDynamic: 0.5,
+        isMirrored: false,
+        nowMs: 1000 + i * 50,
+      });
+    }
+    expect(controller.isLockInActive()).toBe(true);
+
+    // Retract finger (no pointing hands)
+    const openSample = createSample("Open_Palm", 0.5, 0.5, 0.5, 0.6);
+    controller.update({
+      samples: [openSample],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1300,
+    });
+    expect(controller.isLockInActive()).toBe(false);
+
+    // Point again: laser re-arms and is active
+    const pointAgain = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+    const telAfter = controller.update({
+      samples: [pointAgain],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1350,
+    });
+    expect(telAfter.isActive).toBe(true);
+    expect(telAfter.ray).not.toBeNull();
+  });
+
+  it("clears lock-in when repointing to opposite side or orchestra", () => {
+    // Acquire and lock in on tempo (right)
+    const aimSample = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+    controller.update({
+      samples: [aimSample],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+    const shakePoints = [0.5, 0.45, 0.53, 0.46];
+    for (let i = 0; i < shakePoints.length; i++) {
+      const s = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+      s.landmarks[0] = { x: shakePoints[i], y: 0.5, z: 0 };
+      controller.update({
+        samples: [s],
+        indicatedBpm: 175,
+        continuousDynamic: 0.5,
+        isMirrored: false,
+        nowMs: 1000 + i * 50,
+      });
+    }
+    expect(controller.isLockInActive()).toBe(true);
+
+    // Point left towards dynamics (tipX = 0.2, pipX = 0.5 -> rawDirX = -0.3 < -0.15)
+    const repointSample = createSample("Pointing", 0.2, 0.5, 0.5, 0.5);
+    const telRepoint = controller.update({
+      samples: [repointSample],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1300,
+    });
+    expect(controller.isLockInActive()).toBe(false);
+    expect(telRepoint.isActive).toBe(true);
+    expect(telRepoint.ray).not.toBeNull();
+  });
+
+  it("fist curl collapsing extension releases without dragging value down", () => {
+    // Step 1: Acquire tempo at 175 BPM
+    const aimSample = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+    controller.update({
+      samples: [aimSample],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+    expect(controller.getActiveTarget()).toBe("tempo");
+
+    // Step 2: Curl finger into fist (tip collapses close to mcp)
+    const curlSample = createSample("Pointing", 0.42, 0.54, 0.4, 0.5);
+    const telCurl = controller.update({
+      samples: [curlSample],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1050,
+    });
+
+    expect(telCurl.activeTarget).toBeNull();
+    expect(controller.getLastBpm()).toBe(175);
+  });
+
+  it("pointing at orchestra section triggers onSpotlightChange with section id", () => {
+    const onSpotlightChange = vi.fn();
+    controller.setCallbacks({ onSpotlightChange });
+    controller.setSections([
+      { id: "violins1", name: "Violin I", channels: [0], programs: [40], trackNames: ["VIOLIN"] },
+      { id: "cellos", name: "Cello", channels: [1], programs: [42], trackNames: ["CELLO"] },
+    ]);
+
+    // Point up towards violins1 (rect left: 150, right: 250)
+    // startX = 100 + 0.5*200 = 200, rayDirX = 0, rayDirY = -0.5
+    const aimSample = createSample("Pointing_Up", 0.5, 0.2, 0.5, 0.5);
+    const tel = controller.update({
+      samples: [aimSample],
+      indicatedBpm: 120,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+
+    expect(tel.targetedSectionId).toBe("violins1");
+    expect(onSpotlightChange).toHaveBeenCalledWith("violins1");
+
+    // Point in open space (down)
+    const downSample = createSample("Pointing", 0.5, 0.8, 0.5, 0.5);
+    for (let frame = 1; frame <= 4; frame++) {
+      controller.update({
+        samples: [downSample],
+        indicatedBpm: 120,
+        continuousDynamic: 0.5,
+        isMirrored: false,
+        nowMs: 1000 + frame * 33,
+      });
+    }
+
+    expect(onSpotlightChange).toHaveBeenCalledWith(null);
   });
 });
 

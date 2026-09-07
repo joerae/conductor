@@ -91,6 +91,11 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     this.beatFusion = new BeatFusion();
     this.focusController = new InstrumentFocusController();
     this.magicFingerController = new MagicFingerController();
+    this.magicFingerController.setCallbacks({
+      onLockIn: (event) => {
+        this.previewOverlay?.triggerSparkleVFX(event.screenX, event.screenY);
+      },
+    });
 
     if (options?.mountOverlay !== false && typeof document !== "undefined") {
       this.previewOverlay = new CameraPreviewOverlay({
@@ -171,6 +176,10 @@ export class CameraBeatInputProvider implements BeatInputProvider {
           beatDebug: this.beatDetector.getDebugSnapshot(),
           lastBeat: lastBeatDetail,
         };
+
+        if (magicTelemetry.lockInEvent) {
+          this.previewOverlay?.triggerSparkleVFX(magicTelemetry.lockInEvent.screenX, magicTelemetry.lockInEvent.screenY);
+        }
 
         this.currentTelemetry = fullTelemetry;
         this.previewOverlay?.render(samples, fullTelemetry, synthFocusTelemetry, magicTelemetry);
@@ -295,6 +304,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
 
   setSections(sections: PieceSection[]): void {
     this.currentSections = sections;
+    this.magicFingerController.setSections(sections);
   }
 
   getFocusController(): InstrumentFocusController {

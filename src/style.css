@@ -618,6 +618,28 @@ html, body {
   100% { box-shadow: 0 0 22px rgba(255, 90, 20, 0.85); }
 }
 
+/* Golden sparkle lock-in flash for Magic Finger gauges */
+.sparkle-locked {
+  animation: sparkleLockFlash 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+  box-shadow: 0 0 35px rgba(255, 215, 0, 0.85), inset 0 0 20px rgba(255, 215, 0, 0.4) !important;
+  border-color: #ffd700 !important;
+}
+
+@keyframes sparkleLockFlash {
+  0% {
+    box-shadow: 0 0 50px rgba(255, 215, 0, 1.0), inset 0 0 30px rgba(255, 215, 0, 0.7);
+    border-color: #ffffff;
+    transform: scale(1.02);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.75), inset 0 0 15px rgba(255, 215, 0, 0.35);
+  }
+  100% {
+    box-shadow: none;
+    transform: scale(1.0);
+  }
+}
+
 /* ── Prompt area ────────────────────────────────────────────────────────────── */
 #prompt-area {
   display: flex;

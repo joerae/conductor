@@ -496,6 +496,120 @@ describe("ExperienceController Lifecycle & Bug Regressions", () => {
     ];
 
     (controller as any).cameraInput.sampleCallbacks.forEach((cb: any) => cb(samples));
+    await (controller as any).startPlaybackPromise;
     expect(controller.getState()).toBe("playing");
+  });
+
+  it("Issue 22: in magic finger mode, fades down volume after 250ms and pauses at 500ms of no hands", async () => {
+    vi.spyOn(CameraBeatInputProvider.prototype, "start").mockResolvedValue();
+    const controller = new ExperienceController(createMockCallbacks());
+    await controller.load();
+    await controller.setInputSource("camera");
+    controller.setTempoMode("magic");
+
+    await (controller as any).startPlayback();
+    expect(controller.getState()).toBe("playing");
+
+    let fakeNow = 1000;
+    const nowSpy = vi.spyOn(performance, "now").mockImplementation(() => fakeNow);
+
+    try {
+      const dispatchSamples = (samples: any[]) => {
+        (controller as any).cameraInput.sampleCallbacks.forEach((cb: any) => cb(samples));
+      };
+
+      // Hands leave camera at t = 1000
+      dispatchSamples([]);
+      expect(controller.getState()).toBe("playing");
+      expect((controller as any).audioEngine.getFadeMultiplier()).toBe(1.0);
+
+      // t = 1200 (200ms elapsed < 250ms): still 1.0
+      fakeNow = 1200;
+      dispatchSamples([]);
+      expect(controller.getState()).toBe("playing");
+      expect((controller as any).audioEngine.getFadeMultiplier()).toBe(1.0);
+
+      // t = 1375 (375ms elapsed, halfway between 250ms and 500ms): fadeMultiplier should be ~0.5
+      fakeNow = 1375;
+      dispatchSamples([]);
+      expect(controller.getState()).toBe("playing");
+      expect((controller as any).audioEngine.getFadeMultiplier()).toBeCloseTo(0.5, 2);
+
+      // t = 1500 (500ms elapsed): pauses playback and restores master volume
+      fakeNow = 1500;
+      dispatchSamples([]);
+      expect(controller.getState()).toBe("paused");
+      expect((controller as any).audioEngine.getFadeMultiplier()).toBe(1.0);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("Issue 23: in magic finger mode, hands returning before 500ms restores volume without pausing", async () => {
+    vi.spyOn(CameraBeatInputProvider.prototype, "start").mockResolvedValue();
+    const controller = new ExperienceController(createMockCallbacks());
+    await controller.load();
+    await controller.setInputSource("camera");
+    controller.setTempoMode("magic");
+
+    await (controller as any).startPlayback();
+    expect(controller.getState()).toBe("playing");
+
+    let fakeNow = 2000;
+    const nowSpy = vi.spyOn(performance, "now").mockImplementation(() => fakeNow);
+
+    try {
+      const dispatchSamples = (samples: any[]) => {
+        (controller as any).cameraInput.sampleCallbacks.forEach((cb: any) => cb(samples));
+      };
+
+      // Hands leave camera at t = 2000
+      dispatchSamples([]);
+      fakeNow = 2375; // 375ms elapsed, faded to 0.5
+      dispatchSamples([]);
+      expect((controller as any).audioEngine.getFadeMultiplier()).toBeCloseTo(0.5, 2);
+
+      // Hands return at t = 2400 (before 500ms)
+      fakeNow = 2400;
+      const returnSample = {
+        handIndex: 0,
+        timestampMs: fakeNow,
+        handedness: "Right",
+        confidence: 0.9,
+        landmarks: Array(21).fill({ x: 0.5, y: 0.5, z: 0 }),
+        conductorPoint: { x: 0.5, y: 0.35 },
+        conductorX: 0.5,
+        conductorY: 0.35,
+        speed: 0,
+        acceleration: 0,
+        direction: { x: 0, y: 0 },
+        gesture: "Open_Palm",
+      };
+      dispatchSamples([returnSample]);
+
+      // Playback continues and volume is restored!
+      expect(controller.getState()).toBe("playing");
+      expect((controller as any).audioEngine.getFadeMultiplier()).toBe(1.0);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("Issue 24: in magic finger mode, pointing at instrument section sets audio section focus", async () => {
+    const controller = new ExperienceController(createMockCallbacks());
+    await controller.load();
+    controller.setTempoMode("magic");
+    (controller as any).inputSource = "camera";
+
+    const focusSpy = vi.spyOn((controller as any).audioEngine, "setSectionFocus");
+    const mfController = (controller as any).cameraInput.getMagicFingerController();
+
+    // Trigger spotlight change to violin1 / section-0
+    (mfController as any).callbacks.onSpotlightChange?.("violin1");
+    expect(focusSpy).toHaveBeenCalledWith(expect.any(Array), 1.0);
+
+    // Point away to clear spotlight
+    (mfController as any).callbacks.onSpotlightChange?.(null);
+    expect(focusSpy).toHaveBeenCalledWith(null, 0);
   });
 });

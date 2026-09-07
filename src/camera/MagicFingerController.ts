@@ -582,13 +582,12 @@ export class MagicFingerController {
       this.hasSmoothedDir = true;
     } else {
       const alpha = MAGIC_FINGER_TUNING.SMOOTHING_ALPHA;
-      this.smoothedUnitX = this.smoothedUnitX + alpha * (unitX - this.smoothedUnitX);
-      this.smoothedUnitY = this.smoothedUnitY + alpha * (unitY - this.smoothedUnitY);
-      const sLen = Math.hypot(this.smoothedUnitX, this.smoothedUnitY);
-      if (sLen > 0.001) {
-        this.smoothedUnitX /= sLen;
-        this.smoothedUnitY /= sLen;
-      }
+      const currentAngle = Math.atan2(this.smoothedUnitY, this.smoothedUnitX);
+      const targetAngle = Math.atan2(unitY, unitX);
+      const diff = ((targetAngle - currentAngle + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+      const newAngle = currentAngle + alpha * diff;
+      this.smoothedUnitX = Math.cos(newAngle);
+      this.smoothedUnitY = Math.sin(newAngle);
     }
 
     const rayDirX = this.smoothedUnitX;
@@ -630,6 +629,22 @@ export class MagicFingerController {
       this.lastHitY = hitY;
       this.lastHitTime = now;
 
+      // Check for fist curl / collapsing finger extension
+      let isClosingFist = false;
+      if (pointingSample.landmarks && pointingSample.landmarks.length >= 21) {
+        const tip = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP];
+        const mcp = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
+        const wrist = pointingSample.landmarks[HAND_LANDMARK_INDICES.WRIST];
+        const middleMcp = pointingSample.landmarks[HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP];
+        if (tip && mcp && wrist && middleMcp) {
+          const handScale = Math.max(0.04, Math.hypot(middleMcp.x - wrist.x, middleMcp.y - wrist.y));
+          const extension = Math.hypot(tip.x - mcp.x, tip.y - mcp.y) / handScale;
+          if (extension < 0.72) {
+            isClosingFist = true;
+          }
+        }
+      }
+
       // Detect upward flick exit to orchestra:
       // 1. Ray turned inward away from right edge towards orchestra / center stage
       const turnedInwardToOrchestra = rayDirX < 0.08;
@@ -648,8 +663,8 @@ export class MagicFingerController {
         projectedX > tempoTrackRight + pad ||
         hitY > tempoTrackBottom + pad;
 
-      if (turnedInwardToOrchestra || isRapidUpwardFlick || isAboveGauge || isOutsideBounds) {
-        // Release tempo control immediately without committing max/out-of-bounds BPM!
+      if (turnedInwardToOrchestra || isRapidUpwardFlick || isAboveGauge || isOutsideBounds || isClosingFist) {
+        // Release tempo control immediately without committing max/out-of-bounds or dropped fist-curl BPM!
         this.activeTarget = null;
         this.state = "pointing";
         this.lastBpm = this.lastValidInBoundsBpm;
@@ -670,6 +685,8 @@ export class MagicFingerController {
 
         endX = tempoTrackCenterX;
         endY = clampedY;
+        this.lastHitScreenX = endX;
+        this.lastHitScreenY = endY;
         rayTargetType = "tempo";
         this.state = "tempo_acquired";
       }
@@ -684,6 +701,22 @@ export class MagicFingerController {
       const dynTrackWidth = Math.max(1, dynTrackRight - dynTrackLeft);
       const dynTrackHeight = Math.max(1, dynTrackBottom - dynTrackTop);
       const pad = MAGIC_FINGER_TUNING.DYNAMICS_RELEASE_PAD_PX;
+
+      // Check for fist curl / collapsing finger extension
+      let isClosingFist = false;
+      if (pointingSample.landmarks && pointingSample.landmarks.length >= 21) {
+        const tip = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP];
+        const mcp = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
+        const wrist = pointingSample.landmarks[HAND_LANDMARK_INDICES.WRIST];
+        const middleMcp = pointingSample.landmarks[HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP];
+        if (tip && mcp && wrist && middleMcp) {
+          const handScale = Math.max(0.04, Math.hypot(middleMcp.x - wrist.x, middleMcp.y - wrist.y));
+          const extension = Math.hypot(tip.x - mcp.x, tip.y - mcp.y) / handScale;
+          if (extension < 0.72) {
+            isClosingFist = true;
+          }
+        }
+      }
 
       if (isVertical) {
         // Project ray onto vertical line of left dynamics gauge
@@ -719,8 +752,8 @@ export class MagicFingerController {
           projectedX > dynTrackRight + pad ||
           hitY > dynTrackBottom + pad;
 
-        if (turnedInwardToOrchestra || isRapidUpwardFlick || isAboveGauge || isOutsideBounds) {
-          // Release dynamics control immediately without committing max/out-of-bounds dynamic!
+        if (turnedInwardToOrchestra || isRapidUpwardFlick || isAboveGauge || isOutsideBounds || isClosingFist) {
+          // Release dynamics control immediately without committing dropped fist-curl dynamic!
           this.activeTarget = null;
           this.state = "pointing";
           this.lastDynamic = this.lastValidInBoundsDynamic;
@@ -740,6 +773,8 @@ export class MagicFingerController {
 
           endX = dynTrackCenterX;
           endY = clampedY;
+          this.lastHitScreenX = endX;
+          this.lastHitScreenY = endY;
           rayTargetType = "dynamics";
           this.state = "dynamics_acquired";
         }
@@ -834,6 +869,8 @@ export class MagicFingerController {
               this.lastValidInBoundsBpm = this.lastBpm;
               this.lastHitY = clampedY;
               this.lastHitTime = now;
+              this.lastHitScreenX = endX;
+              this.lastHitScreenY = clampedY;
               liveBpm = this.lastBpm;
               this.callbacks.onBpmChange?.(this.lastBpm);
               this.currentHoverTarget = null;
@@ -888,6 +925,8 @@ export class MagicFingerController {
                 this.lastValidInBoundsDynamic = hitVal;
                 this.lastHitY = clampedY;
                 this.lastHitTime = now;
+                this.lastHitScreenX = endX;
+                this.lastHitScreenY = clampedY;
                 liveDynamic = hitVal;
                 this.callbacks.onDynamicChange?.(hitVal);
                 this.currentHoverTarget = null;
@@ -933,12 +972,33 @@ export class MagicFingerController {
       }
 
       // ── C. Check Instrument Sections (Top) ──────────────────────────────────
-      if (this.activeTarget === null && rayDirY < -0.10 && instrumentSections.length > 0) {
+      let effectiveSections: InstrumentSectionTarget[] = instrumentSections;
+      if (effectiveSections.length === 0 && this.sections.length > 0) {
+        const count = this.sections.length;
+        const totalW = svgRect.width || 1000;
+        effectiveSections = this.sections.map((sec, idx) => {
+          const secW = (totalW * 0.76) / count;
+          const left = (svgRect.left || 0) + totalW * 0.12 + idx * secW;
+          return {
+            id: sec.id,
+            rect: {
+              left,
+              right: left + secW,
+              top: (svgRect.top || 0) + 10,
+              bottom: (svgRect.top || 0) + 120,
+              width: secW,
+              height: 110,
+            },
+          };
+        });
+      }
+
+      if (this.activeTarget === null && rayDirY < -0.10 && effectiveSections.length > 0) {
         // Natural ray extension towards orchestra baseline (mirroring Expressive Mode)
         // Does NOT snap laser to target center, giving full freedom of finger pointing
         let targetBaselineY = 60;
-        if (instrumentSections[0]) {
-          const firstRect = instrumentSections[0].rect;
+        if (effectiveSections[0]) {
+          const firstRect = effectiveSections[0].rect;
           targetBaselineY = (firstRect.top - svgRect.top) + firstRect.height * 0.78;
         }
 
@@ -953,7 +1013,7 @@ export class MagicFingerController {
         let bestSectionId: string | null = null;
         let minDistance = Infinity;
 
-        for (const sec of instrumentSections) {
+        for (const sec of effectiveSections) {
           const secLeft = sec.rect.left - svgRect.left;
           const secRight = sec.rect.right - svgRect.left;
           const secCenterX = (secLeft + secRight) / 2;
@@ -970,6 +1030,11 @@ export class MagicFingerController {
         }
 
         if (bestSectionId) {
+          const numIdx = parseInt(bestSectionId, 10);
+          if (!isNaN(numIdx) && this.sections[numIdx]) {
+            bestSectionId = this.sections[numIdx].id;
+          }
+
           this.hoverTarget = "instrument";
           this.state = "instrument_targeted";
           rayTargetType = "instrument";

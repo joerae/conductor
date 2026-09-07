@@ -579,9 +579,24 @@ const controller = new ExperienceController({
       dynVerticalEl.classList.toggle("magic-acquired", isDynTarget && isAcquired);
     }
 
+    // Lock-in sparkle flash
+    if (telemetry.lockInEvent) {
+      const targetEl = telemetry.lockInEvent.target === "tempo"
+        ? bpmGaugeEl
+        : (dynVerticalEl || dynRibbonEl);
+      if (targetEl) {
+        targetEl.classList.remove("sparkle-locked");
+        void targetEl.offsetWidth;
+        targetEl.classList.add("sparkle-locked");
+        setTimeout(() => targetEl.classList.remove("sparkle-locked"), 850);
+      }
+    }
+
     // Update prompt text if in magic mode
     if (controller.getTempoMode() === "magic") {
-      if (isAcquired) {
+      if (telemetry.isLockedIn) {
+        promptEl.textContent = `✨ Locked in! Shake detected • Point elsewhere or retract finger to repoint`;
+      } else if (isAcquired) {
         if (targetType === "tempo") {
           promptEl.textContent = `👆 Aiming at Tempo Gauge • Move finger up/down to adjust BPM (${telemetry.liveBpm ?? controller.getIndicatedBpm()} BPM)`;
         } else if (targetType === "dynamics") {

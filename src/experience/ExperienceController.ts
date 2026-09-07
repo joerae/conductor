@@ -613,7 +613,13 @@ export class ExperienceController {
           if (hasSectionChanged || hasAmountChanged || (now - lastAudioFocusUpdateTime >= 50)) {
             if (targetSectionId && targetFocusAmount > 0.001) {
               const currentPiece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
-              const sec = currentPiece?.sections.find(s => s.id === targetSectionId);
+              const sec = currentPiece?.sections.find((s, idx) =>
+                s.id === targetSectionId ||
+                `section-${s.id}` === targetSectionId ||
+                String(idx) === targetSectionId ||
+                `section-${idx}` === targetSectionId ||
+                targetSectionId.endsWith(s.id)
+              );
               if (sec) {
                 this.audioEngine.setSectionFocus(sec.channels, targetFocusAmount);
               }
@@ -637,6 +643,23 @@ export class ExperienceController {
         },
         onDynamicChange: (val: number) => {
           this.setContinuousDynamic(val);
+        },
+        onSpotlightChange: (sectionId: string | null) => {
+          if (sectionId) {
+            const currentPiece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
+            const sec = currentPiece?.sections.find((s, idx) =>
+              s.id === sectionId ||
+              `section-${s.id}` === sectionId ||
+              String(idx) === sectionId ||
+              `section-${idx}` === sectionId ||
+              sectionId.endsWith(s.id)
+            );
+            if (sec) {
+              this.audioEngine.setSectionFocus(sec.channels, 1.0);
+            }
+          } else {
+            this.audioEngine.setSectionFocus(null, 0);
+          }
         },
       });
 
@@ -672,27 +695,36 @@ export class ExperienceController {
         const isFocusActive = this.cameraInput?.getFocusController().isFocusModeActive() ?? false;
         const isMagicMode = this.clock.getTempoMode() === "magic";
 
-        // In Magic Finger mode: if no hands are present on screen, pause with 1.5s grace period!
+        // In Magic Finger mode: if no hands are present on screen, pause with 500ms grace period and 250ms fade down!
         if (isMagicMode && this.inputSource === "camera") {
           if (samples.length === 0) {
             if (this.state === "playing") {
               const now = performance.now();
               if (this.magicNoHandsStartTime === 0) {
                 this.magicNoHandsStartTime = now;
-              } else if (now - this.magicNoHandsStartTime >= 1500) {
+              }
+              const elapsed = now - this.magicNoHandsStartTime;
+              if (elapsed >= 500) {
                 this.magicNoHandsStartTime = 0;
+                this.audioEngine.restoreMasterVolume();
                 this.pausePlayback();
+              } else if (elapsed >= 250) {
+                const fadeRatio = 1.0 - (elapsed - 250) / 250;
+                this.audioEngine.setFadeMultiplier(Math.max(0, Math.min(1, fadeRatio)));
               }
             } else {
               this.magicNoHandsStartTime = 0;
             }
           } else {
-            this.magicNoHandsStartTime = 0;
+            if (this.magicNoHandsStartTime > 0) {
+              this.audioEngine.restoreMasterVolume();
+              this.magicNoHandsStartTime = 0;
+            }
             const isOneHandRaised = samples.some(s => s.conductorPoint.y >= 0.08);
 
             // Broadcast motion sample for warmup and UI meters in magic mode
             this.uiCallbacks.onCameraMotionSample?.({
-              tempoBpm: this.indicatedBpm || Math.round(this.clock.getBpm()),
+              tempoBpm: this.indicatedBpm || Math.round(this.clock.getState().bpm || this.nominalPieceBpm),
               isHandsRaised: isOneHandRaised,
               handPoints: samples.map(s => ({
                 x: Math.round(Math.max(40, Math.min(560, s.conductorPoint.x * 600))),
