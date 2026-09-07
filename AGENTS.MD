@@ -6,3 +6,5 @@ My preferences
 2. Versioning! Follow major.minor.update format, like 1.1.1 . Record what happens in each update by incrementing the apporopriate number and storing it in a text file. The version number should be visible in a subtle place in the app, and I can tap on it to see more.
 
 3. Say where I can open the version I can play, right now it is http://localhost:5173/ 
+
+4. Feature flags. They should go into the Debug menu. Major features should have a flag by default please. But turned on by default too. 
