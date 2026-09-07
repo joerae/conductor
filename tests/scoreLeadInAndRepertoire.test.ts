@@ -15,12 +15,12 @@ describe("Beethoven Metadata & Score Lead-In Timing (Issues 8 & 9)", () => {
 
     // Verify timeSignature, beatsPerTap, defaultBpm, and leadInBeats
     expect(jsonData.timeSignature).toBe("2/4");
-    expect(jsonData.beatsPerTap).toBe(2);
+    expect(jsonData.beatsPerTap).toBe(1);
     expect(jsonData.defaultBpm).toBe(108);
     expect(jsonData.leadInBeats).toBe(1);
 
     expect(builtInBeethoven?.timeSignature).toBe("2/4");
-    expect(builtInBeethoven?.beatsPerTap).toBe(2);
+    expect(builtInBeethoven?.beatsPerTap).toBe(1);
     expect(builtInBeethoven?.defaultBpm).toBe(108);
     expect(builtInBeethoven?.leadInBeats).toBe(1);
   });

@@ -11,6 +11,7 @@
 import type { HandSample } from "./cameraTypes";
 import { HAND_LANDMARK_INDICES, isPointingGesture } from "./cameraTypes";
 import { percentToBpm } from "../ui/bpmGauge";
+import type { PieceSection } from "../score/repertoire";
 
 export const MAGIC_FINGER_TUNING = {
   TEMPO_CAPTURE_BPM_DELTA: 35,
@@ -42,6 +43,14 @@ export interface MagicFingerRay {
   targetType: "tempo" | "dynamics" | "instrument" | "open" | null;
 }
 
+export interface MagicFingerLockInEvent {
+  target: "tempo" | "dynamics";
+  value: number;
+  screenX: number;
+  screenY: number;
+  timestamp: number;
+}
+
 export interface MagicFingerTelemetry {
   isActive: boolean;
   state: MagicFingerState;
@@ -52,6 +61,8 @@ export interface MagicFingerTelemetry {
   liveBpm: number | null;
   liveDynamic: number | null;
   ray: MagicFingerRay | null;
+  isLockedIn?: boolean;
+  lockInEvent?: MagicFingerLockInEvent | null;
 }
 
 export interface ScreenRect {
@@ -111,7 +122,8 @@ export class DefaultDOMGeometryProvider implements MagicFingerGeometryProvider {
     const sections: InstrumentSectionTarget[] = [];
     const els = document.querySelectorAll<HTMLElement>(".instrument-section");
     els.forEach(el => {
-      const id = el.id.replace(/^section-/, "");
+      const dataId = el.getAttribute("data-section-id");
+      const id = dataId || el.id.replace(/^section-/, "");
       sections.push({ id, rect: el.getBoundingClientRect() });
     });
     return sections;
@@ -122,6 +134,7 @@ export interface MagicFingerCallbacks {
   onBpmChange?: (bpm: number) => void;
   onDynamicChange?: (dynamicContinuous: number) => void;
   onSpotlightChange?: (sectionId: string | null) => void;
+  onLockIn?: (event: MagicFingerLockInEvent) => void;
   onTelemetry?: (telemetry: MagicFingerTelemetry) => void;
 }
 
@@ -155,6 +168,18 @@ export class MagicFingerController {
   private lastHitY: number | null = null;
   private lastHitTime: number = 0;
 
+  // Lock-in state & repointing protection
+  private isLockedIn: boolean = false;
+  private lockedTarget: "tempo" | "dynamics" | null = null;
+  private lastHitScreenX: number | null = null;
+  private lastHitScreenY: number | null = null;
+
+  // Hand motion tracking for shake detection (sliding window)
+  private handMotionHistory: Map<number, Array<{ x: number; y: number; time: number }>> = new Map();
+
+  // Known repertoire piece sections
+  private sections: PieceSection[] = [];
+
   constructor(
     geometry?: MagicFingerGeometryProvider,
     callbacks?: MagicFingerCallbacks
@@ -169,6 +194,18 @@ export class MagicFingerController {
 
   setGeometryProvider(geometry: MagicFingerGeometryProvider): void {
     this.geometry = geometry;
+  }
+
+  setSections(sections: PieceSection[]): void {
+    this.sections = sections;
+  }
+
+  isLockInActive(): boolean {
+    return this.isLockedIn;
+  }
+
+  getLockedTarget(): "tempo" | "dynamics" | null {
+    return this.lockedTarget;
   }
 
   getState(): MagicFingerState {
@@ -203,9 +240,59 @@ export class MagicFingerController {
     this.targetedSectionId = null;
     this.hasSmoothedDir = false;
     this.lastPointingHandIndex = null;
+    this.lastHitY = null;
+    this.lastHitTime = 0;
+    this.isLockedIn = false;
+    this.lockedTarget = null;
+    this.lastHitScreenX = null;
+    this.lastHitScreenY = null;
+    this.handMotionHistory.clear();
     this.lastValidInBoundsBpm = this.lastBpm;
     this.lastValidInBoundsDynamic = this.lastDynamic;
     this.callbacks.onSpotlightChange?.(null);
+  }
+
+  private isHandShaking(points: Array<{ x: number; y: number; time: number }>): boolean {
+    if (points.length < 4) return false;
+    const duration = points[points.length - 1].time - points[0].time;
+    if (duration < 80 || duration > 360) return false;
+
+    let xReversals = 0;
+    let prevDx = 0;
+    let yReversals = 0;
+    let prevDy = 0;
+    let totalDist = 0;
+    let minX = points[0].x, maxX = points[0].x;
+    let minY = points[0].y, maxY = points[0].y;
+
+    for (let i = 1; i < points.length; i++) {
+      const dx = points[i].x - points[i - 1].x;
+      const dy = points[i].y - points[i - 1].y;
+      totalDist += Math.hypot(dx, dy);
+
+      minX = Math.min(minX, points[i].x);
+      maxX = Math.max(maxX, points[i].x);
+      minY = Math.min(minY, points[i].y);
+      maxY = Math.max(maxY, points[i].y);
+
+      if (Math.abs(dx) > 0.015) {
+        if (prevDx !== 0 && ((dx > 0 && prevDx < 0) || (dx < 0 && prevDx > 0))) {
+          xReversals++;
+        }
+        prevDx = dx;
+      }
+      if (Math.abs(dy) > 0.015) {
+        if (prevDy !== 0 && ((dy > 0 && prevDy < 0) || (dy < 0 && prevDy > 0))) {
+          yReversals++;
+        }
+        prevDy = dy;
+      }
+    }
+
+    const excursionX = maxX - minX;
+    const excursionY = maxY - minY;
+    const hasReversals = (xReversals >= 2 && excursionX >= 0.03) || (yReversals >= 2 && excursionY >= 0.03);
+    return hasReversals && totalDist >= 0.05;
   }
 
   /**
@@ -224,10 +311,80 @@ export class MagicFingerController {
     this.lastBpm = indicatedBpm;
     this.lastDynamic = continuousDynamic;
 
+    // 0. Update motion history for shake detection
+    for (const s of samples) {
+      if (!s.landmarks || s.landmarks.length < 21) continue;
+      const pt = s.landmarks[0] || s.conductorPoint;
+      let hist = this.handMotionHistory.get(s.handIndex);
+      if (!hist) {
+        hist = [];
+        this.handMotionHistory.set(s.handIndex, hist);
+      }
+      hist.push({ x: pt.x, y: pt.y, time: now });
+      const cutoff = now - 320;
+      while (hist.length > 0 && hist[0].time < cutoff) {
+        hist.shift();
+      }
+    }
+
+    // Check if either hand is shaking to trigger lock-in
+    let isAnyHandShaking = false;
+    for (const hist of this.handMotionHistory.values()) {
+      if (this.isHandShaking(hist)) {
+        isAnyHandShaking = true;
+        break;
+      }
+    }
+
+    if (this.activeTarget !== null && isAnyHandShaking) {
+      const lockedTarget = this.activeTarget;
+      const lockedValue = lockedTarget === "tempo" ? this.lastBpm : this.lastDynamic;
+      const lockEvent: MagicFingerLockInEvent = {
+        target: lockedTarget,
+        value: lockedValue,
+        screenX: this.lastHitScreenX ?? (lockedTarget === "tempo" ? 500 : 50),
+        screenY: this.lastHitScreenY ?? 250,
+        timestamp: now,
+      };
+
+      this.isLockedIn = true;
+      this.lockedTarget = lockedTarget;
+      this.activeTarget = null;
+      this.state = "idle";
+      this.hoverTarget = null;
+      this.currentHoverTarget = null;
+      this.hoverStartTime = 0;
+      this.handMotionHistory.clear();
+
+      this.callbacks.onLockIn?.(lockEvent);
+
+      const telemetry: MagicFingerTelemetry = {
+        isActive: false,
+        state: "idle",
+        pointingHandIndex: null,
+        hoverTarget: null,
+        activeTarget: null,
+        targetedSectionId: null,
+        liveBpm: this.lastBpm,
+        liveDynamic: this.lastDynamic,
+        ray: null,
+        isLockedIn: true,
+        lockInEvent: lockEvent,
+      };
+      this.callbacks.onTelemetry?.(telemetry);
+      return telemetry;
+    }
+
     // 1. Gather all candidate pointing hands
     const candidateSamples = samples.filter(
       s => s.gesture && isPointingGesture(s.gesture) && s.landmarks && s.landmarks.length >= 21
     );
+
+    if (candidateSamples.length === 0) {
+      // Pulling finger in clears lock-in so user can point again!
+      this.isLockedIn = false;
+      this.lockedTarget = null;
+    }
 
     let pointingSample: HandSample | null = null;
 
@@ -287,6 +444,47 @@ export class MagicFingerController {
       }
     }
 
+    // Check if user is locked in and attempting to repoint to a different side
+    if (this.isLockedIn && pointingSample && pointingSample.landmarks && pointingSample.landmarks.length >= 21) {
+      const tip = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP];
+      const pip = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] || pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
+      const rawDirX = isMirrored ? -(tip.x - pip.x) : (tip.x - pip.x);
+      const rawDirY = tip.y - pip.y;
+
+      let repointed = false;
+      if (this.lockedTarget === "tempo") {
+        if (rawDirX < -0.15 || rawDirY < -0.15) {
+          repointed = true;
+        }
+      } else if (this.lockedTarget === "dynamics") {
+        if (rawDirX > 0.15 || rawDirY < -0.15) {
+          repointed = true;
+        }
+      }
+
+      if (repointed) {
+        this.isLockedIn = false;
+        this.lockedTarget = null;
+      } else {
+        // Maintained pointing at locked side -> keep laser off to protect setting
+        const telemetry: MagicFingerTelemetry = {
+          isActive: false,
+          state: "idle",
+          pointingHandIndex: pointingSample.handIndex,
+          hoverTarget: null,
+          activeTarget: null,
+          targetedSectionId: null,
+          liveBpm: this.lastBpm,
+          liveDynamic: this.lastDynamic,
+          ray: null,
+          isLockedIn: true,
+          lockInEvent: null,
+        };
+        this.callbacks.onTelemetry?.(telemetry);
+        return telemetry;
+      }
+    }
+
     this.lastPointingHandIndex = pointingSample ? pointingSample.handIndex : null;
 
     // If finger is retracted, release everything immediately and hide laser
@@ -302,6 +500,8 @@ export class MagicFingerController {
       this.lastPointingHandIndex = null;
       this.lastHitY = null;
       this.lastHitTime = 0;
+      this.isLockedIn = false;
+      this.lockedTarget = null;
 
       if (wasSpotlighted) {
         this.callbacks.onSpotlightChange?.(null);
@@ -317,6 +517,8 @@ export class MagicFingerController {
         liveBpm: null,
         liveDynamic: null,
         ray: null,
+        isLockedIn: false,
+        lockInEvent: null,
       };
 
       this.callbacks.onTelemetry?.(telemetry);

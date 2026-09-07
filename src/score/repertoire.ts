@@ -72,10 +72,10 @@ export const REPERTOIRE: PieceDefinition[] = [
     defaultBpm: 108,
     timeSignature: "2/4",
     keySignature: "Cm",
-    beatsPerTap: 2,
-    conductMode: "Cut Time / Alla Breve (1 tap = 2 beats / 1 bar)",
+    beatsPerTap: 1,
+    conductMode: "Standard (1 tap = 1 beat)",
     layout: "full_orchestra",
-    description: "The most famous four-note motif in music history. Conducted in cut time (1 tap = 2 beats / 1 bar of 2/4) at ~108 half notes/min.",
+    description: "The most famous four-note motif in music history. Allegro con brio in 2/4 at ~108 BPM.",
     leadInBeats: 1,
     sections: [
       { id: "woodwinds", name: "Flute & Oboe", channels: [0, 1], programs: [73, 68], trackNames: ["FLUTE", "OBOE"] },

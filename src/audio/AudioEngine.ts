@@ -177,6 +177,7 @@ export class AudioEngine {
   private reverbGain: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
   private masterVolume: number = 0.60;
+  private fadeMultiplier: number = 1.0;
 
   // Spatial Stereo Buses & Seating Arrangement
   private channelBuses: Map<number, ChannelBus> = new Map();
@@ -234,12 +235,35 @@ export class AudioEngine {
     this.masterVolume = Math.max(0.0, Math.min(1.25, vol));
     if (this.masterGain && this.ctx) {
       safeCancelAutomation(this.masterGain.gain, this.ctx.currentTime);
-      this.masterGain.gain.setValueAtTime(this.masterVolume, this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(this.masterVolume * this.fadeMultiplier, this.ctx.currentTime);
     }
   }
 
   getMasterVolume(): number {
     return this.masterVolume;
+  }
+
+  setFadeMultiplier(ratio: number): void {
+    const clamped = Math.max(0.0, Math.min(1.0, ratio));
+    this.fadeMultiplier = clamped;
+    if (this.masterGain && this.ctx) {
+      const targetGain = this.masterVolume * this.fadeMultiplier;
+      safeCancelAutomation(this.masterGain.gain, this.ctx.currentTime);
+      this.masterGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.03);
+    }
+  }
+
+  restoreMasterVolume(): void {
+    if (this.fadeMultiplier === 1.0) return;
+    this.fadeMultiplier = 1.0;
+    if (this.masterGain && this.ctx) {
+      safeCancelAutomation(this.masterGain.gain, this.ctx.currentTime);
+      this.masterGain.gain.setTargetAtTime(this.masterVolume, this.ctx.currentTime, 0.04);
+    }
+  }
+
+  getFadeMultiplier(): number {
+    return this.fadeMultiplier;
   }
 
   // ── Diagnostics & Telemetry ──────────────────────────────────────────────
@@ -818,7 +842,7 @@ export class AudioEngine {
 
     // Master output bus
     this.masterGain = ctx.createGain();
-    this.masterGain.gain.value = this.masterVolume;
+    this.masterGain.gain.value = this.masterVolume * this.fadeMultiplier;
 
     // Dynamic Low-Pass Filter (removes harsh upper harmonics in soft dynamics, opens in forte)
     this.lowPassFilter = ctx.createBiquadFilter();
@@ -1340,6 +1364,8 @@ export class AudioEngine {
     }
     this.pendingCleanupTimers.clear();
     this.pendingCleanupCount = 0;
+
+    this.restoreMasterVolume();
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
