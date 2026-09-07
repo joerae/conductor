@@ -22,9 +22,9 @@ export const MAGIC_FINGER_TUNING = {
   SMOOTHING_ALPHA: 0.40,
   RAY_FREE_DISTANCE_PX: 360,
   UPWARD_FLICK_SPEED_PX_PER_SEC: 350,
-  HOLD_STEADY_TIME_MS: 595,
-  HOLD_CHARGE_DURATION_MS: 600,
-  HOLD_VALUE_TOLERANCE_BPM: 6.4,
+  HOLD_STEADY_TIME_MS: 500,
+  HOLD_CHARGE_DURATION_MS: 800,
+  HOLD_VALUE_TOLERANCE_BPM: 5,
   HOLD_VALUE_TOLERANCE_DYN: 0.056,
   HOLD_LOCK_ENABLED: true,
   SHAKE_LOCK_ENABLED: true,
@@ -632,7 +632,7 @@ export class MagicFingerController {
     // Fingertip & Knuckle coordinates
     const tip = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP];
     const pip = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] ||
-                pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
+      pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
 
     const tipScreenNormX = Math.max(0, Math.min(1, isMirrored ? 1.0 - tip.x : tip.x));
     const clampedTipY = Math.max(0, Math.min(1, tip.y));
