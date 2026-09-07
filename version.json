@@ -1,9 +1,22 @@
 {
-  "version": "0.29.1",
+  "version": "0.30.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.30.0",
+      "date": "2026-09-07",
+      "summary": "Magic Finger Mode Refinements: Left Vertical Dynamics Ribbon, Symmetrical Vertical Stage Alignment, Dwell & Wide-Delta Safe Acquisition, Camera Laser Darkening, and Directional Emergent Finger Switching",
+      "details": [
+        "Symmetrical Vertical Alignment: Reorganized stage layout into a unified stage-camera-row, vertically centering the left Dynamics gauge, hero camera, and right Tempo gauge flush in the exact same vertical space below the orchestra silhouette",
+        "Left Vertical Dynamics Ribbon: Created a dedicated vertical dynamics ribbon on the left of the camera for Magic Finger mode only, with smooth continuous volume modulation (pp to fff) and dynamic ladder indicators",
+        "Tempo Selector Dwell & Safe Acquisition: Added dwell capture (>=280ms) and widened capture delta (35 BPM) so pointing at the tempo gauge reliably acquires and transitions into glowing Gold (magic-acquired)",
+        "Camera Video Laser Darkening: Smoothly faded camera video feed to pure black (opacity: 0) with a 0.3s transition when pointing lasers appear in Magic Finger mode, mirroring Expressive mode",
+        "Directional Emergent Finger Switching: Intelligently selects candidate pointing hand based on target intent (rightmost hand for Tempo, leftmost hand for Dynamics, highest hand for Orchestra)",
+        "Tempo Gauge Bounds Clamping: Guaranteed indicated BPM is strictly clamped to [40, 220] range across all inputs"
+      ]
+    },
     {
       "version": "0.29.1",
       "date": "2026-09-04",
