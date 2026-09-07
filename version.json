@@ -1,9 +1,21 @@
 {
-  "version": "0.30.0",
+  "version": "0.31.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.31.0",
+      "date": "2026-09-07",
+      "summary": "Magic Finger Mode Enhancements: Free-Aiming Instrument Pointing, 3/4 Pointing Sensitivity, Symmetrical Full-Height Selectors, No-Hands Auto-Pause & Anti-Maxing Safeguards",
+      "details": [
+        "Free-Aiming Instrument Pointing: Removed rigid endpoint snapping to section centers when aiming up at the orchestra. The laser now sweeps naturally with finger orientation and turns radiant gold (#ffd56b) with glowing reticles upon selecting an instrument section, mirroring Expressive Mode.",
+        "3/4 Pointing Finger Sensitivity: Relaxed geometric gesture classification to reliably detect 3/4 extended fingers and fingers pointing horizontally (e.g. left towards Dynamics or right towards Tempo) without false-negative drops.",
+        "Symmetrical Full-Height Selectors: Updated layout styling so both the left Dynamics gauge and right Tempo gauge cleanly stretch to 100% of the camera container's full vertical height.",
+        "No-Hands Auto-Pause: In Magic Finger mode, removing or dropping hands from the camera screen automatically pauses music playback cleanly with a brief debounce to eliminate stutter from transient frame drops.",
+        "Upward Flick Anti-Maxing Safeguard: Moving quickly from the Tempo or Dynamics slider to point up at an instrument section detects the upward exit gesture and cleanly releases without accidentally pinning Tempo to 220 BPM or volume to maximum."
+      ]
+    },
     {
       "version": "0.30.0",
       "date": "2026-09-07",

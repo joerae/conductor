@@ -9,6 +9,7 @@
 import { describe, it, expect } from "vitest";
 import {
   classifyHandGestureFromLandmarks,
+  isPointingGesture,
   getNormalizedPinchDistance,
   HAND_LANDMARK_INDICES,
   type HandLandmark,
@@ -203,6 +204,51 @@ describe("Hand Gesture Detection", () => {
 
     const gesture = classifyHandGestureFromLandmarks(looseHandLandmarks);
     expect(gesture).not.toBe("Pointing_Up");
+  });
+
+  it("classifies Pointing when hand is pointing sideways or horizontal", () => {
+    const sidewaysLandmarks = createMockHandLandmarks({
+      thumbExtended: false,
+      indexExtended: true,
+      middleExtended: false,
+      ringExtended: false,
+      pinkyExtended: false,
+    });
+    // Rotate wrist and knuckles so palm axis is horizontal (wrist at right, knuckles at left)
+    sidewaysLandmarks[HAND_LANDMARK_INDICES.WRIST] = { x: 0.70, y: 0.60, z: 0 };
+    sidewaysLandmarks[HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP] = { x: 0.40, y: 0.60, z: 0 };
+    sidewaysLandmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP] = { x: 0.40, y: 0.55, z: 0 };
+    sidewaysLandmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] = { x: 0.35, y: 0.50, z: 0 };
+    sidewaysLandmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP] = { x: 0.25, y: 0.50, z: 0 };
+
+    const gesture = classifyHandGestureFromLandmarks(sidewaysLandmarks);
+    expect(gesture).toBe("Pointing");
+    expect(isPointingGesture(gesture)).toBe(true);
+  });
+
+  it("classifies Pointing when finger is 3/4 extended (e.g. pointing left at Dynamics)", () => {
+    const relaxedPoint = createMockHandLandmarks({
+      thumbExtended: false,
+      indexExtended: false,
+      middleExtended: false,
+      ringExtended: false,
+      pinkyExtended: false,
+    });
+    // Hand oriented pointing leftwards
+    relaxedPoint[HAND_LANDMARK_INDICES.WRIST] = { x: 0.65, y: 0.60, z: 0 };
+    relaxedPoint[HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP] = { x: 0.45, y: 0.60, z: 0 };
+    relaxedPoint[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP] = { x: 0.45, y: 0.55, z: 0 };
+    relaxedPoint[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] = { x: 0.38, y: 0.55, z: 0 };
+    // 3/4 extended (tip reached out past PIP, but not fully hyper-extended)
+    relaxedPoint[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP] = { x: 0.30, y: 0.55, z: 0 };
+
+    // Middle, Ring, Pinky curled in near palm
+    relaxedPoint[HAND_LANDMARK_INDICES.MIDDLE_FINGER_TIP] = { x: 0.46, y: 0.61, z: 0 };
+    relaxedPoint[HAND_LANDMARK_INDICES.RING_FINGER_TIP] = { x: 0.47, y: 0.62, z: 0 };
+    relaxedPoint[HAND_LANDMARK_INDICES.PINKY_TIP] = { x: 0.48, y: 0.63, z: 0 };
+
+    const gesture = classifyHandGestureFromLandmarks(relaxedPoint);
+    expect(isPointingGesture(gesture)).toBe(true);
   });
 
   it("calculates normalized pinch distance correctly", () => {

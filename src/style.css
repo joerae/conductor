@@ -1571,17 +1571,33 @@ body.debug-mode-active .section-debug-hud {
   align-items: stretch;
 }
 
+.magic-mode-active .stage-center-column {
+  justify-content: stretch;
+}
+
+.magic-mode-active .camera-hero-slot {
+  height: 100%;
+}
+
 .magic-mode-active .dynamic-vertical-gauge {
   display: flex;
   height: auto;
-  min-height: 480px;
-  max-height: 560px;
+  align-self: stretch;
+  min-height: 0;
+  max-height: none;
 }
 
 .magic-mode-active .bpm-vertical-gauge {
+  display: flex;
   height: auto;
-  min-height: 480px;
-  max-height: 560px;
+  align-self: stretch;
+  min-height: 0;
+  max-height: none;
+}
+
+.magic-mode-active .dynamic-gauge-track-wrap,
+.magic-mode-active .bpm-gauge-track-wrap {
+  min-height: 0;
 }
 
 .magic-mode-active #dynamic-ladder-container {

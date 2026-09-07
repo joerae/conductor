@@ -205,11 +205,18 @@ export class HandTracker {
                 }
               }
 
-              if (gesture === "none" || gesture === "Unrecognized") {
+              // MediaPipe pretrained gestures only include "Pointing_Up" and often mistag horizontal/angled pointing as "Closed_Fist" or "Unrecognized".
+              // Always verify with geometric pointing classifier if not already recognized as Pointing_Up.
+              if (gesture !== "Pointing_Up") {
                 const geomGesture = classifyHandGestureFromLandmarks(landmarks);
-                if (geomGesture !== "none") {
+                if (geomGesture === "Pointing_Up" || geomGesture === "Pointing") {
                   gesture = geomGesture;
-                  gestureScore = 0.9;
+                  gestureScore = 0.92;
+                } else if (gesture === "none" || gesture === "Unrecognized") {
+                  if (geomGesture !== "none") {
+                    gesture = geomGesture;
+                    gestureScore = 0.9;
+                  }
                 }
               }
 

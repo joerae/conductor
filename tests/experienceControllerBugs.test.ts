@@ -439,4 +439,28 @@ describe("ExperienceController Lifecycle & Bug Regressions", () => {
     expect(controller.getBasePieceBpm()).toBe(initialBaseBpm + 5);
     expect((controller as any).currentGesturalBpm).toBe(initialBaseBpm + 5);
   });
+
+  it("Issue 20: in magic finger mode, pauses music when no hands are present on screen", async () => {
+    const controller = new ExperienceController(createMockCallbacks());
+    controller.setTempoMode("magic");
+    (controller as any).inputSource = "camera";
+
+    // Start playing
+    await (controller as any).startPlayback();
+    expect(controller.getState()).toBe("playing");
+
+    // When hands are down in magic mode, a single silent beat triggers pause
+    (controller as any).isHandsDown = true;
+    (controller as any).handleClockEvent({
+      type: "beat",
+      state: {
+        beatIndex: 1,
+        bpm: 120,
+        phaseCorrectionSec: 0,
+        periodMs: 500,
+      },
+    });
+
+    expect(controller.getState()).toBe("paused");
+  });
 });

@@ -417,6 +417,102 @@ describe("MagicFingerController", () => {
 
     expect(tel.pointingHandIndex).toBe(1);
   });
+
+  it("does not snap laser endpoint to section center when pointing up at orchestra sections and turns gold", () => {
+    const onSpotlightChange = vi.fn();
+    controller.setCallbacks({ onSpotlightChange });
+
+    // Aiming up with slight angle: tipX = 0.46, pipX = 0.48 (ray points slightly leftwards towards violins1)
+    const sample = createSample("Pointing_Up", 0.46, 0.2, 0.48, 0.6);
+
+    const tel = controller.update({
+      samples: [sample],
+      indicatedBpm: 120,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+    });
+
+    expect(tel.targetedSectionId).toBe("violins1");
+    expect(tel.ray?.isAcquired).toBe(true); // Turns energetic gold!
+    expect(tel.ray?.targetType).toBe("instrument");
+    // Center of violins1 is 200. With free-aiming ray, endX should NOT snap to exactly 200
+    expect(tel.ray?.endX).not.toBe(200);
+    expect(onSpotlightChange).toHaveBeenCalledWith("violins1");
+  });
+
+  it("safely releases tempo gauge on upward flick exit without jumping to max 220 BPM", () => {
+    const onBpmChange = vi.fn();
+    controller.setCallbacks({ onBpmChange });
+
+    // Step 1: Acquire tempo at moderate BPM (~120 BPM)
+    // Tempo track is from top: 100 to bottom: 500 (height 400).
+    // Middle y=300 -> 50% -> 130 BPM
+    // Aim hits at y=200 on tempo gauge -> 75% -> 175 BPM
+    const aimSample = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+    const telAcquire = controller.update({
+      samples: [aimSample],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+    expect(telAcquire.state).toBe("tempo_acquired");
+    expect(telAcquire.activeTarget).toBe("tempo");
+    const acquiredBpm = telAcquire.liveBpm;
+    expect(acquiredBpm).toBe(175);
+
+    // Step 2: Flick finger quickly UP towards orchestra (rayDirY strongly negative < -0.32)
+    const flickSample = createSample("Pointing_Up", 0.7, 0.2, 0.5, 0.6);
+    const telFlick = controller.update({
+      samples: [flickSample],
+      indicatedBpm: acquiredBpm!,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1050,
+    });
+
+    // Must release cleanly and NOT spike to 220 BPM
+    expect(telFlick.activeTarget).toBeNull();
+    expect(telFlick.liveBpm).toBeNull();
+    expect(controller.getLastBpm()).toBe(acquiredBpm);
+    expect(controller.getLastBpm()).not.toBe(220);
+  });
+
+  it("safely releases left vertical dynamics gauge on upward flick exit without jumping to max dynamic", () => {
+    const onDynamicChange = vi.fn();
+    mockGeo.dynamicsRect = { left: 40, top: 100, right: 80, bottom: 500, width: 40, height: 400 };
+    controller.setCallbacks({ onDynamicChange });
+
+    // Step 1: Acquire dynamics at y=200 on track -> (500 - 200)/400 = 0.75
+    // Pointing left: tipX = 0.2, pipX = 0.6
+    const aimSample = createSample("Pointing", 0.2, 0.5, 0.6, 0.5);
+    const telAcquire = controller.update({
+      samples: [aimSample],
+      indicatedBpm: 120,
+      continuousDynamic: 0.75,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+    expect(telAcquire.state).toBe("dynamics_acquired");
+    expect(telAcquire.activeTarget).toBe("dynamics");
+    expect(telAcquire.liveDynamic).toBeCloseTo(0.75, 2);
+
+    // Step 2: Flick finger quickly UP towards orchestra
+    const flickSample = createSample("Pointing_Up", 0.3, 0.2, 0.4, 0.6);
+    const telFlick = controller.update({
+      samples: [flickSample],
+      indicatedBpm: 120,
+      continuousDynamic: 0.75,
+      isMirrored: false,
+      nowMs: 1050,
+    });
+
+    // Must release cleanly and NOT spike to 1.0 (fff)
+    expect(telFlick.activeTarget).toBeNull();
+    expect(telFlick.liveDynamic).toBeNull();
+    expect(controller.getLastDynamic()).toBeCloseTo(0.75, 2);
+    expect(controller.getLastDynamic()).not.toBe(1.0);
+  });
 });
 
 describe("ConductorClock magic mode", () => {

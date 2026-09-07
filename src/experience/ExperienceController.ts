@@ -120,6 +120,7 @@ export class ExperienceController {
   // In Mode E: only true when hands are completely off-screen (samples.length === 0)
   private isHandsDown: boolean = false;
   private handsDownPulseCount: number = 0;
+  private magicNoHandsStartTime: number = 0;
 
   // Mode E: Gestural Conducting (Intended BPM base + continuous height accelerando)
   private nominalPieceBpm: number = 140;
@@ -670,6 +671,25 @@ export class ExperienceController {
 
         const isFocusActive = this.cameraInput?.getFocusController().isFocusModeActive() ?? false;
         const isMagicMode = this.clock.getTempoMode() === "magic";
+
+        // In Magic Finger mode: if no hands are present on screen, music should not play!
+        if (isMagicMode && this.inputSource === "camera") {
+          if (samples.length === 0) {
+            if (this.state === "playing") {
+              const now = performance.now();
+              if (this.magicNoHandsStartTime === 0) {
+                this.magicNoHandsStartTime = now;
+              } else if (now - this.magicNoHandsStartTime >= 180) {
+                this.magicNoHandsStartTime = 0;
+                this.pausePlayback();
+              }
+            } else {
+              this.magicNoHandsStartTime = 0;
+            }
+          } else {
+            this.magicNoHandsStartTime = 0;
+          }
+        }
 
         if (samples.length > 0 && !isFocusActive && !isMagicMode) {
           // ── 1. Thumbs Down Cutoff (👎): Dramatically pauses music ──
@@ -1335,12 +1355,15 @@ export class ExperienceController {
         }
 
         // Check hands-down inactivity in camera mode:
+        // In Magic Finger mode: pause after 1 beat of dropping hands (or immediate via onSamples)
         // In Mode E: pause within 2 beats of dropping hands
         // In Mode D: pause after 6 beats of dropping hands
         if (this.inputSource === "camera" && this.state === "playing") {
           if (this.isHandsDown) {
             this.handsDownPulseCount++;
-            const maxSilentBeats = this.clock.getTempoMode() === "gestural" ? 2 : 6;
+            const maxSilentBeats = this.clock.getTempoMode() === "magic"
+              ? 1
+              : (this.clock.getTempoMode() === "gestural" ? 2 : 6);
             if (this.handsDownPulseCount >= maxSilentBeats) {
               this.handsDownPulseCount = 0;
               this.pausePlayback();

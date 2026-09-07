@@ -251,9 +251,13 @@ export function classifyHandGestureFromLandmarks(landmarks: HandLandmark[]): Han
     return Math.hypot(dx, dy);
   };
 
+  const middleMcp = landmarks[HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP];
+  const handScale = Math.max(0.04, middleMcp && wrist ? Math.hypot(middleMcp.x - wrist.x, middleMcp.y - wrist.y) : 0.15);
+
   // Finger extension: distance from wrist to TIP vs distance from wrist to PIP
+  // Relax index extension from 1.18 to 1.08 to accommodate 3/4 pointed and foreshortened fingers
   const isThumbExt = distToWrist(HAND_LANDMARK_INDICES.THUMB_TIP) > distToWrist(HAND_LANDMARK_INDICES.THUMB_MCP) * 1.10;
-  const isIndexExt = distToWrist(HAND_LANDMARK_INDICES.INDEX_FINGER_TIP) > distToWrist(HAND_LANDMARK_INDICES.INDEX_FINGER_PIP) * 1.18;
+  const isIndexExt = distToWrist(HAND_LANDMARK_INDICES.INDEX_FINGER_TIP) > distToWrist(HAND_LANDMARK_INDICES.INDEX_FINGER_PIP) * 1.08;
   const isMiddleExt = distToWrist(HAND_LANDMARK_INDICES.MIDDLE_FINGER_TIP) > distToWrist(HAND_LANDMARK_INDICES.MIDDLE_FINGER_PIP) * 1.15;
   const isRingExt = distToWrist(HAND_LANDMARK_INDICES.RING_FINGER_TIP) > distToWrist(HAND_LANDMARK_INDICES.RING_FINGER_PIP) * 1.15;
   const isPinkyExt = distToWrist(HAND_LANDMARK_INDICES.PINKY_TIP) > distToWrist(HAND_LANDMARK_INDICES.PINKY_PIP) * 1.15;
@@ -263,17 +267,17 @@ export function classifyHandGestureFromLandmarks(landmarks: HandLandmark[]): Han
   const indexTip = landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP];
   const indexPip = landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP];
   const indexMcp = landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
-  const middleMcp = landmarks[HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP];
 
-  // Helper: Checks if a non-index finger is substantially curled into the palm
+  // Helper: Checks if a non-index finger is substantially curled into the palm (works at any hand orientation)
   const isFingerStrictlyCurled = (tipIdx: number, pipIdx: number, mcpIdx: number): boolean => {
     const tip = landmarks[tipIdx];
     const pip = landmarks[pipIdx];
     const mcp = landmarks[mcpIdx];
     if (!tip || !pip || !mcp) return false;
-    const distCurled = distToWrist(tipIdx) < distToWrist(mcpIdx) * 1.14 && distToWrist(tipIdx) < distToWrist(pipIdx) * 1.02;
-    const notExtendedUp = tip.y >= pip.y - 0.015;
-    return distCurled || notExtendedUp;
+    const distCurled = distToWrist(tipIdx) < distToWrist(mcpIdx) * 1.16 && distToWrist(tipIdx) < distToWrist(pipIdx) * 1.05;
+    const distToMcp = Math.hypot(tip.x - mcp.x, tip.y - mcp.y);
+    const curledCloseToPalm = distToMcp < handScale * 0.85;
+    return distCurled || curledCloseToPalm;
   };
 
   // 1. ILoveYou (🤟): Thumb, Index, Pinky extended; Middle, Ring curled
@@ -286,26 +290,33 @@ export function classifyHandGestureFromLandmarks(landmarks: HandLandmark[]): Han
     return "Victory";
   }
 
-  // 3. Pointing_Up (☝️): Strict vertical hand orientation + Index pointing straight up + other 3 fingers strictly curled
-  if (isIndexExt && indexTip && indexPip && indexMcp && middleMcp) {
-    // Hand axis must be substantially vertical (wrist below knuckles, vertical delta > horizontal delta)
-    const palmVerticalUp = wrist.y - middleMcp.y;
-    const palmHorizontal = Math.abs(middleMcp.x - wrist.x);
-    const handIsVertical = palmVerticalUp > 0.045 && palmVerticalUp > palmHorizontal * 0.80;
+  // 3. Pointing / Pointing_Up: Index extended, other three fingers curled
+  // Accommodates strict vertical pointing (Pointing_Up) AND horizontal / angled / 3/4 pointing (Pointing)
+  if (indexTip && indexPip && indexMcp && middleMcp) {
+    const indexReachFromMcp = Math.hypot(indexTip.x - indexMcp.x, indexTip.y - indexMcp.y);
+    const middleTip = landmarks[HAND_LANDMARK_INDICES.MIDDLE_FINGER_TIP];
+    const middleReachFromMcp = middleTip ? Math.hypot(middleTip.x - middleMcp.x, middleTip.y - middleMcp.y) : 0;
+    const isIndexSubstantiallyOutward =
+      isIndexExt ||
+      (indexReachFromMcp > handScale * 0.45 && indexReachFromMcp > middleReachFromMcp * 1.15);
 
-    // Index finger itself must point straight up
-    const indexVerticalUp = indexMcp.y - indexTip.y;
-    const indexHorizontal = Math.abs(indexTip.x - indexMcp.x);
-    const indexPointsUp = indexTip.y < indexPip.y - 0.035 && indexVerticalUp > indexHorizontal * 0.85;
-
-    // Middle, Ring, and Pinky must be curled
     const middleCurled = isFingerStrictlyCurled(HAND_LANDMARK_INDICES.MIDDLE_FINGER_TIP, HAND_LANDMARK_INDICES.MIDDLE_FINGER_PIP, HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP);
     const ringCurled = isFingerStrictlyCurled(HAND_LANDMARK_INDICES.RING_FINGER_TIP, HAND_LANDMARK_INDICES.RING_FINGER_PIP, HAND_LANDMARK_INDICES.RING_FINGER_MCP);
     const pinkyCurled = isFingerStrictlyCurled(HAND_LANDMARK_INDICES.PINKY_TIP, HAND_LANDMARK_INDICES.PINKY_PIP, HAND_LANDMARK_INDICES.PINKY_MCP);
 
     const otherFingersCurled = (middleCurled && ringCurled && pinkyCurled) || (!isMiddleExt && !isRingExt && !isPinkyExt);
 
-    if (otherFingersCurled) {
+    if (isIndexSubstantiallyOutward && otherFingersCurled) {
+      // Hand axis must be substantially vertical for Pointing_Up
+      const palmVerticalUp = wrist.y - middleMcp.y;
+      const palmHorizontal = Math.abs(middleMcp.x - wrist.x);
+      const handIsVertical = palmVerticalUp > 0.045 && palmVerticalUp > palmHorizontal * 0.80;
+
+      // Index finger itself must point straight up
+      const indexVerticalUp = indexMcp.y - indexTip.y;
+      const indexHorizontal = Math.abs(indexTip.x - indexMcp.x);
+      const indexPointsUp = indexTip.y < indexPip.y - 0.030 && indexVerticalUp > indexHorizontal * 0.85;
+
       if (handIsVertical && indexPointsUp && middleCurled && ringCurled && pinkyCurled) {
         return "Pointing_Up";
       }

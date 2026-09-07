@@ -137,6 +137,8 @@ export class MagicFingerController {
   // Values preserved across releases
   private lastBpm: number = 100;
   private lastDynamic: number = 0.5;
+  private lastValidInBoundsBpm: number = 100;
+  private lastValidInBoundsDynamic: number = 0.5;
 
   // Dwell acquisition state
   private hoverStartTime: number = 0;
@@ -196,6 +198,8 @@ export class MagicFingerController {
     this.targetedSectionId = null;
     this.hasSmoothedDir = false;
     this.lastPointingHandIndex = null;
+    this.lastValidInBoundsBpm = this.lastBpm;
+    this.lastValidInBoundsDynamic = this.lastDynamic;
     this.callbacks.onSpotlightChange?.(null);
   }
 
@@ -390,6 +394,8 @@ export class MagicFingerController {
     let liveBpm: number | null = null;
     let liveDynamic: number | null = null;
 
+    let releasedThisFrame = false;
+
     // ── 1. ACTIVE TARGET PROCESSING (If already acquired) ─────────────────────
     if (this.activeTarget === "tempo" && tempoTrackRect) {
       const tempoTrackLeft = tempoTrackRect.left - svgRect.left;
@@ -408,6 +414,9 @@ export class MagicFingerController {
         hitY = startY;
       }
 
+      // Detect upward flick exit to avoid accidental 220 BPM maxing when flicking up to orchestra
+      const isUpwardFlickExit = rayDirY < -0.32 || (hitY < tempoTrackTop && rayDirY < -0.18);
+
       // Check padded zone for release
       const pad = MAGIC_FINGER_TUNING.TEMPO_RELEASE_PAD_PX;
       const projectedX = (Math.abs(rayDirX) > 0.02)
@@ -421,16 +430,20 @@ export class MagicFingerController {
         hitY > tempoTrackBottom + pad ||
         rayDirX < -0.15; // clearly pointing away to the left
 
-      if (isOutsidePaddedZone) {
-        // Release tempo control, preserve last BPM
+      if (isUpwardFlickExit || isOutsidePaddedZone) {
+        // Release tempo control immediately without committing max/out-of-bounds BPM!
         this.activeTarget = null;
         this.state = "pointing";
+        this.lastBpm = this.lastValidInBoundsBpm;
+        this.callbacks.onBpmChange?.(this.lastValidInBoundsBpm);
+        releasedThisFrame = true;
       } else {
         // Control tempo continuously
         const clampedY = Math.max(tempoTrackTop, Math.min(tempoTrackBottom, hitY));
         const pct = ((tempoTrackBottom - clampedY) / tempoTrackHeight) * 100;
         const newBpm = Math.round(percentToBpm(pct));
 
+        this.lastValidInBoundsBpm = newBpm;
         this.lastBpm = newBpm;
         liveBpm = newBpm;
         this.callbacks.onBpmChange?.(newBpm);
@@ -462,6 +475,9 @@ export class MagicFingerController {
           hitY = startY;
         }
 
+        // Detect upward flick exit to avoid accidental 1.0 (fff) maxing when flicking up to orchestra
+        const isUpwardFlickExit = rayDirY < -0.32 || (hitY < dynTrackTop && rayDirY < -0.18);
+
         const projectedX = (Math.abs(rayDirX) > 0.02)
           ? dynTrackCenterX
           : startX + rayDirX * MAGIC_FINGER_TUNING.RAY_FREE_DISTANCE_PX;
@@ -473,15 +489,19 @@ export class MagicFingerController {
           hitY > dynTrackBottom + pad ||
           rayDirX > 0.15; // clearly pointing away to the right
 
-        if (isOutsidePaddedZone) {
-          // Release dynamics control, preserve last dynamic
+        if (isUpwardFlickExit || isOutsidePaddedZone) {
+          // Release dynamics control immediately without committing max/out-of-bounds dynamic!
           this.activeTarget = null;
           this.state = "pointing";
+          this.lastDynamic = this.lastValidInBoundsDynamic;
+          this.callbacks.onDynamicChange?.(this.lastValidInBoundsDynamic);
+          releasedThisFrame = true;
         } else {
           // Control continuous dynamics: Top is 1.0 (fff), Bottom is 0.0 (pp)
           const clampedY = Math.max(dynTrackTop, Math.min(dynTrackBottom, hitY));
           const continuousVal = Math.max(0, Math.min(1, (dynTrackBottom - clampedY) / dynTrackHeight));
 
+          this.lastValidInBoundsDynamic = continuousVal;
           this.lastDynamic = continuousVal;
           liveDynamic = continuousVal;
           this.callbacks.onDynamicChange?.(continuousVal);
@@ -501,6 +521,7 @@ export class MagicFingerController {
           hitX = startX;
         }
 
+        const isUpwardExit = rayDirY < -0.15;
         const projectedY = (Math.abs(rayDirY) > 0.02)
           ? dynTrackCenterY
           : startY + rayDirY * MAGIC_FINGER_TUNING.RAY_FREE_DISTANCE_PX;
@@ -512,15 +533,19 @@ export class MagicFingerController {
           projectedY > dynTrackBottom + pad ||
           rayDirY < -0.20; // clearly pointing upwards away
 
-        if (isOutsidePaddedZone) {
-          // Release dynamics control, preserve last dynamic
+        if (isUpwardExit || isOutsidePaddedZone) {
+          // Release dynamics control, preserve last valid in-bounds dynamic
           this.activeTarget = null;
           this.state = "pointing";
+          this.lastDynamic = this.lastValidInBoundsDynamic;
+          this.callbacks.onDynamicChange?.(this.lastValidInBoundsDynamic);
+          releasedThisFrame = true;
         } else {
           // Control continuous dynamics
           const clampedX = Math.max(dynTrackLeft, Math.min(dynTrackRight, hitX));
           const continuousVal = Math.max(0, Math.min(1, (clampedX - dynTrackLeft) / dynTrackWidth));
 
+          this.lastValidInBoundsDynamic = continuousVal;
           this.lastDynamic = continuousVal;
           liveDynamic = continuousVal;
           this.callbacks.onDynamicChange?.(continuousVal);
@@ -538,7 +563,8 @@ export class MagicFingerController {
       this.state = "pointing";
 
       // ── A. Check Safe Acquisition on Tempo Gauge (Right) ─────────────────────
-      if (tempoTrackRect && rayDirX > 0.15) {
+      // Only check tempo acquisition if ray is not pointing upwards towards the orchestra
+      if (tempoTrackRect && rayDirX > 0.15 && rayDirY > -0.25 && !releasedThisFrame) {
         const tempoTrackLeft = tempoTrackRect.left - svgRect.left;
         const tempoTrackRight = tempoTrackRect.right - svgRect.left;
         const tempoTrackTop = tempoTrackRect.top - svgRect.top;
@@ -574,6 +600,7 @@ export class MagicFingerController {
               this.activeTarget = "tempo";
               this.state = "tempo_acquired";
               this.lastBpm = Math.round(hitBpm);
+              this.lastValidInBoundsBpm = this.lastBpm;
               liveBpm = this.lastBpm;
               this.callbacks.onBpmChange?.(this.lastBpm);
               this.currentHoverTarget = null;
@@ -584,7 +611,7 @@ export class MagicFingerController {
       }
 
       // ── B. Check Safe Acquisition on Dynamics Ribbon ─────────────────────────
-      if (this.activeTarget === null && dynamicsTrackRect) {
+      if (this.activeTarget === null && dynamicsTrackRect && !releasedThisFrame) {
         const isVertical = dynamicsTrackRect.height > dynamicsTrackRect.width;
         const dynTrackLeft = dynamicsTrackRect.left - svgRect.left;
         const dynTrackRight = dynamicsTrackRect.right - svgRect.left;
@@ -595,7 +622,8 @@ export class MagicFingerController {
         const dynTrackWidth = Math.max(1, dynTrackRight - dynTrackLeft);
         const dynTrackHeight = Math.max(1, dynTrackBottom - dynTrackTop);
 
-        if (isVertical && rayDirX < -0.15) {
+        // Only check dynamics acquisition if ray is not pointing upwards towards the orchestra
+        if (isVertical && rayDirX < -0.15 && rayDirY > -0.25) {
           // Pointing LEFT towards left vertical dynamics gauge
           const t = (dynTrackCenterX - startX) / rayDirX;
           if (t > 0) {
@@ -625,6 +653,7 @@ export class MagicFingerController {
                 this.activeTarget = "dynamics";
                 this.state = "dynamics_acquired";
                 this.lastDynamic = hitVal;
+                this.lastValidInBoundsDynamic = hitVal;
                 liveDynamic = hitVal;
                 this.callbacks.onDynamicChange?.(hitVal);
                 this.currentHoverTarget = null;
@@ -658,6 +687,7 @@ export class MagicFingerController {
                 this.activeTarget = "dynamics";
                 this.state = "dynamics_acquired";
                 this.lastDynamic = hitVal;
+                this.lastValidInBoundsDynamic = hitVal;
                 liveDynamic = hitVal;
                 this.callbacks.onDynamicChange?.(hitVal);
                 this.currentHoverTarget = null;
@@ -670,33 +700,37 @@ export class MagicFingerController {
 
       // ── C. Check Instrument Sections (Top) ──────────────────────────────────
       if (this.activeTarget === null && rayDirY < -0.10 && instrumentSections.length > 0) {
+        // Natural ray extension towards orchestra baseline (mirroring Expressive Mode)
+        // Does NOT snap laser to target center, giving full freedom of finger pointing
+        let targetBaselineY = 60;
+        if (instrumentSections[0]) {
+          const firstRect = instrumentSections[0].rect;
+          targetBaselineY = (firstRect.top - svgRect.top) + firstRect.height * 0.78;
+        }
+
+        const rayDist = (startY - targetBaselineY) / (-rayDirY);
+        const projectedHitX = startX + rayDirX * rayDist;
+        const projectedHitY = startY + rayDirY * rayDist;
+
+        // Laser end point freely follows finger direction without snapping to target center!
+        endX = projectedHitX;
+        endY = projectedHitY;
+
         let bestSectionId: string | null = null;
         let minDistance = Infinity;
-        let bestTargetX = endX;
-        let bestTargetY = endY;
 
         for (const sec of instrumentSections) {
           const secLeft = sec.rect.left - svgRect.left;
           const secRight = sec.rect.right - svgRect.left;
-          const secTop = sec.rect.top - svgRect.top;
-          const secBottom = sec.rect.bottom - svgRect.top;
           const secCenterX = (secLeft + secRight) / 2;
-          const secCenterY = (secTop + secBottom) / 2;
 
-          // Ray intersection with horizontal centerline of section
-          const t = (secCenterY - startY) / rayDirY;
-          if (t > 0) {
-            const hitX = startX + rayDirX * t;
-            // Pad width by 15% for generous hit testing
-            const padX = (secRight - secLeft) * 0.15;
-            if (hitX >= secLeft - padX && hitX <= secRight + padX) {
-              const dist = Math.abs(hitX - secCenterX);
-              if (dist < minDistance) {
-                minDistance = dist;
-                bestSectionId = sec.id;
-                bestTargetX = secCenterX;
-                bestTargetY = secCenterY;
-              }
+          // Generous hit testing pad (15% on each side)
+          const padX = (secRight - secLeft) * 0.15;
+          if (projectedHitX >= secLeft - padX && projectedHitX <= secRight + padX) {
+            const dist = Math.abs(projectedHitX - secCenterX);
+            if (dist < minDistance) {
+              minDistance = dist;
+              bestSectionId = sec.id;
             }
           }
         }
@@ -704,8 +738,6 @@ export class MagicFingerController {
         if (bestSectionId) {
           this.hoverTarget = "instrument";
           this.state = "instrument_targeted";
-          endX = bestTargetX;
-          endY = bestTargetY;
           rayTargetType = "instrument";
 
           if (this.targetedSectionId !== bestSectionId) {
@@ -727,7 +759,8 @@ export class MagicFingerController {
       this.hoverStartTime = 0;
     }
 
-    const isAcquired = this.activeTarget !== null;
+    // Laser turns gold when acquired on tempo, dynamics, OR when targeting an instrument section!
+    const isAcquired = this.activeTarget !== null || this.state === "instrument_targeted" || this.hoverTarget === "instrument";
 
     const ray: MagicFingerRay = {
       startX,
