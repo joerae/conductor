@@ -22,6 +22,12 @@ export const MAGIC_FINGER_TUNING = {
   SMOOTHING_ALPHA: 0.40,
   RAY_FREE_DISTANCE_PX: 360,
   UPWARD_FLICK_SPEED_PX_PER_SEC: 350,
+  HOLD_STEADY_TIME_MS: 850,
+  HOLD_CHARGE_DURATION_MS: 400,
+  HOLD_VALUE_TOLERANCE_BPM: 4,
+  HOLD_VALUE_TOLERANCE_DYN: 0.035,
+  HOLD_LOCK_ENABLED: true,
+  SHAKE_LOCK_ENABLED: true,
 };
 
 export type MagicFingerState =
@@ -41,6 +47,7 @@ export interface MagicFingerRay {
   isActive: boolean;
   isAcquired: boolean;
   targetType: "tempo" | "dynamics" | "instrument" | "open" | null;
+  isDimmed?: boolean;
 }
 
 export interface MagicFingerLockInEvent {
@@ -49,6 +56,7 @@ export interface MagicFingerLockInEvent {
   screenX: number;
   screenY: number;
   timestamp: number;
+  source: "shake" | "hold";
 }
 
 export interface MagicFingerTelemetry {
@@ -63,6 +71,8 @@ export interface MagicFingerTelemetry {
   ray: MagicFingerRay | null;
   isLockedIn?: boolean;
   lockInEvent?: MagicFingerLockInEvent | null;
+  chargeProgress?: number;
+  chargeTarget?: "tempo" | "dynamics" | null;
 }
 
 export interface ScreenRect {
@@ -171,8 +181,14 @@ export class MagicFingerController {
   // Lock-in state & repointing protection
   private isLockedIn: boolean = false;
   private lockedTarget: "tempo" | "dynamics" | null = null;
+  private lockedValue: number | null = null;
   private lastHitScreenX: number | null = null;
   private lastHitScreenY: number | null = null;
+
+  // Hold-to-lock state
+  private holdSteadyStartTime: number = 0;
+  private holdSteadyValue: number | null = null;
+  private chargeProgress: number = 0;
 
   // Hand motion tracking for shake detection (sliding window)
   private handMotionHistory: Map<number, Array<{ x: number; y: number; time: number }>> = new Map();
@@ -311,6 +327,8 @@ export class MagicFingerController {
     this.lastBpm = indicatedBpm;
     this.lastDynamic = continuousDynamic;
 
+    let lockInEvent: MagicFingerLockInEvent | null = null;
+
     // 0. Update motion history for shake detection
     for (const s of samples) {
       if (!s.landmarks || s.landmarks.length < 21) continue;
@@ -336,27 +354,47 @@ export class MagicFingerController {
       }
     }
 
-    if (this.activeTarget !== null && isAnyHandShaking) {
+    if (this.activeTarget !== null && isAnyHandShaking && MAGIC_FINGER_TUNING.SHAKE_LOCK_ENABLED) {
       const lockedTarget = this.activeTarget;
       const lockedValue = lockedTarget === "tempo" ? this.lastBpm : this.lastDynamic;
+      const hitX = this.lastHitScreenX ?? (lockedTarget === "tempo" ? 500 : 50);
+      const hitY = this.lastHitScreenY ?? 250;
       const lockEvent: MagicFingerLockInEvent = {
         target: lockedTarget,
         value: lockedValue,
-        screenX: this.lastHitScreenX ?? (lockedTarget === "tempo" ? 500 : 50),
-        screenY: this.lastHitScreenY ?? 250,
+        screenX: hitX,
+        screenY: hitY,
         timestamp: now,
+        source: "shake",
       };
 
       this.isLockedIn = true;
       this.lockedTarget = lockedTarget;
+      this.lockedValue = lockedValue;
       this.activeTarget = null;
       this.state = "idle";
       this.hoverTarget = null;
       this.currentHoverTarget = null;
       this.hoverStartTime = 0;
+      this.holdSteadyStartTime = 0;
+      this.holdSteadyValue = null;
+      this.chargeProgress = 0;
       this.handMotionHistory.clear();
 
       this.callbacks.onLockIn?.(lockEvent);
+
+      const lockedDimmedRay: MagicFingerRay = {
+        startX: lockedTarget === "tempo" ? hitX - 100 : hitX + 100,
+        startY: hitY,
+        endX: hitX,
+        endY: hitY,
+        unitX: lockedTarget === "tempo" ? 1 : -1,
+        unitY: 0,
+        isActive: true,
+        isAcquired: true,
+        targetType: lockedTarget,
+        isDimmed: true,
+      };
 
       const telemetry: MagicFingerTelemetry = {
         isActive: false,
@@ -367,9 +405,11 @@ export class MagicFingerController {
         targetedSectionId: null,
         liveBpm: this.lastBpm,
         liveDynamic: this.lastDynamic,
-        ray: null,
+        ray: lockedDimmedRay,
         isLockedIn: true,
         lockInEvent: lockEvent,
+        chargeProgress: 0,
+        chargeTarget: null,
       };
       this.callbacks.onTelemetry?.(telemetry);
       return telemetry;
@@ -384,6 +424,10 @@ export class MagicFingerController {
       // Pulling finger in clears lock-in so user can point again!
       this.isLockedIn = false;
       this.lockedTarget = null;
+      this.lockedValue = null;
+      this.holdSteadyStartTime = 0;
+      this.holdSteadyValue = null;
+      this.chargeProgress = 0;
     }
 
     let pointingSample: HandSample | null = null;
@@ -444,47 +488,6 @@ export class MagicFingerController {
       }
     }
 
-    // Check if user is locked in and attempting to repoint to a different side
-    if (this.isLockedIn && pointingSample && pointingSample.landmarks && pointingSample.landmarks.length >= 21) {
-      const tip = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP];
-      const pip = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] || pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
-      const rawDirX = isMirrored ? -(tip.x - pip.x) : (tip.x - pip.x);
-      const rawDirY = tip.y - pip.y;
-
-      let repointed = false;
-      if (this.lockedTarget === "tempo") {
-        if (rawDirX < -0.15 || rawDirY < -0.15) {
-          repointed = true;
-        }
-      } else if (this.lockedTarget === "dynamics") {
-        if (rawDirX > 0.15 || rawDirY < -0.15) {
-          repointed = true;
-        }
-      }
-
-      if (repointed) {
-        this.isLockedIn = false;
-        this.lockedTarget = null;
-      } else {
-        // Maintained pointing at locked side -> keep laser off to protect setting
-        const telemetry: MagicFingerTelemetry = {
-          isActive: false,
-          state: "idle",
-          pointingHandIndex: pointingSample.handIndex,
-          hoverTarget: null,
-          activeTarget: null,
-          targetedSectionId: null,
-          liveBpm: this.lastBpm,
-          liveDynamic: this.lastDynamic,
-          ray: null,
-          isLockedIn: true,
-          lockInEvent: null,
-        };
-        this.callbacks.onTelemetry?.(telemetry);
-        return telemetry;
-      }
-    }
-
     this.lastPointingHandIndex = pointingSample ? pointingSample.handIndex : null;
 
     // If finger is retracted, release everything immediately and hide laser
@@ -495,6 +498,9 @@ export class MagicFingerController {
       this.hoverTarget = null;
       this.currentHoverTarget = null;
       this.hoverStartTime = 0;
+      this.holdSteadyStartTime = 0;
+      this.holdSteadyValue = null;
+      this.chargeProgress = 0;
       this.targetedSectionId = null;
       this.hasSmoothedDir = false;
       this.lastPointingHandIndex = null;
@@ -502,6 +508,7 @@ export class MagicFingerController {
       this.lastHitTime = 0;
       this.isLockedIn = false;
       this.lockedTarget = null;
+      this.lockedValue = null;
 
       if (wasSpotlighted) {
         this.callbacks.onSpotlightChange?.(null);
@@ -593,6 +600,80 @@ export class MagicFingerController {
     const rayDirX = this.smoothedUnitX;
     const rayDirY = this.smoothedUnitY;
 
+    // ── EVALUATE LOCKED-IN STATE & ZONE REARMING ────────────────────────────
+    if (this.isLockedIn) {
+      // 1. Check if pointer clearly aims outside the locked control zone:
+      // A) Pointing up to orchestra / instruments:
+      const pointingUpToOrchestra = rayDirY < -0.12;
+
+      // B) Pointing across to opposite control side:
+      const pointingAcross = this.lockedTarget === "tempo"
+        ? rayDirX < -0.05
+        : rayDirX > 0.05;
+
+      if (pointingUpToOrchestra || pointingAcross) {
+        // REARM! Pointer has exited the locked control zone into another zone
+        this.isLockedIn = false;
+        this.lockedTarget = null;
+        this.lockedValue = null;
+        this.holdSteadyStartTime = 0;
+        this.holdSteadyValue = null;
+        this.chargeProgress = 0;
+      } else {
+        // Still pointing within the locked control zone:
+        // Value remains strictly frozen, laser is kept in darker/dimmed inactive state
+        const targetRect = this.lockedTarget === "tempo" ? tempoTrackRect : dynamicsTrackRect;
+        let lockedEndX = startX;
+        let lockedEndY = startY;
+
+        if (targetRect) {
+          const trackLeft = targetRect.left - svgRect.left;
+          const trackRight = targetRect.right - svgRect.left;
+          const trackTop = targetRect.top - svgRect.top;
+          const trackBottom = targetRect.bottom - svgRect.top;
+          const trackCenterX = (trackLeft + trackRight) / 2;
+          lockedEndX = trackCenterX;
+          if (Math.abs(rayDirX) > 0.02) {
+            const t = (trackCenterX - startX) / rayDirX;
+            lockedEndY = Math.max(trackTop, Math.min(trackBottom, startY + rayDirY * t));
+          } else {
+            lockedEndY = Math.max(trackTop, Math.min(trackBottom, startY));
+          }
+        }
+
+        const dimmedRay: MagicFingerRay = {
+          startX,
+          startY,
+          endX: lockedEndX,
+          endY: lockedEndY,
+          unitX: rayDirX,
+          unitY: rayDirY,
+          isActive: true,
+          isAcquired: true,
+          targetType: this.lockedTarget,
+          isDimmed: true,
+        };
+
+        const telemetry: MagicFingerTelemetry = {
+          isActive: false,
+          state: "idle",
+          pointingHandIndex: pointingSample.handIndex,
+          hoverTarget: null,
+          activeTarget: null,
+          targetedSectionId: null,
+          liveBpm: this.lockedTarget === "tempo" ? this.lockedValue : this.lastBpm,
+          liveDynamic: this.lockedTarget === "dynamics" ? this.lockedValue : this.lastDynamic,
+          ray: dimmedRay,
+          isLockedIn: true,
+          lockInEvent: null,
+          chargeProgress: 0,
+          chargeTarget: null,
+        };
+        this.callbacks.onTelemetry?.(telemetry);
+        return telemetry;
+      }
+    }
+
     // Default ray endpoint in open space
     let endX = startX + rayDirX * MAGIC_FINGER_TUNING.RAY_FREE_DISTANCE_PX;
     let endY = startY + rayDirY * MAGIC_FINGER_TUNING.RAY_FREE_DISTANCE_PX;
@@ -672,6 +753,9 @@ export class MagicFingerController {
         releasedThisFrame = true;
         this.lastHitY = null;
         this.lastHitTime = 0;
+        this.holdSteadyStartTime = 0;
+        this.holdSteadyValue = null;
+        this.chargeProgress = 0;
       } else {
         // Control tempo continuously within track bounds
         const clampedY = Math.max(tempoTrackTop, Math.min(tempoTrackBottom, hitY));
@@ -689,6 +773,43 @@ export class MagicFingerController {
         this.lastHitScreenY = endY;
         rayTargetType = "tempo";
         this.state = "tempo_acquired";
+
+        // Hold-to-lock logic for tempo
+        if (MAGIC_FINGER_TUNING.HOLD_LOCK_ENABLED) {
+          if (this.holdSteadyValue === null || Math.abs(newBpm - this.holdSteadyValue) > MAGIC_FINGER_TUNING.HOLD_VALUE_TOLERANCE_BPM) {
+            this.holdSteadyStartTime = now;
+            this.holdSteadyValue = newBpm;
+            this.chargeProgress = 0;
+          } else {
+            const steadyDuration = now - this.holdSteadyStartTime;
+            if (steadyDuration >= MAGIC_FINGER_TUNING.HOLD_STEADY_TIME_MS) {
+              const chargeElapsed = steadyDuration - MAGIC_FINGER_TUNING.HOLD_STEADY_TIME_MS;
+              this.chargeProgress = Math.min(1.0, chargeElapsed / Math.max(1, MAGIC_FINGER_TUNING.HOLD_CHARGE_DURATION_MS));
+              if (this.chargeProgress >= 1.0) {
+                // Lock in!
+                this.isLockedIn = true;
+                this.lockedTarget = "tempo";
+                this.lockedValue = newBpm;
+                this.activeTarget = null;
+                this.state = "idle";
+                lockInEvent = {
+                  target: "tempo",
+                  value: newBpm,
+                  screenX: endX,
+                  screenY: endY,
+                  timestamp: now,
+                  source: "hold",
+                };
+                this.callbacks.onLockIn?.(lockInEvent);
+                this.holdSteadyStartTime = 0;
+                this.holdSteadyValue = null;
+                this.chargeProgress = 0;
+              }
+            } else {
+              this.chargeProgress = 0;
+            }
+          }
+        }
       }
     } else if (this.activeTarget === "dynamics" && dynamicsTrackRect) {
       const isVertical = dynamicsTrackRect.height > dynamicsTrackRect.width;
@@ -761,6 +882,9 @@ export class MagicFingerController {
           releasedThisFrame = true;
           this.lastHitY = null;
           this.lastHitTime = 0;
+          this.holdSteadyStartTime = 0;
+          this.holdSteadyValue = null;
+          this.chargeProgress = 0;
         } else {
           // Control continuous dynamics: Top is 1.0 (fff), Bottom is 0.0 (pp)
           const clampedY = Math.max(dynTrackTop, Math.min(dynTrackBottom, hitY));
@@ -777,6 +901,43 @@ export class MagicFingerController {
           this.lastHitScreenY = endY;
           rayTargetType = "dynamics";
           this.state = "dynamics_acquired";
+
+          // Hold-to-lock logic for dynamics (vertical)
+          if (MAGIC_FINGER_TUNING.HOLD_LOCK_ENABLED) {
+            if (this.holdSteadyValue === null || Math.abs(continuousVal - this.holdSteadyValue) > MAGIC_FINGER_TUNING.HOLD_VALUE_TOLERANCE_DYN) {
+              this.holdSteadyStartTime = now;
+              this.holdSteadyValue = continuousVal;
+              this.chargeProgress = 0;
+            } else {
+              const steadyDuration = now - this.holdSteadyStartTime;
+              if (steadyDuration >= MAGIC_FINGER_TUNING.HOLD_STEADY_TIME_MS) {
+                const chargeElapsed = steadyDuration - MAGIC_FINGER_TUNING.HOLD_STEADY_TIME_MS;
+                this.chargeProgress = Math.min(1.0, chargeElapsed / Math.max(1, MAGIC_FINGER_TUNING.HOLD_CHARGE_DURATION_MS));
+                if (this.chargeProgress >= 1.0) {
+                  // Lock in!
+                  this.isLockedIn = true;
+                  this.lockedTarget = "dynamics";
+                  this.lockedValue = continuousVal;
+                  this.activeTarget = null;
+                  this.state = "idle";
+                  lockInEvent = {
+                    target: "dynamics",
+                    value: continuousVal,
+                    screenX: endX,
+                    screenY: endY,
+                    timestamp: now,
+                    source: "hold",
+                  };
+                  this.callbacks.onLockIn?.(lockInEvent);
+                  this.holdSteadyStartTime = 0;
+                  this.holdSteadyValue = null;
+                  this.chargeProgress = 0;
+                }
+              } else {
+                this.chargeProgress = 0;
+              }
+            }
+          }
         }
       } else {
         // Project ray onto horizontal line of bottom dynamics ribbon
@@ -807,6 +968,9 @@ export class MagicFingerController {
           this.lastDynamic = this.lastValidInBoundsDynamic;
           this.callbacks.onDynamicChange?.(this.lastValidInBoundsDynamic);
           releasedThisFrame = true;
+          this.holdSteadyStartTime = 0;
+          this.holdSteadyValue = null;
+          this.chargeProgress = 0;
         } else {
           // Control continuous dynamics
           const clampedX = Math.max(dynTrackLeft, Math.min(dynTrackRight, hitX));
@@ -821,6 +985,43 @@ export class MagicFingerController {
           endY = dynTrackCenterY;
           rayTargetType = "dynamics";
           this.state = "dynamics_acquired";
+
+          // Hold-to-lock logic for dynamics (horizontal)
+          if (MAGIC_FINGER_TUNING.HOLD_LOCK_ENABLED) {
+            if (this.holdSteadyValue === null || Math.abs(continuousVal - this.holdSteadyValue) > MAGIC_FINGER_TUNING.HOLD_VALUE_TOLERANCE_DYN) {
+              this.holdSteadyStartTime = now;
+              this.holdSteadyValue = continuousVal;
+              this.chargeProgress = 0;
+            } else {
+              const steadyDuration = now - this.holdSteadyStartTime;
+              if (steadyDuration >= MAGIC_FINGER_TUNING.HOLD_STEADY_TIME_MS) {
+                const chargeElapsed = steadyDuration - MAGIC_FINGER_TUNING.HOLD_STEADY_TIME_MS;
+                this.chargeProgress = Math.min(1.0, chargeElapsed / Math.max(1, MAGIC_FINGER_TUNING.HOLD_CHARGE_DURATION_MS));
+                if (this.chargeProgress >= 1.0) {
+                  // Lock in!
+                  this.isLockedIn = true;
+                  this.lockedTarget = "dynamics";
+                  this.lockedValue = continuousVal;
+                  this.activeTarget = null;
+                  this.state = "idle";
+                  lockInEvent = {
+                    target: "dynamics",
+                    value: continuousVal,
+                    screenX: endX,
+                    screenY: endY,
+                    timestamp: now,
+                    source: "hold",
+                  };
+                  this.callbacks.onLockIn?.(lockInEvent);
+                  this.holdSteadyStartTime = 0;
+                  this.holdSteadyValue = null;
+                  this.chargeProgress = 0;
+                }
+              } else {
+                this.chargeProgress = 0;
+              }
+            }
+          }
         }
       }
     }
@@ -875,6 +1076,9 @@ export class MagicFingerController {
               this.callbacks.onBpmChange?.(this.lastBpm);
               this.currentHoverTarget = null;
               this.hoverStartTime = 0;
+              this.holdSteadyStartTime = now;
+              this.holdSteadyValue = this.lastBpm;
+              this.chargeProgress = 0;
             }
           }
         }
@@ -931,6 +1135,9 @@ export class MagicFingerController {
                 this.callbacks.onDynamicChange?.(hitVal);
                 this.currentHoverTarget = null;
                 this.hoverStartTime = 0;
+                this.holdSteadyStartTime = now;
+                this.holdSteadyValue = hitVal;
+                this.chargeProgress = 0;
               }
             }
           }
@@ -965,6 +1172,9 @@ export class MagicFingerController {
                 this.callbacks.onDynamicChange?.(hitVal);
                 this.currentHoverTarget = null;
                 this.hoverStartTime = 0;
+                this.holdSteadyStartTime = now;
+                this.holdSteadyValue = hitVal;
+                this.chargeProgress = 0;
               }
             }
           }
@@ -1071,10 +1281,11 @@ export class MagicFingerController {
       isActive: true,
       isAcquired,
       targetType: rayTargetType,
+      isDimmed: this.isLockedIn,
     };
 
     const telemetry: MagicFingerTelemetry = {
-      isActive: true,
+      isActive: !this.isLockedIn,
       state: this.state,
       pointingHandIndex: pointingSample.handIndex,
       hoverTarget: this.hoverTarget,
@@ -1083,6 +1294,10 @@ export class MagicFingerController {
       liveBpm,
       liveDynamic,
       ray,
+      isLockedIn: this.isLockedIn,
+      lockInEvent,
+      chargeProgress: this.chargeProgress,
+      chargeTarget: this.chargeProgress > 0 ? (this.activeTarget as "tempo" | "dynamics") : null,
     };
 
     this.callbacks.onTelemetry?.(telemetry);

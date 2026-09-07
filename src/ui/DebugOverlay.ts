@@ -22,6 +22,7 @@
 import type { ClockState, TapRejectionReason } from "../clock/clockTypes";
 import type { TempoMode } from "../clock/ConductorClock";
 import type { DynamicsTelemetry, DSPBypassFlags, VelocityDecomposition } from "../audio/dynamicsTypes";
+import { MAGIC_FINGER_TUNING } from "../camera/MagicFingerController";
 
 interface DebugSnapshot {
   tempoMode: string;
@@ -271,6 +272,45 @@ export class DebugOverlay {
     scoreVisCb?.addEventListener("change", () => {
       if (this.onScoreVisualizerToggle) {
         this.onScoreVisualizerToggle(scoreVisCb.checked);
+      }
+    });
+
+    // Wire up Magic Finger Hold to Lock controls
+    const holdLockCb = this.container.querySelector<HTMLInputElement>("#dbg-mf-hold-lock-cb");
+    const shakeLockCb = this.container.querySelector<HTMLInputElement>("#dbg-mf-shake-lock-cb");
+    const holdDelaySlider = this.container.querySelector<HTMLInputElement>("#dbg-mf-hold-delay-slider");
+    const holdDelayVal = this.container.querySelector<HTMLElement>("#dbg-mf-hold-delay-val");
+    const chargeDurSlider = this.container.querySelector<HTMLInputElement>("#dbg-mf-charge-dur-slider");
+    const chargeDurVal = this.container.querySelector<HTMLElement>("#dbg-mf-charge-dur-val");
+    const toleranceSlider = this.container.querySelector<HTMLInputElement>("#dbg-mf-tolerance-slider");
+    const toleranceVal = this.container.querySelector<HTMLElement>("#dbg-mf-tolerance-val");
+
+    holdLockCb?.addEventListener("change", () => {
+      MAGIC_FINGER_TUNING.HOLD_LOCK_ENABLED = holdLockCb.checked;
+    });
+
+    shakeLockCb?.addEventListener("change", () => {
+      MAGIC_FINGER_TUNING.SHAKE_LOCK_ENABLED = shakeLockCb.checked;
+    });
+
+    holdDelaySlider?.addEventListener("input", () => {
+      const valSec = parseFloat(holdDelaySlider.value);
+      MAGIC_FINGER_TUNING.HOLD_STEADY_TIME_MS = Math.round(valSec * 1000);
+      if (holdDelayVal) holdDelayVal.textContent = `${valSec.toFixed(2)}s`;
+    });
+
+    chargeDurSlider?.addEventListener("input", () => {
+      const valSec = parseFloat(chargeDurSlider.value);
+      MAGIC_FINGER_TUNING.HOLD_CHARGE_DURATION_MS = Math.round(valSec * 1000);
+      if (chargeDurVal) chargeDurVal.textContent = `${valSec.toFixed(2)}s`;
+    });
+
+    toleranceSlider?.addEventListener("input", () => {
+      const valBpm = parseInt(toleranceSlider.value, 10);
+      MAGIC_FINGER_TUNING.HOLD_VALUE_TOLERANCE_BPM = valBpm;
+      MAGIC_FINGER_TUNING.HOLD_VALUE_TOLERANCE_DYN = valBpm * 0.009;
+      if (toleranceVal) {
+        toleranceVal.textContent = `±${valBpm} BPM / ±${(valBpm * 0.009).toFixed(3)} Dyn`;
       }
     });
 
@@ -975,6 +1015,45 @@ export class DebugOverlay {
           <input type="checkbox" id="dbg-score-visualizer-cb" checked style="accent-color:#ffd56b; margin-right:6px;">
           <span><strong>🎼 Spotlight Score Visualizer</strong> (2-Bar VexFlow Notation)</span>
         </label>
+      </div>
+
+      <!-- Magic Finger: Hold to Lock & Sensitivity Controls -->
+      <div class="debug-section-header" style="margin-top: 10px;" title="Configure Magic Finger Hold-to-Lock and Shake-to-Lock parameters">MAGIC FINGER: HOLD TO LOCK</div>
+      <div style="
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 213, 107, 0.2);
+        margin-top: 4px;
+      ">
+        <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Enable Hold Steady to Lock interaction on Tempo and Dynamics controls">
+          <input type="checkbox" id="dbg-mf-hold-lock-cb" checked style="accent-color:#ffd56b; margin-right:6px;">
+          <span><strong>🔒 Enable Hold to Lock</strong></span>
+        </label>
+        <label class="debug-checkbox-label" style="margin:0; cursor:pointer;" title="Enable Fist/Hand Shake to Lock gesture">
+          <input type="checkbox" id="dbg-mf-shake-lock-cb" checked style="accent-color:#ffd56b; margin-right:6px;">
+          <span><strong>👋 Enable Shake to Lock</strong></span>
+        </label>
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+          <span>Hold Steady Delay (before charging):</span>
+          <span id="dbg-mf-hold-delay-val" style="color:#ffd56b; font-weight:bold;">0.85s</span>
+        </div>
+        <input type="range" id="dbg-mf-hold-delay-slider" min="0.3" max="2.0" step="0.05" value="0.85" style="accent-color:#ffd56b; width:100%;">
+
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+          <span>Charge Duration (ring fill speed):</span>
+          <span id="dbg-mf-charge-dur-val" style="color:#ffd56b; font-weight:bold;">0.40s</span>
+        </div>
+        <input type="range" id="dbg-mf-charge-dur-slider" min="0.1" max="1.0" step="0.05" value="0.40" style="accent-color:#ffd56b; width:100%;">
+
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+          <span>Jitter Tolerance (steady threshold):</span>
+          <span id="dbg-mf-tolerance-val" style="color:#ffd56b; font-weight:bold;">±4 BPM / ±0.036 Dyn</span>
+        </div>
+        <input type="range" id="dbg-mf-tolerance-slider" min="1" max="10" step="1" value="4" style="accent-color:#ffd56b; width:100%;">
       </div>
 
       <!-- Spotlight Score Visualizer Diagnostics -->

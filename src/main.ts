@@ -595,13 +595,16 @@ const controller = new ExperienceController({
     // Update prompt text if in magic mode
     if (controller.getTempoMode() === "magic") {
       if (telemetry.isLockedIn) {
-        promptEl.textContent = `✨ Locked in! Shake detected • Point elsewhere or retract finger to repoint`;
+        promptEl.textContent = `✨ Locked In • Point away to continue or retract finger`;
+      } else if (telemetry.chargeProgress && telemetry.chargeProgress > 0) {
+        const pct = Math.round(telemetry.chargeProgress * 100);
+        promptEl.textContent = `⚡ Locking in (${pct}%) • Hold steady...`;
       } else if (isAcquired) {
         if (targetType === "tempo") {
-          promptEl.textContent = `👆 Aiming at Tempo Gauge • Move finger up/down to adjust BPM (${telemetry.liveBpm ?? controller.getIndicatedBpm()} BPM)`;
+          promptEl.textContent = `👆 Adjusting Tempo (${telemetry.liveBpm ?? controller.getIndicatedBpm()} BPM) • Hold steady to lock • Point away to continue`;
         } else if (targetType === "dynamics") {
           const pct = Math.round((telemetry.liveDynamic ?? 0.5) * 100);
-          promptEl.textContent = `👆 Aiming at Dynamics Gauge • Move finger up/down to adjust Dynamics (${pct}%)`;
+          promptEl.textContent = `👆 Adjusting Dynamics (${pct}%) • Hold steady to lock • Point away to continue`;
         } else if (telemetry.targetedSectionId) {
           promptEl.textContent = `👆 Pointing at Orchestra • Section spotlighted!`;
         }

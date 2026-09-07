@@ -554,10 +554,11 @@ describe("MagicFingerController", () => {
     expect(controller.getLockedTarget()).toBe("tempo");
     expect(telShake?.isLockedIn).toBe(true);
     expect(telShake?.isActive).toBe(false);
-    expect(telShake?.ray).toBeNull();
+    expect(telShake?.ray?.isDimmed).toBe(true);
     expect(onLockIn).toHaveBeenCalledWith(expect.objectContaining({
       target: "tempo",
       value: 175,
+      source: "shake",
     }));
   });
 
@@ -708,6 +709,186 @@ describe("MagicFingerController", () => {
     }
 
     expect(onSpotlightChange).toHaveBeenCalledWith(null);
+  });
+
+  it("hold steady for 0.85s begins charging and completes lock-in", () => {
+    const onLockIn = vi.fn();
+    controller.setCallbacks({ onLockIn });
+
+    // Step 1: Acquire tempo at 150 BPM
+    const aimSample = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+    let tel = controller.update({
+      samples: [aimSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+    expect(tel.activeTarget).toBe("tempo");
+    expect(tel.chargeProgress).toBe(0);
+
+    // Step 2: Hold steady for 500ms (steadyDuration < 850ms -> not charging yet)
+    tel = controller.update({
+      samples: [aimSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1500,
+    });
+    expect(tel.chargeProgress).toBe(0);
+    expect(controller.isLockInActive()).toBe(false);
+
+    // Step 3: At 1050ms (steadyDuration = 1050ms > 850ms -> 200ms of charge elapsed / 400ms = 50%)
+    tel = controller.update({
+      samples: [aimSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 2050,
+    });
+    expect(tel.chargeProgress).toBeCloseTo(0.5, 1);
+    expect(tel.chargeTarget).toBe("tempo");
+    expect(controller.isLockInActive()).toBe(false);
+
+    // Step 4: At 1250ms+ (steadyDuration >= 1250ms -> charge completes 100% and triggers lock-in)
+    tel = controller.update({
+      samples: [aimSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 2260,
+    });
+    expect(controller.isLockInActive()).toBe(true);
+    expect(controller.getLockedTarget()).toBe("tempo");
+    expect(tel.isLockedIn).toBe(true);
+    expect(tel.ray?.isDimmed).toBe(true);
+    expect(onLockIn).toHaveBeenCalledWith(expect.objectContaining({
+      target: "tempo",
+      source: "hold",
+    }));
+  });
+
+  it("normal jitter within tolerance allows hold-to-lock to complete", () => {
+    const onLockIn = vi.fn();
+    controller.setCallbacks({ onLockIn });
+
+    // Acquire tempo
+    const aimSample = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+    controller.update({
+      samples: [aimSample],
+      indicatedBpm: 140,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+
+    // Small jitter between 139 and 141 BPM (within ±4 BPM tolerance)
+    const jitterOffsets = [0, 0.001, -0.001, 0.0015, -0.001];
+    let tel;
+    for (let i = 1; i <= 30; i++) {
+      const offset = jitterOffsets[i % jitterOffsets.length];
+      const s = createSample("Pointing", 0.8, 0.5 + offset, 0.4, 0.5);
+      tel = controller.update({
+        samples: [s],
+        indicatedBpm: 140,
+        continuousDynamic: 0.5,
+        isMirrored: false,
+        nowMs: 1000 + i * 50, // Advances to 2500ms (1500ms steady)
+      });
+    }
+
+    expect(controller.isLockInActive()).toBe(true);
+    expect(onLockIn).toHaveBeenCalledWith(expect.objectContaining({
+      target: "tempo",
+      source: "hold",
+    }));
+  });
+
+  it("deliberate adjustment resets charge immediately", () => {
+    // Acquire tempo
+    const aimSample = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+    controller.update({
+      samples: [aimSample],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+
+    // Hold for 1000ms (charging is active, ~37.5%)
+    let tel = controller.update({
+      samples: [aimSample],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 2000,
+    });
+    expect(tel.chargeProgress).toBeGreaterThan(0.3);
+
+    // Deliberate jump: move finger downward significantly
+    const movedSample = createSample("Pointing", 0.8, 0.8, 0.4, 0.5);
+    tel = controller.update({
+      samples: [movedSample],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 2050,
+    });
+
+    // Charge progress must reset immediately
+    expect(tel.chargeProgress).toBe(0);
+    expect(controller.isLockInActive()).toBe(false);
+  });
+
+  it("moving finger up to orchestra after locking rearms laser without retracting finger", () => {
+    const onSpotlightChange = vi.fn();
+    controller.setCallbacks({ onSpotlightChange });
+
+    // Step 1: Lock in tempo
+    const aimSample = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+    controller.update({
+      samples: [aimSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+    controller.update({
+      samples: [aimSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 2300,
+    });
+    expect(controller.isLockInActive()).toBe(true);
+
+    // Step 2: While in locked zone, laser is dimmed and BPM is frozen
+    const telLocked = controller.update({
+      samples: [aimSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 2350,
+    });
+    expect(telLocked.isLockedIn).toBe(true);
+    expect(telLocked.ray?.isDimmed).toBe(true);
+
+    // Step 3: Move finger to point UP into the orchestra (tipY = 0.2, pipY = 0.5 -> rayDirY < -0.10)
+    const upSample = createSample("Pointing_Up", 0.5, 0.2, 0.5, 0.5);
+    const telRearm = controller.update({
+      samples: [upSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 2400,
+    });
+
+    // Laser rearms immediately, lock clears, and orchestra section is targeted
+    expect(controller.isLockInActive()).toBe(false);
+    expect(telRearm.isLockedIn).toBe(false);
+    expect(telRearm.ray?.isDimmed).toBe(false);
+    expect(telRearm.state).toBe("instrument_targeted");
+    expect(onSpotlightChange).toHaveBeenCalledWith(expect.any(String));
   });
 });
 

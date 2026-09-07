@@ -40,6 +40,7 @@ export class CameraPreviewOverlay {
     startTime: number;
     particles: Array<{ vx: number; vy: number; size: number; color: string; rotation: number; rotSpeed: number }>;
   }> = [];
+  private lastLaserPulseTime = 0;
 
   constructor(options?: CameraPreviewOverlayOptions) {
     this.mirror = options?.mirror ?? true;
@@ -409,7 +410,7 @@ export class CameraPreviewOverlay {
     });
 
     // 7. Render Focus Mode or Magic Finger pointer & targeting visual cues
-    const isMagicActive = Boolean(magicFingerTelemetry && magicFingerTelemetry.isActive && magicFingerTelemetry.ray);
+    const isMagicActive = Boolean(magicFingerTelemetry && (magicFingerTelemetry.isActive || magicFingerTelemetry.isLockedIn) && magicFingerTelemetry.ray);
     const isFocusActive = Boolean(focusTelemetry && focusTelemetry.isActive);
     const isLaserActive = (isMagicActive || isFocusActive) && samples.length > 0;
 
@@ -443,6 +444,8 @@ export class CameraPreviewOverlay {
           const targetGlow = stageOverlay.querySelector("#spotlight-stage-target-glow") as SVGCircleElement | null;
           const targetRing = stageOverlay.querySelector("#spotlight-stage-target-ring") as SVGCircleElement | null;
           const targetPip = stageOverlay.querySelector("#spotlight-stage-target-pip") as SVGCircleElement | null;
+          const chargeBg = stageOverlay.querySelector("#spotlight-stage-charge-bg") as SVGCircleElement | null;
+          const chargeRing = stageOverlay.querySelector("#spotlight-stage-charge-ring") as SVGCircleElement | null;
 
           if (outerRay && mainRay && coreRay && targetGlow && targetRing && targetPip) {
             let stageStartX = 0;
@@ -501,6 +504,16 @@ export class CameraPreviewOverlay {
               isAcquired = focusTelemetry.state === "grabbed";
             }
 
+            // Lock-in laser pulse feedback
+            if (magicFingerTelemetry?.lockInEvent && this.lastLaserPulseTime !== magicFingerTelemetry.lockInEvent.timestamp) {
+              this.lastLaserPulseTime = magicFingerTelemetry.lockInEvent.timestamp;
+              this.triggerSparkleVFX(stageEndX, stageEndY);
+            }
+
+            const pulseElapsed = now - this.lastLaserPulseTime;
+            const isLaserPulseActive = pulseElapsed < 320;
+            const pulseIntensity = isLaserPulseActive ? Math.max(0, 1 - pulseElapsed / 320) : 0;
+
             outerRay.setAttribute("x1", stageStartX.toFixed(1));
             outerRay.setAttribute("y1", stageStartY.toFixed(1));
             outerRay.setAttribute("x2", stageEndX.toFixed(1));
@@ -531,8 +544,53 @@ export class CameraPreviewOverlay {
             targetRing.style.display = showImpact ? "" : "none";
             targetPip.style.display = showImpact ? "" : "none";
 
-            // Visual styling: energetic gold when acquired, luminous cyan-gold when pointing/hovering
-            if (isAcquired) {
+            // Render Hold-to-Lock Charging Ring
+            if (chargeBg && chargeRing) {
+              const isCharging = Boolean(
+                magicFingerTelemetry?.chargeProgress &&
+                magicFingerTelemetry.chargeProgress > 0 &&
+                !magicFingerTelemetry.ray?.isDimmed
+              );
+              if (isCharging) {
+                chargeBg.setAttribute("cx", stageEndX.toFixed(1));
+                chargeBg.setAttribute("cy", stageEndY.toFixed(1));
+                chargeBg.style.display = "";
+
+                chargeRing.setAttribute("cx", stageEndX.toFixed(1));
+                chargeRing.setAttribute("cy", stageEndY.toFixed(1));
+                chargeRing.setAttribute("transform", `rotate(-90 ${stageEndX.toFixed(1)} ${stageEndY.toFixed(1)})`);
+                const circumference = 150.8;
+                const progress = Math.max(0, Math.min(1, magicFingerTelemetry?.chargeProgress || 0));
+                const offset = circumference * (1 - progress);
+                chargeRing.setAttribute("stroke-dashoffset", offset.toFixed(1));
+                chargeRing.style.display = "";
+              } else {
+                chargeBg.style.display = "none";
+                chargeRing.style.display = "none";
+              }
+            }
+
+            // Visual styling: bright pulse on lock, dimmed/dark when locked, energetic gold when acquired, luminous cyan-gold when pointing/hovering
+            if (isLaserPulseActive) {
+              outerRay.setAttribute("stroke", `rgba(255, 255, 255, ${(0.95 * pulseIntensity).toFixed(2)})`);
+              outerRay.setAttribute("stroke-width", (12 + pulseIntensity * 16).toFixed(1));
+              mainRay.setAttribute("stroke", "#ffffff");
+              mainRay.setAttribute("stroke-width", (4.5 + pulseIntensity * 6).toFixed(1));
+              coreRay.setAttribute("stroke", "#ffffff");
+              coreRay.setAttribute("stroke-width", "3");
+              targetGlow.setAttribute("r", (24 + pulseIntensity * 20).toFixed(1));
+              targetGlow.setAttribute("fill", "rgba(255, 255, 255, 0.85)");
+            } else if (magicFingerTelemetry?.ray?.isDimmed) {
+              outerRay.setAttribute("stroke", "rgba(71, 85, 105, 0.22)");
+              outerRay.setAttribute("stroke-width", "6");
+              mainRay.setAttribute("stroke", "rgba(100, 116, 139, 0.45)");
+              mainRay.setAttribute("stroke-width", "2.5");
+              coreRay.setAttribute("stroke", "rgba(148, 163, 184, 0.30)");
+              coreRay.setAttribute("stroke-width", "1");
+              targetGlow.style.display = "none";
+              targetRing.style.display = "none";
+              targetPip.style.display = "none";
+            } else if (isAcquired) {
               outerRay.setAttribute("stroke", "rgba(255, 213, 107, 0.40)");
               outerRay.setAttribute("stroke-width", "12");
               mainRay.setAttribute("stroke", "#ffd56b");
