@@ -375,7 +375,7 @@ export class ExperienceController {
 
     // 2. Kick off MIDI score load
     coordinator.updateTask("score", "loading");
-    const scorePromise = this.midiScore.load(piece.midiUrl)
+    const scorePromise = this.midiScore.load(piece.midiUrl, piece.trackPrograms)
       .then(() => {
         this.transport.setEvents(this.midiScore.getEvents(), this.midiScore.getMetadata().totalBeats);
         const beatsPerTap = this.getEffectiveBeatsPerTap();

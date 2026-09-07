@@ -16,6 +16,7 @@
 
 import { Midi } from "@tonejs/midi";
 import type { ScoreEvent, ScoreMetadata } from "./scoreTypes";
+import { inferProgramFromTrackName } from "../audio/instruments";
 
 export class MidiScore {
   private events: ScoreEvent[] = [];
@@ -23,16 +24,17 @@ export class MidiScore {
 
   /**
    * Load and parse a MIDI file from a URL (e.g. "/midi/Eine-Kleine-Nachtmusik1.mid").
+   * Optional trackProgramMap allows explicit offline mapping of track indices to GM programs.
    * Returns self for chaining.
    */
-  async load(url: string): Promise<this> {
+  async load(url: string, trackProgramMap?: Record<number, number>): Promise<this> {
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch MIDI file: ${url} (${response.status})`);
     }
     const buffer = await response.arrayBuffer();
     const midi = new Midi(buffer);
-    this.parseMidi(midi);
+    this.parseMidi(midi, trackProgramMap);
     return this;
   }
 
@@ -49,7 +51,7 @@ export class MidiScore {
 
   // ── Private ─────────────────────────────────────────────────────────────
 
-  private parseMidi(midi: Midi): void {
+  private parseMidi(midi: Midi, trackProgramMap?: Record<number, number>): void {
     const ppq = midi.header.ppq;
     const events: ScoreEvent[] = [];
 
@@ -69,10 +71,26 @@ export class MidiScore {
 
     let maxBeat = 0;
     let noteCounter = 0;
+    let currentTrackGroupName = "";
 
     midi.tracks.forEach((track, trackIndex) => {
-      const trackId = track.name || `track_${trackIndex}`;
-      const program = track.instrument.number;
+      if (track.name && track.name.trim() !== "") {
+        currentTrackGroupName = track.name.trim();
+      }
+      const effectiveTrackName = (track.name && track.name.trim() !== "")
+        ? track.name.trim()
+        : currentTrackGroupName;
+      const trackId = effectiveTrackName || `track_${trackIndex}`;
+
+      let program = track.instrument.number;
+      if (trackProgramMap && trackProgramMap[trackIndex] !== undefined) {
+        program = trackProgramMap[trackIndex];
+      } else if (program === 0 && effectiveTrackName) {
+        const inferred = inferProgramFromTrackName(effectiveTrackName);
+        if (inferred !== null) {
+          program = inferred;
+        }
+      }
 
       track.notes.forEach(note => {
         noteCounter++;

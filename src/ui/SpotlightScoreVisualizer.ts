@@ -538,153 +538,133 @@ export class SpotlightScoreVisualizer {
 
     try {
       const piece = this.getCurrentPiece();
-      const section = piece?.sections.find(s => s.id === this.currentSectionId);
-      const sectionName = section?.name || "Instrument";
       const clef = getClefForSection(this.currentSectionId);
       const keySig = piece?.keySignature || "C";
 
-    const transport = this.getTransport();
-    const cursorBeat = transport ? transport.getCursorBeat() : 0;
-    const currentBar = Math.floor(Math.max(0, cursorBeat) / this.beatsPerBar);
+      const transport = this.getTransport();
+      const cursorBeat = transport ? transport.getCursorBeat() : 0;
+      const currentBar = Math.floor(Math.max(0, cursorBeat) / this.beatsPerBar);
 
-    this.lastRenderedBar = currentBar;
+      this.lastRenderedBar = currentBar;
 
-    const bar1 = currentBar;
-    const bar2 = currentBar + 1;
-    const bar1StartBeat = bar1 * this.beatsPerBar;
-    const bar1EndBeat = (bar1 + 1) * this.beatsPerBar;
-    const bar2StartBeat = bar2 * this.beatsPerBar;
-    const bar2EndBeat = (bar2 + 1) * this.beatsPerBar;
+      const bar1 = currentBar;
+      const bar2 = currentBar + 1;
+      const bar1StartBeat = bar1 * this.beatsPerBar;
+      const bar1EndBeat = (bar1 + 1) * this.beatsPerBar;
+      const bar2StartBeat = bar2 * this.beatsPerBar;
+      const bar2EndBeat = (bar2 + 1) * this.beatsPerBar;
 
-    let clefBadge = "Treble";
-    if (clef === "bass") clefBadge = "Bass";
-    else if (clef === "alto") clefBadge = "Alto";
+      // Clean minimal score card containing just the engraved notation
+      this.container.innerHTML = `<div class="score-svg-wrap"></div>`;
 
-    // Set up card structure with clean header (no "Spotlight score" text)
-    this.container.innerHTML = `
-      <div class="score-card-header">
-        <div class="score-card-title-wrap">
-          <span class="score-card-icon">🎻</span>
-          <span class="score-card-section-name">${sectionName}</span>
-          <span class="score-card-badge clef-badge">${clefBadge}</span>
-          ${keySig !== "C" ? `<span class="score-card-badge key-badge">${keySig}</span>` : ""}
-        </div>
-        <div class="score-card-meta">
-          <span class="score-card-badge bar-badge">m. ${bar1 + 1}–${bar2 + 1}</span>
-        </div>
-      </div>
-      <div class="score-svg-wrap"></div>
-    `;
+      const svgWrap = this.container.querySelector(".score-svg-wrap") as HTMLElement;
+      if (!svgWrap) return;
 
-    const svgWrap = this.container.querySelector(".score-svg-wrap") as HTMLElement;
-    if (!svgWrap) return;
+      // Dimensions: generous width and height with ample vertical clearance for high stems
+      const totalW = Math.max(520, Math.min(600, this.container.clientWidth || 580));
+      const totalH = 145;
+      const staveY = 28;
+      const availableTotalW = totalW - 20;
 
-    // Dimensions: generous width to fit all notes comfortably
-    const totalW = Math.max(520, Math.min(600, this.container.clientWidth || 580));
-    const totalH = 100;
-    const availableTotalW = totalW - 20;
+      // Allocate preamble space for stave 1 (Clef ~35px, KeySig ~20-30px, TimeSig ~30px)
+      let preambleWidth = 72;
+      if (keySig && keySig !== "C") {
+        preambleWidth += 22;
+      }
+      if (this.timeSignatureText) {
+        preambleWidth += 22;
+      }
+      // Available note width across both bars
+      const noteAreaWidth = Math.floor((availableTotalW - preambleWidth) / 2);
+      const bar1Width = noteAreaWidth + preambleWidth;
+      const bar2Width = availableTotalW - bar1Width;
 
-    // Allocate preamble space for stave 1 (Clef ~35px, KeySig ~20-30px, TimeSig ~30px)
-    let preambleWidth = 72;
-    if (keySig && keySig !== "C") {
-      preambleWidth += 22;
+      // Initialize VexFlow SVG Renderer
+      const renderer = new Renderer(svgWrap as HTMLDivElement, Renderer.Backends.SVG);
+      renderer.resize(totalW, totalH);
+      const context = renderer.getContext();
+
+      // Stave 1 (Bar 1) with Clef, Key Signature, Time Signature, and Start/End barlines
+      const stave1 = new Stave(10, staveY, bar1Width);
+      stave1.addClef(clef);
+      if (keySig && keySig !== "C") {
+        stave1.addKeySignature(keySig);
+      }
+      stave1.addTimeSignature(this.timeSignatureText);
+      stave1.setBegBarType(Barline.type.SINGLE);
+      stave1.setEndBarType(Barline.type.SINGLE);
+      stave1.setContext(context).draw();
+
+      // Stave 2 (Bar 2) with Start barline and Double end barline
+      const stave2 = new Stave(10 + bar1Width, staveY, bar2Width);
+      stave2.setBegBarType(Barline.type.SINGLE);
+      stave2.setEndBarType(Barline.type.DOUBLE);
+      stave2.setContext(context).draw();
+
+      this.bar1Metrics = { startX: stave1.getNoteStartX(), endX: stave1.getNoteEndX() };
+      this.bar2Metrics = { startX: stave2.getNoteStartX(), endX: stave2.getNoteEndX() };
+
+      this.currentNoteRefs = [];
+
+      // Render Bar 1 notes
+      this.renderBarNotes(
+        bar1StartBeat,
+        bar1EndBeat,
+        clef,
+        stave1,
+        context,
+        keySig
+      );
+
+      // Render Bar 2 notes
+      this.renderBarNotes(
+        bar2StartBeat,
+        bar2EndBeat,
+        clef,
+        stave2,
+        context,
+        keySig
+      );
+
+      // Append Playhead Group directly into VexFlow's SVG element
+      const svgEl = svgWrap.querySelector("svg");
+      if (svgEl) {
+        const playheadGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        playheadGroup.id = "score-playhead";
+        playheadGroup.setAttribute("class", "score-playhead-group");
+
+        const glowBeam = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        glowBeam.setAttribute("x1", "0");
+        glowBeam.setAttribute("y1", "8");
+        glowBeam.setAttribute("x2", "0");
+        glowBeam.setAttribute("y2", "136");
+        glowBeam.setAttribute("stroke", "rgba(255, 213, 107, 0.40)");
+        glowBeam.setAttribute("stroke-width", "5");
+        glowBeam.setAttribute("stroke-linecap", "round");
+
+        const coreBeam = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        coreBeam.setAttribute("x1", "0");
+        coreBeam.setAttribute("y1", "6");
+        coreBeam.setAttribute("x2", "0");
+        coreBeam.setAttribute("y2", "138");
+        coreBeam.setAttribute("stroke", "#ffd56b");
+        coreBeam.setAttribute("stroke-width", "2");
+        coreBeam.setAttribute("stroke-linecap", "round");
+
+        const pip = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+        pip.setAttribute("points", "-3.5,6 3.5,6 0,12");
+        pip.setAttribute("fill", "#ffffff");
+
+        playheadGroup.appendChild(glowBeam);
+        playheadGroup.appendChild(coreBeam);
+        playheadGroup.appendChild(pip);
+
+        svgEl.appendChild(playheadGroup);
+      }
+    } catch (err) {
+      console.error(`[SpotlightScoreVisualizer] ❌ Error in render() for section "${this.currentSectionId}":`, err);
     }
-    if (this.timeSignatureText) {
-      preambleWidth += 22;
-    }
-    // Available note width across both bars
-    const noteAreaWidth = Math.floor((availableTotalW - preambleWidth) / 2);
-    const bar1Width = noteAreaWidth + preambleWidth;
-    const bar2Width = availableTotalW - bar1Width;
-
-    // Initialize VexFlow SVG Renderer
-    const renderer = new Renderer(svgWrap as HTMLDivElement, Renderer.Backends.SVG);
-    renderer.resize(totalW, totalH);
-    const context = renderer.getContext();
-
-    // Stave 1 (Bar 1) with Clef, Key Signature, Time Signature, and Start/End barlines
-    const stave1 = new Stave(10, 0, bar1Width);
-    stave1.addClef(clef);
-    if (keySig && keySig !== "C") {
-      stave1.addKeySignature(keySig);
-    }
-    stave1.addTimeSignature(this.timeSignatureText);
-    stave1.setBegBarType(Barline.type.SINGLE);
-    stave1.setEndBarType(Barline.type.SINGLE);
-    stave1.setSection(`m. ${bar1 + 1}`, 0);
-    stave1.setContext(context).draw();
-
-    // Stave 2 (Bar 2) with Start barline and Double end barline
-    const stave2 = new Stave(10 + bar1Width, 0, bar2Width);
-    stave2.setBegBarType(Barline.type.SINGLE);
-    stave2.setEndBarType(Barline.type.DOUBLE);
-    stave2.setSection(`m. ${bar2 + 1}`, 0);
-    stave2.setContext(context).draw();
-
-    this.bar1Metrics = { startX: stave1.getNoteStartX(), endX: stave1.getNoteEndX() };
-    this.bar2Metrics = { startX: stave2.getNoteStartX(), endX: stave2.getNoteEndX() };
-
-    this.currentNoteRefs = [];
-
-    // Render Bar 1 notes
-    this.renderBarNotes(
-      bar1StartBeat,
-      bar1EndBeat,
-      clef,
-      stave1,
-      context,
-      keySig
-    );
-
-    // Render Bar 2 notes
-    this.renderBarNotes(
-      bar2StartBeat,
-      bar2EndBeat,
-      clef,
-      stave2,
-      context,
-      keySig
-    );
-
-    // Append Playhead Group directly into VexFlow's SVG element
-    const svgEl = svgWrap.querySelector("svg");
-    if (svgEl) {
-      const playheadGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      playheadGroup.id = "score-playhead";
-      playheadGroup.setAttribute("class", "score-playhead-group");
-
-      const glowBeam = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      glowBeam.setAttribute("x1", "0");
-      glowBeam.setAttribute("y1", "15");
-      glowBeam.setAttribute("x2", "0");
-      glowBeam.setAttribute("y2", "88");
-      glowBeam.setAttribute("stroke", "rgba(255, 213, 107, 0.40)");
-      glowBeam.setAttribute("stroke-width", "5");
-      glowBeam.setAttribute("stroke-linecap", "round");
-
-      const coreBeam = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      coreBeam.setAttribute("x1", "0");
-      coreBeam.setAttribute("y1", "12");
-      coreBeam.setAttribute("x2", "0");
-      coreBeam.setAttribute("y2", "90");
-      coreBeam.setAttribute("stroke", "#ffd56b");
-      coreBeam.setAttribute("stroke-width", "2");
-      coreBeam.setAttribute("stroke-linecap", "round");
-
-      const pip = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-      pip.setAttribute("points", "-3.5,12 3.5,12 0,17");
-      pip.setAttribute("fill", "#ffffff");
-
-      playheadGroup.appendChild(glowBeam);
-      playheadGroup.appendChild(coreBeam);
-      playheadGroup.appendChild(pip);
-
-      svgEl.appendChild(playheadGroup);
-    }
-  } catch (err) {
-    console.error(`[SpotlightScoreVisualizer] ❌ Error in render() for section "${this.currentSectionId}":`, err);
   }
-}
 
   private renderBarNotes(
     startBeat: number,

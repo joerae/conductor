@@ -8,7 +8,7 @@
  * - Section note extraction and 2-bar measure windowing
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   getClefForSection,
   midiNoteToVexKey,
@@ -377,6 +377,95 @@ describe("SpotlightScoreVisualizer - Section Note Extraction & State", () => {
       // 2. Measure 9 last note must be strictly to the left of Measure 10 first note (no visual collision)
       expect(lastNoteM9X).toBeLessThan(firstNoteM10X);
       expect(firstNoteM10X - lastNoteM9X).toBeGreaterThanOrEqual(15);
+    });
+  });
+
+  describe("Clean Minimal Score Card & High Note Stem Clearance", () => {
+    it("renders clean score card without instrument header, clef badge, or measure counters", () => {
+      const originalDocument = (globalThis as any).document;
+
+      function makeElement(tag: string) {
+        const el: any = {
+          tagName: tag.toUpperCase(),
+          id: "",
+          className: "",
+          style: {},
+          setAttribute: vi.fn(),
+          setAttributeNS: vi.fn(),
+          getAttribute: vi.fn(() => null),
+          getContext: vi.fn(() => null),
+          classList: { add: vi.fn(), remove: vi.fn(), contains: () => false },
+          appendChild: vi.fn((child: any) => el.children.push(child)),
+          children: [] as any[],
+          innerHTML: "",
+          offsetWidth: 580,
+          offsetHeight: 145,
+          clientWidth: 580,
+          clientHeight: 145,
+          getBoundingClientRect: () => ({ left: 100, right: 680, top: 100, bottom: 245, width: 580, height: 145 }),
+          querySelector: (sel: string) => {
+            if (sel === ".score-svg-wrap" && el.innerHTML.includes("score-svg-wrap")) {
+              const wrap = makeElement("div");
+              wrap.className = "score-svg-wrap";
+              wrap.innerHTML = `<svg></svg>`;
+              wrap.querySelector = (s: string) => (s === "svg" ? makeElement("svg") : null);
+              return wrap;
+            }
+            if (sel === ".score-card-header" && el.innerHTML.includes("score-card-header")) return makeElement("div");
+            if (sel === ".score-card-section-name" && el.innerHTML.includes("score-card-section-name")) return makeElement("span");
+            if (sel === ".clef-badge" && el.innerHTML.includes("clef-badge")) return makeElement("span");
+            if (sel === ".bar-badge" && el.innerHTML.includes("bar-badge")) return makeElement("span");
+            return null;
+          },
+          querySelectorAll: () => [],
+        };
+        return el;
+      }
+
+      const mockPanel = makeElement("div");
+      mockPanel.id = "spotlight-score-panel";
+
+      (globalThis as any).document = {
+        getElementById: vi.fn((id: string) => (id === "spotlight-score-panel" ? mockPanel : null)),
+        createElement: vi.fn((tag: string) => makeElement(tag)),
+        createElementNS: vi.fn((_ns: string, tag: string) => makeElement(tag)),
+        querySelector: vi.fn(() => null),
+        body: makeElement("body"),
+      };
+
+      try {
+        const visualizer = new SpotlightScoreVisualizer({
+          getMidiScore: () => mockMidiScore as any,
+          getTransport: () => mockTransport as any,
+          getCurrentPiece: () => mockPiece,
+        });
+
+        visualizer.show("violin1");
+
+        // Verify HTML generated inside panel container
+        expect(mockPanel.innerHTML).toContain("score-svg-wrap");
+        expect(mockPanel.innerHTML).not.toContain("score-card-header");
+        expect(mockPanel.innerHTML).not.toContain("score-card-section-name");
+        expect(mockPanel.innerHTML).not.toContain("clef-badge");
+        expect(mockPanel.innerHTML).not.toContain("bar-badge");
+      } finally {
+        (globalThis as any).document = originalDocument;
+      }
+    });
+
+    it("ensures high note stems have adequate top headroom and do not clip out of bounds", () => {
+      const { Stave, StaveNote } = require("vexflow");
+      const staveY = 28;
+      const stave = new Stave(10, staveY, 300);
+
+      // High notes D6 and C#6 (e.g. measures 43-44 violin 1)
+      const d6Note = new StaveNote({ keys: ["d/6"], duration: "8", clef: "treble" });
+      d6Note.setStave(stave);
+
+      const extents = d6Note.getStemExtents();
+      // topY must be strictly greater than or equal to 0 (inside SVG viewport, not clipped)
+      expect(extents.topY).toBeGreaterThanOrEqual(0);
+      expect(extents.topY).toBe(8); // 8px clearance from top edge of SVG
     });
   });
 });

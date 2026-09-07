@@ -32,6 +32,8 @@ export interface PieceDefinition {
   sections: PieceSection[];
   /** Number of silent beats to count off before score starts (e.g. 1 for Beethoven 5 pickup). */
   leadInBeats?: number;
+  /** Optional explicit track index to GM program number mapping for MIDI files without program change events. */
+  trackPrograms?: Record<number, number>;
 }
 
 export const REPERTOIRE: PieceDefinition[] = [
