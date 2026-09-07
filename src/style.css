@@ -618,18 +618,18 @@ html, body {
   100% { box-shadow: 0 0 22px rgba(255, 90, 20, 0.85); }
 }
 
-/* Golden sparkle lock-in flash for Magic Finger gauges */
+/* Golden sparkle lock-in flash for Magic Finger gauges & handles */
 .sparkle-locked {
   animation: sparkleLockFlash 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
-  box-shadow: 0 0 35px rgba(255, 215, 0, 0.85), inset 0 0 20px rgba(255, 215, 0, 0.4) !important;
+  box-shadow: 0 0 35px rgba(255, 215, 0, 0.95), inset 0 0 20px rgba(255, 215, 0, 0.6) !important;
   border-color: #ffd700 !important;
 }
 
 @keyframes sparkleLockFlash {
   0% {
-    box-shadow: 0 0 50px rgba(255, 215, 0, 1.0), inset 0 0 30px rgba(255, 215, 0, 0.7);
+    box-shadow: 0 0 50px rgba(255, 215, 0, 1.0), inset 0 0 30px rgba(255, 215, 0, 0.8);
     border-color: #ffffff;
-    transform: scale(1.02);
+    transform: scale(1.15);
   }
   50% {
     box-shadow: 0 0 30px rgba(255, 215, 0, 0.75), inset 0 0 15px rgba(255, 215, 0, 0.35);
@@ -637,6 +637,72 @@ html, body {
   100% {
     box-shadow: none;
     transform: scale(1.0);
+  }
+}
+
+/* ── Magic Finger: Stage Lock-In Burst Animations (Right at locking circle) ── */
+.lock-shockwave-outer {
+  transform-origin: center;
+  animation: lockShockwaveOuter 0.55s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+
+.lock-shockwave-inner {
+  transform-origin: center;
+  animation: lockShockwaveInner 0.42s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+
+.lock-sparkle-star {
+  transform-origin: center;
+  animation: lockSparkleFly 0.62s cubic-bezier(0.12, 0.8, 0.25, 1) forwards;
+}
+
+@keyframes lockShockwaveOuter {
+  0% {
+    r: 24px;
+    stroke-width: 5px;
+    opacity: 1;
+    filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.9));
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    r: 80px;
+    stroke-width: 1px;
+    opacity: 0;
+  }
+}
+
+@keyframes lockShockwaveInner {
+  0% {
+    r: 12px;
+    stroke-width: 4px;
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 1));
+  }
+  100% {
+    r: 50px;
+    stroke-width: 1px;
+    opacity: 0;
+  }
+}
+
+@keyframes lockSparkleFly {
+  0% {
+    transform: translate(0, 0) scale(0.5) rotate(0deg);
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.95));
+  }
+  20% {
+    transform: translate(calc(var(--tx) * 0.3), calc(var(--ty) * 0.3)) scale(1.3) rotate(calc(var(--rot) * 0.25));
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(var(--tx), var(--ty)) scale(0) rotate(var(--rot));
+    opacity: 0;
   }
 }
 

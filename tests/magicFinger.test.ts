@@ -727,36 +727,36 @@ describe("MagicFingerController", () => {
     expect(tel.activeTarget).toBe("tempo");
     expect(tel.chargeProgress).toBe(0);
 
-    // Step 2: Hold steady for 500ms (steadyDuration < 850ms -> not charging yet)
+    // Step 2: Hold steady for 400ms (steadyDuration = 400ms < 595ms -> not charging yet)
     tel = controller.update({
       samples: [aimSample],
       indicatedBpm: 150,
       continuousDynamic: 0.5,
       isMirrored: false,
-      nowMs: 1500,
+      nowMs: 1400,
     });
     expect(tel.chargeProgress).toBe(0);
     expect(controller.isLockInActive()).toBe(false);
 
-    // Step 3: At 1050ms (steadyDuration = 1050ms > 850ms -> 200ms of charge elapsed / 400ms = 50%)
+    // Step 3: At 895ms (steadyDuration = 895ms > 595ms -> 300ms of charge elapsed / 600ms = 50%)
     tel = controller.update({
       samples: [aimSample],
       indicatedBpm: 150,
       continuousDynamic: 0.5,
       isMirrored: false,
-      nowMs: 2050,
+      nowMs: 1895,
     });
     expect(tel.chargeProgress).toBeCloseTo(0.5, 1);
     expect(tel.chargeTarget).toBe("tempo");
     expect(controller.isLockInActive()).toBe(false);
 
-    // Step 4: At 1250ms+ (steadyDuration >= 1250ms -> charge completes 100% and triggers lock-in)
+    // Step 4: At 1200ms+ (steadyDuration >= 1195ms -> charge completes 100% and triggers lock-in)
     tel = controller.update({
       samples: [aimSample],
       indicatedBpm: 150,
       continuousDynamic: 0.5,
       isMirrored: false,
-      nowMs: 2260,
+      nowMs: 2200,
     });
     expect(controller.isLockInActive()).toBe(true);
     expect(controller.getLockedTarget()).toBe("tempo");
@@ -782,7 +782,7 @@ describe("MagicFingerController", () => {
       nowMs: 1000,
     });
 
-    // Small jitter between 139 and 141 BPM (within ±4 BPM tolerance)
+    // Small jitter between 138 and 142 BPM (within ±6.4 BPM tolerance)
     const jitterOffsets = [0, 0.001, -0.001, 0.0015, -0.001];
     let tel;
     for (let i = 1; i <= 30; i++) {
@@ -815,13 +815,13 @@ describe("MagicFingerController", () => {
       nowMs: 1000,
     });
 
-    // Hold for 1000ms (charging is active, ~37.5%)
+    // Hold for 900ms (charging is active, ~50%)
     let tel = controller.update({
       samples: [aimSample],
       indicatedBpm: 175,
       continuousDynamic: 0.5,
       isMirrored: false,
-      nowMs: 2000,
+      nowMs: 1900,
     });
     expect(tel.chargeProgress).toBeGreaterThan(0.3);
 
@@ -832,7 +832,7 @@ describe("MagicFingerController", () => {
       indicatedBpm: 175,
       continuousDynamic: 0.5,
       isMirrored: false,
-      nowMs: 2050,
+      nowMs: 1950,
     });
 
     // Charge progress must reset immediately
@@ -840,11 +840,11 @@ describe("MagicFingerController", () => {
     expect(controller.isLockInActive()).toBe(false);
   });
 
-  it("moving finger up to orchestra after locking rearms laser without retracting finger", () => {
+  it("pointing upward towards high tempo on gauge does not rearm, only pointing to instrument section rearms", () => {
     const onSpotlightChange = vi.fn();
     controller.setCallbacks({ onSpotlightChange });
 
-    // Step 1: Lock in tempo
+    // Step 1: Lock in tempo at 150 BPM
     const aimSample = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
     controller.update({
       samples: [aimSample],
@@ -862,28 +862,41 @@ describe("MagicFingerController", () => {
     });
     expect(controller.isLockInActive()).toBe(true);
 
-    // Step 2: While in locked zone, laser is dimmed and BPM is frozen
-    const telLocked = controller.update({
-      samples: [aimSample],
+    // Step 2: Aim upward towards higher tempo on the tempo track (tipY = 0.2, pipY = 0.4 -> upward ray, but aimed right towards tempo gauge)
+    // Canvas left: 100, width: 200 -> startX = 260. tipX: 0.8, pipX: 0.4 -> rayDirX > 0 (aiming to tempo track at x=340)
+    const highTempoSample = createSample("Pointing", 0.8, 0.2, 0.4, 0.4);
+    const telHigh = controller.update({
+      samples: [highTempoSample],
       indicatedBpm: 150,
       continuousDynamic: 0.5,
       isMirrored: false,
       nowMs: 2350,
     });
-    expect(telLocked.isLockedIn).toBe(true);
-    expect(telLocked.ray?.isDimmed).toBe(true);
 
-    // Step 3: Move finger to point UP into the orchestra (tipY = 0.2, pipY = 0.5 -> rayDirY < -0.10)
+    // Must NOT rearm because user is still pointing along the tempo gauge column, not at instrument sections!
+    expect(controller.isLockInActive()).toBe(true);
+    expect(telHigh.isLockedIn).toBe(true);
+    expect(telHigh.ray?.isDimmed).toBe(true);
+    expect(telHigh.liveBpm).toBe(175); // Frozen at locked 175 BPM, not jumping to 220!
+
+    // Step 3: Now deliberately point at violins1 in orchestra (straight up at x=200, inside violins1 left 150..250)
     const upSample = createSample("Pointing_Up", 0.5, 0.2, 0.5, 0.5);
-    const telRearm = controller.update({
+    controller.update({
       samples: [upSample],
       indicatedBpm: 150,
       continuousDynamic: 0.5,
       isMirrored: false,
       nowMs: 2400,
     });
+    const telRearm = controller.update({
+      samples: [upSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 2450,
+    });
 
-    // Laser rearms immediately, lock clears, and orchestra section is targeted
+    // Laser rearms immediately because user is actually pointing at an instrument section!
     expect(controller.isLockInActive()).toBe(false);
     expect(telRearm.isLockedIn).toBe(false);
     expect(telRearm.ray?.isDimmed).toBe(false);

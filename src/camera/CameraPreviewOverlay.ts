@@ -95,16 +95,80 @@ export class CameraPreviewOverlay {
   }
 
   triggerSparkleVFX(screenX?: number, screenY?: number): void {
-    let normX = 0.5;
-    let normY = 0.5;
-    if (this.canvasEl && screenX !== undefined && screenY !== undefined) {
-      const rect = this.canvasEl.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        normX = Math.max(0, Math.min(1, (screenX - rect.left) / rect.width));
-        normY = Math.max(0, Math.min(1, 1.0 - (screenY - rect.top) / rect.height));
+    if (typeof document !== "undefined" && screenX !== undefined && screenY !== undefined) {
+      const burstGroup = document.getElementById("spotlight-stage-lock-burst");
+      if (burstGroup) {
+        this.spawnStageLockBurst(burstGroup, screenX, screenY);
+        return;
       }
     }
-    this.triggerThumbsUpVFXBurst(normX, normY);
+    this.triggerThumbsUpVFXBurst(0.5, 0.5);
+  }
+
+  private spawnStageLockBurst(container: Element, cx: number, cy: number): void {
+    if (typeof document === "undefined") return;
+    const burstWrapper = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    burstWrapper.setAttribute("transform", `translate(${cx.toFixed(1)}, ${cy.toFixed(1)})`);
+
+    // 1. Expanding shockwave rings centered at locking circle
+    const outerRing = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    outerRing.setAttribute("cx", "0");
+    outerRing.setAttribute("cy", "0");
+    outerRing.setAttribute("r", "24");
+    outerRing.setAttribute("fill", "none");
+    outerRing.setAttribute("stroke", "#ffd56b");
+    outerRing.setAttribute("class", "lock-shockwave-outer");
+
+    const innerRing = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    innerRing.setAttribute("cx", "0");
+    innerRing.setAttribute("cy", "0");
+    innerRing.setAttribute("r", "14");
+    innerRing.setAttribute("fill", "none");
+    innerRing.setAttribute("stroke", "#ffffff");
+    innerRing.setAttribute("class", "lock-shockwave-inner");
+
+    const coreFlash = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    coreFlash.setAttribute("cx", "0");
+    coreFlash.setAttribute("cy", "0");
+    coreFlash.setAttribute("r", "8");
+    coreFlash.setAttribute("fill", "#ffffff");
+    coreFlash.setAttribute("class", "lock-shockwave-inner");
+
+    burstWrapper.appendChild(outerRing);
+    burstWrapper.appendChild(innerRing);
+    burstWrapper.appendChild(coreFlash);
+
+    // 2. 14 Sparkling diamond star particles shooting outward in all directions
+    const particleCount = 14;
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.35;
+      const distance = 45 + Math.random() * 55;
+      const tx = Math.cos(angle) * distance;
+      const ty = Math.sin(angle) * distance;
+      const rot = Math.round((Math.random() - 0.5) * 360);
+      const isGold = i % 2 === 0;
+      const color = isGold ? "#ffd56b" : "#ffffff";
+      const size = 5 + Math.random() * 4;
+
+      const star = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      star.setAttribute(
+        "d",
+        `M 0,-${size.toFixed(1)} L ${(size * 0.35).toFixed(1)},0 L 0,${size.toFixed(1)} L -${(size * 0.35).toFixed(1)},0 Z`
+      );
+      star.setAttribute("fill", color);
+      star.setAttribute("class", "lock-sparkle-star");
+      star.style.setProperty("--tx", `${tx.toFixed(1)}px`);
+      star.style.setProperty("--ty", `${ty.toFixed(1)}px`);
+      star.style.setProperty("--rot", `${rot}deg`);
+
+      burstWrapper.appendChild(star);
+    }
+
+    container.appendChild(burstWrapper);
+
+    setTimeout(() => {
+      burstWrapper.remove();
+    }, 700);
   }
 
   mount(parentElement: HTMLElement = document.body): void {

@@ -579,14 +579,14 @@ const controller = new ExperienceController({
       dynVerticalEl.classList.toggle("magic-acquired", isDynTarget && isAcquired);
     }
 
-    // Lock-in sparkle flash
+    // Lock-in sparkle flash on the specific needle / slider handle
     if (telemetry.lockInEvent) {
       const targetEl = telemetry.lockInEvent.target === "tempo"
-        ? bpmGaugeEl
-        : (dynVerticalEl || dynRibbonEl);
+        ? (document.querySelector(".bpm-needle.indicated-needle .needle-pip") || bpmGaugeEl)
+        : (document.querySelector("#dynamic-analogue-marker .analogue-pip") || dynVerticalEl || dynRibbonEl);
       if (targetEl) {
         targetEl.classList.remove("sparkle-locked");
-        void targetEl.offsetWidth;
+        void (targetEl as HTMLElement).offsetWidth;
         targetEl.classList.add("sparkle-locked");
         setTimeout(() => targetEl.classList.remove("sparkle-locked"), 850);
       }

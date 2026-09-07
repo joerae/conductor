@@ -22,10 +22,10 @@ export const MAGIC_FINGER_TUNING = {
   SMOOTHING_ALPHA: 0.40,
   RAY_FREE_DISTANCE_PX: 360,
   UPWARD_FLICK_SPEED_PX_PER_SEC: 350,
-  HOLD_STEADY_TIME_MS: 850,
-  HOLD_CHARGE_DURATION_MS: 400,
-  HOLD_VALUE_TOLERANCE_BPM: 4,
-  HOLD_VALUE_TOLERANCE_DYN: 0.035,
+  HOLD_STEADY_TIME_MS: 595,
+  HOLD_CHARGE_DURATION_MS: 600,
+  HOLD_VALUE_TOLERANCE_BPM: 6.4,
+  HOLD_VALUE_TOLERANCE_DYN: 0.056,
   HOLD_LOCK_ENABLED: true,
   SHAKE_LOCK_ENABLED: true,
 };
@@ -309,6 +309,79 @@ export class MagicFingerController {
     const excursionY = maxY - minY;
     const hasReversals = (xReversals >= 2 && excursionX >= 0.03) || (yReversals >= 2 && excursionY >= 0.03);
     return hasReversals && totalDist >= 0.05;
+  }
+
+  private getTargetedInstrumentSection(
+    rayDirX: number,
+    rayDirY: number,
+    startX: number,
+    startY: number,
+    svgRect: ScreenRect,
+    instrumentSections: InstrumentSectionTarget[]
+  ): { sectionId: string; projectedHitX: number; projectedHitY: number } | null {
+    if (rayDirY >= -0.10) return null;
+
+    let effectiveSections: InstrumentSectionTarget[] = instrumentSections;
+    if (effectiveSections.length === 0 && this.sections.length > 0) {
+      const count = this.sections.length;
+      const totalW = svgRect.width || 1000;
+      effectiveSections = this.sections.map((sec, idx) => {
+        const secW = (totalW * 0.76) / count;
+        const left = (svgRect.left || 0) + totalW * 0.12 + idx * secW;
+        return {
+          id: sec.id,
+          rect: {
+            left,
+            right: left + secW,
+            top: (svgRect.top || 0) + 10,
+            bottom: (svgRect.top || 0) + 120,
+            width: secW,
+            height: 110,
+          },
+        };
+      });
+    }
+
+    if (effectiveSections.length === 0) return null;
+
+    let targetBaselineY = 60;
+    if (effectiveSections[0]) {
+      const firstRect = effectiveSections[0].rect;
+      targetBaselineY = (firstRect.top - svgRect.top) + firstRect.height * 0.78;
+    }
+
+    const rayDist = (startY - targetBaselineY) / (-rayDirY);
+    const projectedHitX = startX + rayDirX * rayDist;
+    const projectedHitY = startY + rayDirY * rayDist;
+
+    let bestSectionId: string | null = null;
+    let minDistance = Infinity;
+
+    for (const sec of effectiveSections) {
+      const secLeft = sec.rect.left - svgRect.left;
+      const secRight = sec.rect.right - svgRect.left;
+      const secCenterX = (secLeft + secRight) / 2;
+
+      // Generous hit testing pad (15% on each side)
+      const padX = (secRight - secLeft) * 0.15;
+      if (projectedHitX >= secLeft - padX && projectedHitX <= secRight + padX) {
+        const dist = Math.abs(projectedHitX - secCenterX);
+        if (dist < minDistance) {
+          minDistance = dist;
+          bestSectionId = sec.id;
+        }
+      }
+    }
+
+    if (bestSectionId) {
+      const numIdx = parseInt(bestSectionId, 10);
+      if (!isNaN(numIdx) && this.sections[numIdx]) {
+        bestSectionId = this.sections[numIdx].id;
+      }
+      return { sectionId: bestSectionId, projectedHitX, projectedHitY };
+    }
+
+    return null;
   }
 
   /**
@@ -604,12 +677,22 @@ export class MagicFingerController {
     if (this.isLockedIn) {
       // 1. Check if pointer clearly aims outside the locked control zone:
       // A) Pointing up to orchestra / instruments:
-      const pointingUpToOrchestra = rayDirY < -0.12;
+      // Rearm ONLY IF ACTUALLY POINTING AT AN ORCHESTRA INSTRUMENT SECTION!
+      // Simply pointing high along the gauge (e.g. at 200 BPM or fff) will project outside the instrument bounds and stay locked.
+      const targetedInstrument = this.getTargetedInstrumentSection(
+        rayDirX,
+        rayDirY,
+        startX,
+        startY,
+        svgRect,
+        instrumentSections
+      );
+      const pointingUpToOrchestra = Boolean(targetedInstrument);
 
       // B) Pointing across to opposite control side:
       const pointingAcross = this.lockedTarget === "tempo"
-        ? rayDirX < -0.05
-        : rayDirX > 0.05;
+        ? (dynamicsTrackRect ? (startX + rayDirX * 360 < (dynamicsTrackRect.right - svgRect.left) + 40) : rayDirX < -0.15)
+        : (tempoTrackRect ? (startX + rayDirX * 360 > (tempoTrackRect.left - svgRect.left) - 40) : rayDirX > 0.15);
 
       if (pointingUpToOrchestra || pointingAcross) {
         // REARM! Pointer has exited the locked control zone into another zone
@@ -1182,78 +1265,33 @@ export class MagicFingerController {
       }
 
       // ── C. Check Instrument Sections (Top) ──────────────────────────────────
-      let effectiveSections: InstrumentSectionTarget[] = instrumentSections;
-      if (effectiveSections.length === 0 && this.sections.length > 0) {
-        const count = this.sections.length;
-        const totalW = svgRect.width || 1000;
-        effectiveSections = this.sections.map((sec, idx) => {
-          const secW = (totalW * 0.76) / count;
-          const left = (svgRect.left || 0) + totalW * 0.12 + idx * secW;
-          return {
-            id: sec.id,
-            rect: {
-              left,
-              right: left + secW,
-              top: (svgRect.top || 0) + 10,
-              bottom: (svgRect.top || 0) + 120,
-              width: secW,
-              height: 110,
-            },
-          };
-        });
-      }
+      const targetedInstrument = this.getTargetedInstrumentSection(
+        rayDirX,
+        rayDirY,
+        startX,
+        startY,
+        svgRect,
+        instrumentSections
+      );
 
-      if (this.activeTarget === null && rayDirY < -0.10 && effectiveSections.length > 0) {
-        // Natural ray extension towards orchestra baseline (mirroring Expressive Mode)
-        // Does NOT snap laser to target center, giving full freedom of finger pointing
-        let targetBaselineY = 60;
-        if (effectiveSections[0]) {
-          const firstRect = effectiveSections[0].rect;
-          targetBaselineY = (firstRect.top - svgRect.top) + firstRect.height * 0.78;
+      if (this.activeTarget === null && targetedInstrument) {
+        endX = targetedInstrument.projectedHitX;
+        endY = targetedInstrument.projectedHitY;
+        const bestSectionId = targetedInstrument.sectionId;
+
+        this.hoverTarget = "instrument";
+        this.state = "instrument_targeted";
+        rayTargetType = "instrument";
+
+        if (this.targetedSectionId !== bestSectionId) {
+          this.targetedSectionId = bestSectionId;
+          this.callbacks.onSpotlightChange?.(bestSectionId);
         }
-
-        const rayDist = (startY - targetBaselineY) / (-rayDirY);
-        const projectedHitX = startX + rayDirX * rayDist;
-        const projectedHitY = startY + rayDirY * rayDist;
-
-        // Laser end point freely follows finger direction without snapping to target center!
-        endX = projectedHitX;
-        endY = projectedHitY;
-
-        let bestSectionId: string | null = null;
-        let minDistance = Infinity;
-
-        for (const sec of effectiveSections) {
-          const secLeft = sec.rect.left - svgRect.left;
-          const secRight = sec.rect.right - svgRect.left;
-          const secCenterX = (secLeft + secRight) / 2;
-
-          // Generous hit testing pad (15% on each side)
-          const padX = (secRight - secLeft) * 0.15;
-          if (projectedHitX >= secLeft - padX && projectedHitX <= secRight + padX) {
-            const dist = Math.abs(projectedHitX - secCenterX);
-            if (dist < minDistance) {
-              minDistance = dist;
-              bestSectionId = sec.id;
-            }
-          }
-        }
-
-        if (bestSectionId) {
-          const numIdx = parseInt(bestSectionId, 10);
-          if (!isNaN(numIdx) && this.sections[numIdx]) {
-            bestSectionId = this.sections[numIdx].id;
-          }
-
-          this.hoverTarget = "instrument";
-          this.state = "instrument_targeted";
-          rayTargetType = "instrument";
-
-          if (this.targetedSectionId !== bestSectionId) {
-            this.targetedSectionId = bestSectionId;
-            this.callbacks.onSpotlightChange?.(bestSectionId);
-          }
-        } else if (this.targetedSectionId !== null) {
+      } else if (this.activeTarget === null && rayDirY < -0.10) {
+        const rayDist = (startY - 60) / (-rayDirY);
+        endX = startX + rayDirX * rayDist;
+        endY = startY + rayDirY * rayDist;
+        if (this.targetedSectionId !== null) {
           this.targetedSectionId = null;
           this.callbacks.onSpotlightChange?.(null);
         }

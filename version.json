@@ -1,9 +1,24 @@
 {
-  "version": "0.31.0",
+  "version": "0.32.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.32.0",
+      "date": "2026-09-08",
+      "summary": "Magic Finger: Hold to Lock Interaction & Precise Instrument Zone Rearming",
+      "details": [
+        "Steadiness Jitter Tolerance: Increased steadiness threshold by 60% with HOLD_VALUE_TOLERANCE_BPM = 6.4 (increased from 4 BPM) and HOLD_VALUE_TOLERANCE_DYN = 0.056 (increased from 0.035 Dyn) in MAGIC_FINGER_TUNING, ensuring normal conductor hand jitter allows locking to start smoothly without resetting.",
+        "Appearance Delay Timing: Reduced the time before the locking circle begins appearing by 30% with HOLD_STEADY_TIME_MS = 595 ms (reduced from 850 ms) in MAGIC_FINGER_TUNING.",
+        "Charge Duration Timing: Made the indicator circle take 50% longer to fill up with HOLD_CHARGE_DURATION_MS = 600 ms (increased from 400 ms) in MAGIC_FINGER_TUNING, providing clear, comfortable visual pacing before finalizing the lock.",
+        "Lock-In Feedback Visualization at Locking Circle Position: Replaced preview canvas clamping with SVG burst group (#spotlight-stage-lock-burst) in #stage-spotlight-ray-overlay. Spawns an expanding golden shockwave (r=24 to 80), inner white radiance ring (r=14 to 50), core flash, and 14 diamond star sparkle particles in 360 degrees directly centered at the locking circle (stageEndX, stageEndY).",
+        "Handle Sparkle Flash: Targeted the golden sparkle flash (.sparkle-locked) directly on the indicated needle handle (.bpm-needle.indicated-needle .needle-pip) and dynamic marker pip instead of the entire gauge container box.",
+        "Precise Instrument Zone Rearming: Implemented getTargetedInstrumentSection(...). Moving up towards high tempos (180–220 BPM) or high dynamics keeps the laser dimmed and value frozen, and ONLY rearms if the ray actually projects into an orchestra section (Violin I, Violin II, Viola, Cello/Bass) or across to the opposite control.",
+        "Debug Menu Controls: Added 'MAGIC FINGER: HOLD TO LOCK' section in DebugOverlay.ts with live tuning sliders defaulting to 0.60s delay, 0.60s charge duration, and ±6.4 BPM tolerance, plus Hold-to-Lock and Shake-to-Lock toggles.",
+        "Files Edited: src/camera/MagicFingerController.ts, src/camera/CameraPreviewOverlay.ts, src/main.ts, src/style.css, src/ui/DebugOverlay.ts, index.html, tests/magicFinger.test.ts, package.json, version.json."
+      ]
+    },
     {
       "version": "0.31.0",
       "date": "2026-09-07",

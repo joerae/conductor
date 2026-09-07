@@ -303,6 +303,8 @@
         <circle id="spotlight-stage-charge-bg" cx="0" cy="0" r="24" fill="none" stroke="rgba(255, 213, 107, 0.20)" stroke-width="3" style="display: none;" />
         <circle id="spotlight-stage-charge-ring" cx="0" cy="0" r="24" fill="none" stroke="#ffd56b" stroke-width="4"
           stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="150.8" style="display: none;" />
+        <!-- Lock-In Sparkle & Shockwave Burst (Triggered exactly at locking circle position) -->
+        <g id="spotlight-stage-lock-burst" pointer-events="none"></g>
       </svg>
     </div>
 
@@ -361,7 +363,7 @@
 
     <!-- Footer controls -->
     <footer id="stage-footer">
-      <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.31.0</button>
+      <button id="version-btn" class="subtle-link" aria-label="Show version information">v0.32.0</button>
       <span class="footer-divider">•</span>
       <span id="debug-hint" class="debug-hint">Press D for debug overlay & A/B DSP</span>
     </footer>

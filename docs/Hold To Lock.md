@@ -1,5 +1,19 @@
 # Magic Finger: Hold to Lock
 
+## Tuning Required
+
+* Right now you need to hold very steady for it to start locking, increase the threshold for what "steady" means by 60% please
+
+* Timing of the locking circle: it takes a little too long for the circle to start appearing, but then it fill up to fast. Reduce the time the locking indicator circle takes to appear by 30%, but then make it take 50% longer to fill up and lock the circle
+
+* Loock in feedback:  visulisation - this should happen at the position on screen of the locking circle. Right now it always happens in the top right part of the tempo gauge.
+
+* Rearming - the laser rearms far to easily when moving up towards the top. In reality I just want it to rearm IF YOU ARE ACTUALLY POINTING TO THE TOP - I.E. pointing at one of the instrument sections. The current behaviour makes the rearming take place if you gradually increase the tempo or dynamics, which gives us the same bad experience of going to max tempo.
+
+
+
+
+
 ## Problem
 
 When the player retracts their pointing finger to stop controlling tempo or dynamics, the laser moves as the finger curls. This often changes the value just before release.
@@ -9,7 +23,7 @@ When the player retracts their pointing finger to stop controlling tempo or dyna
 Augment the fist-shake lock gesture with a **hold steady to lock** interaction. It does a similar thing (locks the value) but tries a different input that doesn't require the user to learn anything new
 
 1. The player grabs and adjusts tempo or dynamics as they do now.
-2. When the selected value stays roughly steady for about **0.7 seconds**, the control begins charging. (Configurable, add the config into the debug menu)
+2. When the selected value stays roughly steady for about **0.85 seconds**, the control begins charging. (Configurable, add the config into the debug menu)
 3. Show the charge as a ring filling around the slider handle or laser impact point.
 4. If the value moves meaningfully, reset the charge immediately.
 5. When the ring completes, send a bright pulse along the laser, briefly flash the handle, freeze the current value, and fade out the laser to a darker colour, showing it is inactive.
