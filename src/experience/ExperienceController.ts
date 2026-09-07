@@ -672,14 +672,14 @@ export class ExperienceController {
         const isFocusActive = this.cameraInput?.getFocusController().isFocusModeActive() ?? false;
         const isMagicMode = this.clock.getTempoMode() === "magic";
 
-        // In Magic Finger mode: if no hands are present on screen, music should not play!
+        // In Magic Finger mode: if no hands are present on screen, pause with 1.5s grace period!
         if (isMagicMode && this.inputSource === "camera") {
           if (samples.length === 0) {
             if (this.state === "playing") {
               const now = performance.now();
               if (this.magicNoHandsStartTime === 0) {
                 this.magicNoHandsStartTime = now;
-              } else if (now - this.magicNoHandsStartTime >= 180) {
+              } else if (now - this.magicNoHandsStartTime >= 1500) {
                 this.magicNoHandsStartTime = 0;
                 this.pausePlayback();
               }
@@ -688,6 +688,27 @@ export class ExperienceController {
             }
           } else {
             this.magicNoHandsStartTime = 0;
+            const isOneHandRaised = samples.some(s => s.conductorPoint.y >= 0.08);
+
+            // Broadcast motion sample for warmup and UI meters in magic mode
+            this.uiCallbacks.onCameraMotionSample?.({
+              tempoBpm: this.indicatedBpm || Math.round(this.clock.getBpm()),
+              isHandsRaised: isOneHandRaised,
+              handPoints: samples.map(s => ({
+                x: Math.round(Math.max(40, Math.min(560, s.conductorPoint.x * 600))),
+                y: Math.round(Math.max(40, Math.min(360, (1.0 - s.conductorPoint.y) * 400))),
+              })),
+            });
+
+            // Raising ONE hand starts or resumes playback in Magic Finger mode
+            if (!this.isWarmingUp && (this.state === "ready" || this.state === "paused" || this.state === "completed")) {
+              if (isOneHandRaised) {
+                if (this.state === "completed") {
+                  this.restart();
+                }
+                this.startPlayback();
+              }
+            }
           }
         }
 
@@ -1362,7 +1383,7 @@ export class ExperienceController {
           if (this.isHandsDown) {
             this.handsDownPulseCount++;
             const maxSilentBeats = this.clock.getTempoMode() === "magic"
-              ? 1
+              ? 4
               : (this.clock.getTempoMode() === "gestural" ? 2 : 6);
             if (this.handsDownPulseCount >= maxSilentBeats) {
               this.handsDownPulseCount = 0;

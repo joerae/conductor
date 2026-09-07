@@ -440,7 +440,7 @@ describe("ExperienceController Lifecycle & Bug Regressions", () => {
     expect((controller as any).currentGesturalBpm).toBe(initialBaseBpm + 5);
   });
 
-  it("Issue 20: in magic finger mode, pauses music when no hands are present on screen", async () => {
+  it("Issue 20: in magic finger mode, pauses music with grace period when hands are absent", async () => {
     const controller = new ExperienceController(createMockCallbacks());
     controller.setTempoMode("magic");
     (controller as any).inputSource = "camera";
@@ -449,18 +449,53 @@ describe("ExperienceController Lifecycle & Bug Regressions", () => {
     await (controller as any).startPlayback();
     expect(controller.getState()).toBe("playing");
 
-    // When hands are down in magic mode, a single silent beat triggers pause
+    // When hands are down in magic mode, it provides grace period before pausing
     (controller as any).isHandsDown = true;
+    for (let beat = 1; beat <= 3; beat++) {
+      (controller as any).handleClockEvent({
+        type: "beat",
+        state: { beatIndex: beat, bpm: 120, phaseCorrectionSec: 0, periodMs: 500 },
+      });
+      // Should remain playing during grace period
+      expect(controller.getState()).toBe("playing");
+    }
+
+    // On 4th silent beat (~2s grace), it pauses
     (controller as any).handleClockEvent({
       type: "beat",
-      state: {
-        beatIndex: 1,
-        bpm: 120,
-        phaseCorrectionSec: 0,
-        periodMs: 500,
-      },
+      state: { beatIndex: 4, bpm: 120, phaseCorrectionSec: 0, periodMs: 500 },
     });
 
     expect(controller.getState()).toBe("paused");
+  });
+
+  it("Issue 21: in magic finger mode, starts playback when raising one hand", async () => {
+    vi.spyOn(CameraBeatInputProvider.prototype, "start").mockResolvedValue();
+    const controller = new ExperienceController(createMockCallbacks());
+    await controller.load();
+    controller.setTempoMode("magic");
+    (controller as any).inputSource = "camera";
+    expect(controller.getState()).toBe("ready");
+
+    // Simulate camera sample callback with 1 hand raised (conductorPoint.y >= 0.08)
+    const samples = [
+      {
+        handIndex: 0,
+        timestampMs: 1000,
+        handedness: "Right",
+        confidence: 0.9,
+        landmarks: Array(21).fill({ x: 0.5, y: 0.5, z: 0 }),
+        conductorPoint: { x: 0.5, y: 0.35 }, // raised
+        conductorX: 0.5,
+        conductorY: 0.35,
+        speed: 0,
+        acceleration: 0,
+        direction: { x: 0, y: 0 },
+        gesture: "Open_Palm", // not pointing, just raised hand
+      },
+    ];
+
+    (controller as any).cameraInput.sampleCallbacks.forEach((cb: any) => cb(samples));
+    expect(controller.getState()).toBe("playing");
   });
 });

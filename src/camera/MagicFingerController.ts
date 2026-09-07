@@ -14,12 +14,13 @@ import { percentToBpm } from "../ui/bpmGauge";
 
 export const MAGIC_FINGER_TUNING = {
   TEMPO_CAPTURE_BPM_DELTA: 35,
-  TEMPO_RELEASE_PAD_PX: 65,
+  TEMPO_RELEASE_PAD_PX: 50,
   DYNAMICS_CAPTURE_DELTA: 0.25,
-  DYNAMICS_RELEASE_PAD_PX: 60,
+  DYNAMICS_RELEASE_PAD_PX: 50,
   DWELL_ACQUIRE_MS: 280,
   SMOOTHING_ALPHA: 0.40,
   RAY_FREE_DISTANCE_PX: 360,
+  UPWARD_FLICK_SPEED_PX_PER_SEC: 350,
 };
 
 export type MagicFingerState =
@@ -149,6 +150,10 @@ export class MagicFingerController {
   private smoothedUnitX: number = 0;
   private smoothedUnitY: number = -1;
   private hasSmoothedDir: boolean = false;
+
+  // Tracking speed along gauge to detect upward flick exits
+  private lastHitY: number | null = null;
+  private lastHitTime: number = 0;
 
   constructor(
     geometry?: MagicFingerGeometryProvider,
@@ -295,6 +300,8 @@ export class MagicFingerController {
       this.targetedSectionId = null;
       this.hasSmoothedDir = false;
       this.lastPointingHandIndex = null;
+      this.lastHitY = null;
+      this.lastHitTime = 0;
 
       if (wasSpotlighted) {
         this.callbacks.onSpotlightChange?.(null);
@@ -414,31 +421,42 @@ export class MagicFingerController {
         hitY = startY;
       }
 
-      // Detect upward flick exit to avoid accidental 220 BPM maxing when flicking up to orchestra
-      const isUpwardFlickExit = rayDirY < -0.32 || (hitY < tempoTrackTop && rayDirY < -0.18);
+      // Track vertical speed along the gauge (positive when moving upward towards top)
+      const prevHitY = this.lastHitY ?? hitY;
+      const dt = this.lastHitTime > 0 ? Math.max(1, now - this.lastHitTime) : 33;
+      const upwardSpeedPxPerSec = ((prevHitY - hitY) / dt) * 1000;
+      this.lastHitY = hitY;
+      this.lastHitTime = now;
 
-      // Check padded zone for release
+      // Detect upward flick exit to orchestra:
+      // 1. Ray turned inward away from right edge towards orchestra / center stage
+      const turnedInwardToOrchestra = rayDirX < 0.08;
+      // 2. Ray flicked upward rapidly near the top of the gauge
+      const isRapidUpwardFlick = upwardSpeedPxPerSec > MAGIC_FINGER_TUNING.UPWARD_FLICK_SPEED_PX_PER_SEC && hitY < tempoTrackTop + 50;
+      // 3. Ray moved above the top of the gauge
+      const isAboveGauge = hitY < tempoTrackTop;
+
       const pad = MAGIC_FINGER_TUNING.TEMPO_RELEASE_PAD_PX;
       const projectedX = (Math.abs(rayDirX) > 0.02)
         ? tempoTrackCenterX
         : startX + rayDirX * MAGIC_FINGER_TUNING.RAY_FREE_DISTANCE_PX;
 
-      const isOutsidePaddedZone =
+      const isOutsideBounds =
         projectedX < tempoTrackLeft - pad ||
         projectedX > tempoTrackRight + pad ||
-        hitY < tempoTrackTop - pad ||
-        hitY > tempoTrackBottom + pad ||
-        rayDirX < -0.15; // clearly pointing away to the left
+        hitY > tempoTrackBottom + pad;
 
-      if (isUpwardFlickExit || isOutsidePaddedZone) {
+      if (turnedInwardToOrchestra || isRapidUpwardFlick || isAboveGauge || isOutsideBounds) {
         // Release tempo control immediately without committing max/out-of-bounds BPM!
         this.activeTarget = null;
         this.state = "pointing";
         this.lastBpm = this.lastValidInBoundsBpm;
         this.callbacks.onBpmChange?.(this.lastValidInBoundsBpm);
         releasedThisFrame = true;
+        this.lastHitY = null;
+        this.lastHitTime = 0;
       } else {
-        // Control tempo continuously
+        // Control tempo continuously within track bounds
         const clampedY = Math.max(tempoTrackTop, Math.min(tempoTrackBottom, hitY));
         const pct = ((tempoTrackBottom - clampedY) / tempoTrackHeight) * 100;
         const newBpm = Math.round(percentToBpm(pct));
@@ -475,27 +493,39 @@ export class MagicFingerController {
           hitY = startY;
         }
 
-        // Detect upward flick exit to avoid accidental 1.0 (fff) maxing when flicking up to orchestra
-        const isUpwardFlickExit = rayDirY < -0.32 || (hitY < dynTrackTop && rayDirY < -0.18);
+        // Track vertical speed along the gauge (positive when moving upward towards top)
+        const prevHitY = this.lastHitY ?? hitY;
+        const dt = this.lastHitTime > 0 ? Math.max(1, now - this.lastHitTime) : 33;
+        const upwardSpeedPxPerSec = ((prevHitY - hitY) / dt) * 1000;
+        this.lastHitY = hitY;
+        this.lastHitTime = now;
+
+        // Detect upward flick exit to orchestra:
+        // 1. Ray turned inward away from left edge towards orchestra / center stage
+        const turnedInwardToOrchestra = rayDirX > -0.08;
+        // 2. Ray flicked upward rapidly near the top of the gauge
+        const isRapidUpwardFlick = upwardSpeedPxPerSec > MAGIC_FINGER_TUNING.UPWARD_FLICK_SPEED_PX_PER_SEC && hitY < dynTrackTop + 50;
+        // 3. Ray moved above the top of the gauge
+        const isAboveGauge = hitY < dynTrackTop;
 
         const projectedX = (Math.abs(rayDirX) > 0.02)
           ? dynTrackCenterX
           : startX + rayDirX * MAGIC_FINGER_TUNING.RAY_FREE_DISTANCE_PX;
 
-        const isOutsidePaddedZone =
+        const isOutsideBounds =
           projectedX < dynTrackLeft - pad ||
           projectedX > dynTrackRight + pad ||
-          hitY < dynTrackTop - pad ||
-          hitY > dynTrackBottom + pad ||
-          rayDirX > 0.15; // clearly pointing away to the right
+          hitY > dynTrackBottom + pad;
 
-        if (isUpwardFlickExit || isOutsidePaddedZone) {
+        if (turnedInwardToOrchestra || isRapidUpwardFlick || isAboveGauge || isOutsideBounds) {
           // Release dynamics control immediately without committing max/out-of-bounds dynamic!
           this.activeTarget = null;
           this.state = "pointing";
           this.lastDynamic = this.lastValidInBoundsDynamic;
           this.callbacks.onDynamicChange?.(this.lastValidInBoundsDynamic);
           releasedThisFrame = true;
+          this.lastHitY = null;
+          this.lastHitTime = 0;
         } else {
           // Control continuous dynamics: Top is 1.0 (fff), Bottom is 0.0 (pp)
           const clampedY = Math.max(dynTrackTop, Math.min(dynTrackBottom, hitY));
@@ -563,8 +593,7 @@ export class MagicFingerController {
       this.state = "pointing";
 
       // ── A. Check Safe Acquisition on Tempo Gauge (Right) ─────────────────────
-      // Only check tempo acquisition if ray is not pointing upwards towards the orchestra
-      if (tempoTrackRect && rayDirX > 0.15 && rayDirY > -0.25 && !releasedThisFrame) {
+      if (tempoTrackRect && rayDirX > 0.15 && !releasedThisFrame) {
         const tempoTrackLeft = tempoTrackRect.left - svgRect.left;
         const tempoTrackRight = tempoTrackRect.right - svgRect.left;
         const tempoTrackTop = tempoTrackRect.top - svgRect.top;
@@ -575,7 +604,7 @@ export class MagicFingerController {
         const t = (tempoTrackCenterX - startX) / rayDirX;
         if (t > 0) {
           const hitY = startY + rayDirY * t;
-          if (hitY >= tempoTrackTop - 35 && hitY <= tempoTrackBottom + 35) {
+          if (hitY >= tempoTrackTop - 45 && hitY <= tempoTrackBottom + 45) {
             const clampedY = Math.max(tempoTrackTop, Math.min(tempoTrackBottom, hitY));
             const pct = ((tempoTrackBottom - clampedY) / tempoTrackHeight) * 100;
             const hitBpm = percentToBpm(pct);
@@ -601,6 +630,8 @@ export class MagicFingerController {
               this.state = "tempo_acquired";
               this.lastBpm = Math.round(hitBpm);
               this.lastValidInBoundsBpm = this.lastBpm;
+              this.lastHitY = clampedY;
+              this.lastHitTime = now;
               liveBpm = this.lastBpm;
               this.callbacks.onBpmChange?.(this.lastBpm);
               this.currentHoverTarget = null;
@@ -622,13 +653,12 @@ export class MagicFingerController {
         const dynTrackWidth = Math.max(1, dynTrackRight - dynTrackLeft);
         const dynTrackHeight = Math.max(1, dynTrackBottom - dynTrackTop);
 
-        // Only check dynamics acquisition if ray is not pointing upwards towards the orchestra
-        if (isVertical && rayDirX < -0.15 && rayDirY > -0.25) {
-          // Pointing LEFT towards left vertical dynamics gauge
+        if (isVertical && rayDirX < -0.15) {
+          // Pointing LEFT towards left vertical dynamics gauge (no upward angle restriction)
           const t = (dynTrackCenterX - startX) / rayDirX;
           if (t > 0) {
             const hitY = startY + rayDirY * t;
-            if (hitY >= dynTrackTop - 35 && hitY <= dynTrackBottom + 35) {
+            if (hitY >= dynTrackTop - 45 && hitY <= dynTrackBottom + 45) {
               const clampedY = Math.max(dynTrackTop, Math.min(dynTrackBottom, hitY));
               // Top is 1.0 (fff), Bottom is 0.0 (pp)
               const hitVal = Math.max(0, Math.min(1, (dynTrackBottom - clampedY) / dynTrackHeight));
@@ -654,6 +684,8 @@ export class MagicFingerController {
                 this.state = "dynamics_acquired";
                 this.lastDynamic = hitVal;
                 this.lastValidInBoundsDynamic = hitVal;
+                this.lastHitY = clampedY;
+                this.lastHitTime = now;
                 liveDynamic = hitVal;
                 this.callbacks.onDynamicChange?.(hitVal);
                 this.currentHoverTarget = null;
