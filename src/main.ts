@@ -554,6 +554,43 @@ const controller = new ExperienceController({
       warmupManager.startWarmupAudio(audioCtx);
     }
   },
+  onMagicFinger: (telemetry) => {
+    // Update active visual cues for Magic Finger targets
+    const targetType = telemetry.activeTarget || telemetry.hoverTarget || "open";
+    const isAcquired = telemetry.ray?.isAcquired ?? false;
+
+    // Tempo gauge highlight
+    const bpmGaugeEl = document.getElementById("bpm-gauge-container");
+    if (bpmGaugeEl) {
+      bpmGaugeEl.classList.toggle("magic-hover", targetType === "tempo" && !isAcquired);
+      bpmGaugeEl.classList.toggle("magic-acquired", targetType === "tempo" && isAcquired);
+    }
+
+    // Dynamics ribbon highlight
+    const dynRibbonEl = document.getElementById("dynamic-ladder-container");
+    if (dynRibbonEl) {
+      dynRibbonEl.classList.toggle("magic-hover", targetType === "dynamics" && !isAcquired);
+      dynRibbonEl.classList.toggle("magic-acquired", targetType === "dynamics" && isAcquired);
+    }
+
+    // Update prompt text if in magic mode
+    if (controller.getTempoMode() === "magic") {
+      if (isAcquired) {
+        if (targetType === "tempo") {
+          promptEl.textContent = `👆 Aiming at Tempo Gauge • Move finger up/down to adjust BPM (${telemetry.liveBpm ?? controller.getIndicatedBpm()} BPM)`;
+        } else if (targetType === "dynamics") {
+          const pct = Math.round((telemetry.liveDynamic ?? 0.5) * 100);
+          promptEl.textContent = `👆 Aiming at Dynamics Ribbon • Move finger left/right to adjust Dynamics (${pct}%)`;
+        } else if (telemetry.targetedSectionId) {
+          promptEl.textContent = `👆 Pointing at Orchestra • Section spotlighted!`;
+        }
+      } else if (targetType !== "open") {
+        promptEl.textContent = `👆 Hovering over ${targetType === "tempo" ? "Tempo Gauge" : (targetType === "dynamics" ? "Dynamics Ribbon" : "Orchestra")} • Hold steady to grab`;
+      } else {
+        promptEl.textContent = `👆 Magic Finger Active • Aim laser at Tempo Gauge, Dynamics Ribbon, or Orchestra Sections`;
+      }
+    }
+  },
   onCameraMotionSample: (sample) => {
     if (stageEl.classList.contains("stage-warming-up")) {
       warmupManager?.handleLiveSample(sample);
@@ -566,6 +603,13 @@ const controller = new ExperienceController({
       }
       if (sample.isHandsRaised && warmupManager?.isReadyToExit()) {
         exitWarmupAndStartConducting();
+      }
+    } else {
+      if (sample.tempoBpm !== undefined) {
+        updateBpmGaugeUI(sample.tempoBpm);
+      }
+      if (sample.dynamicContinuous !== undefined) {
+        updateAnalogueDynamicUI(sample.dynamicContinuous, sample.dynamicLevel);
       }
     }
   },
@@ -618,6 +662,8 @@ function updateControlHints(): void {
         }
       } else if (mode === "inertial") {
         modeHintText.innerHTML = `🥁 <strong>Beat (Camera Cut Time)</strong>: Conduct strokes in 2 (1 stroke = 2 beats) • Steer tempo with hands • Coast freely`;
+      } else if (mode === "magic") {
+        modeHintText.innerHTML = `👆 <strong>Magic Finger</strong>: Aim laser pointer at Tempo Gauge, Dynamics Ribbon, or Orchestra Sections`;
       } else if (mode === "autoplay") {
         modeHintText.innerHTML = `⚡ <strong>Autoplay (Debug)</strong>: Playing continuously in tempo`;
       } else {
@@ -629,6 +675,8 @@ function updateControlHints(): void {
         modeHintText.innerHTML = `🪄 <strong>Expressive (Keyboard)</strong>: <strong>↑ / ↓</strong> adjust Target Tempo • <strong>← / →</strong> adjust Volume • <strong>\\</strong> Accent (&gt;) • <strong>SPACE / P</strong> Play/Pause`;
       } else if (mode === "inertial" || mode === "balanced" || mode === "instant") {
         modeHintText.innerHTML = `🥁 <strong>Beat (Keyboard)</strong>: Tap <strong>SPACE</strong> on every beat (1 tap = 1 beat) • <strong>← / →</strong> adjust Volume`;
+      } else if (mode === "magic") {
+        modeHintText.innerHTML = `👆 <strong>Magic Finger</strong>: Switch to camera to use laser pointer control`;
       } else if (mode === "autoplay") {
         modeHintText.innerHTML = `⚡ <strong>Autoplay (Debug)</strong>: Playing continuously in tempo`;
       } else {
@@ -675,21 +723,28 @@ inputBtnCamera?.addEventListener("click", () => setInputSource("camera"));
 
 const modeBtnE = document.getElementById("mode-btn-e") as HTMLButtonElement;
 const modeBtnD = document.getElementById("mode-btn-d") as HTMLButtonElement;
+const modeBtnMagic = document.getElementById("mode-btn-magic") as HTMLButtonElement;
 const modeHintText = document.getElementById("mode-hint-text") as HTMLElement;
 
 function updateModeButtons(mode: TempoMode): void {
   modeBtnE?.classList.toggle("active", mode === "gestural");
   modeBtnD?.classList.toggle("active", mode === "inertial");
+  modeBtnMagic?.classList.toggle("active", mode === "magic");
+  stageEl.classList.toggle("magic-mode-active", mode === "magic");
   updateControlHints();
 }
 
 function setMode(mode: TempoMode): void {
   controller.setTempoMode(mode);
   updateModeButtons(mode);
+  if (mode === "magic" && controller.getInputSource() === "camera") {
+    updateInputSourceButtons("camera");
+  }
 }
 
 modeBtnE?.addEventListener("click", () => setMode("gestural"));
 modeBtnD?.addEventListener("click", () => setMode("inertial"));
+modeBtnMagic?.addEventListener("click", () => setMode("magic"));
 
 // ── Vertical BPM Speedometer Gauge (Beside Camera) ───────────────────────────
 
@@ -809,12 +864,14 @@ window.addEventListener("keydown", (e) => {
     setInputSource(current === "keyboard" ? "camera" : "keyboard");
   } else if (e.code === "KeyT" && !e.repeat) {
     const current = controller.getTempoMode();
-    const nextMode: TempoMode = current === "gestural" ? "inertial" : "gestural";
+    const nextMode: TempoMode = current === "gestural" ? "inertial" : (current === "inertial" ? "magic" : "gestural");
     setMode(nextMode);
   } else if (e.code === "Digit1" && !e.repeat) {
     setMode("gestural");
   } else if (e.code === "Digit2" && !e.repeat) {
     setMode("inertial");
+  } else if (e.code === "Digit3" && !e.repeat) {
+    setMode("magic");
   } else if (e.code === "KeyP" && !e.repeat) {
     controller.togglePause();
   } else if (e.code === "KeyS" && !e.repeat) {

@@ -1993,10 +1993,25 @@ body.debug-mode-active .section-debug-hud {
   transform: scale(1.02);
 }
 
-#stage.focus-mode-active #dynamic-ladder-container {
+#stage.focus-mode-active:not(.magic-mode-active) #dynamic-ladder-container {
   opacity: 0.55;
   pointer-events: none;
   transition: opacity 0.3s ease;
+}
+
+/* ── Magic Finger Targeting & Acquisition Highlights ─────────────────────── */
+.bpm-vertical-gauge.magic-hover,
+#dynamic-ladder-container.magic-hover {
+  border-color: rgba(107, 231, 255, 0.7) !important;
+  box-shadow: 0 0 20px rgba(107, 231, 255, 0.35) !important;
+  transition: all 0.15s ease-out;
+}
+
+.bpm-vertical-gauge.magic-acquired,
+#dynamic-ladder-container.magic-acquired {
+  border-color: rgba(255, 213, 107, 0.95) !important;
+  box-shadow: 0 0 30px rgba(255, 213, 107, 0.6), 0 0 10px rgba(255, 255, 255, 0.4) !important;
+  transition: all 0.1s ease-out;
 }
 
 /* ── Section Visual States during Spotlight Focus Mode ───────────────────── */

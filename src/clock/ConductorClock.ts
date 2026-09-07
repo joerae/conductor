@@ -53,7 +53,7 @@ const MODE_D_PHASE_DEADBAND_MS = 25;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type TempoMode = "balanced" | "instant" | "autoplay" | "inertial" | "gestural";
+export type TempoMode = "balanced" | "instant" | "autoplay" | "inertial" | "gestural" | "magic";
 
 export type ClockEventType = "beat" | "rejected" | "stopped";
 
@@ -137,11 +137,11 @@ export class ConductorClock {
         this.cancelStopTimer();
         this.cancelInertialLoop();
         this.startAutoplayLoop();
-      } else if ((mode === "inertial" || mode === "gestural") && (prevMode !== "inertial" && prevMode !== "gestural")) {
+      } else if ((mode === "inertial" || mode === "gestural" || mode === "magic") && (prevMode !== "inertial" && prevMode !== "gestural" && prevMode !== "magic")) {
         this.cancelAutoplayLoop();
         this.cancelStopTimer();
         this.startInertialLoop();
-      } else if (mode !== "autoplay" && mode !== "inertial" && mode !== "gestural") {
+      } else if (mode !== "autoplay" && mode !== "inertial" && mode !== "gestural" && mode !== "magic") {
         this.cancelAutoplayLoop();
         this.cancelInertialLoop();
         this.scheduleStopTimer();
@@ -191,7 +191,7 @@ export class ConductorClock {
     this.emit({ type: "beat", state: this.getState(), beatNumber: 2 });
     if (this.mode === "autoplay") {
       this.startAutoplayLoop();
-    } else if (this.mode === "inertial" || this.mode === "gestural") {
+    } else if (this.mode === "inertial" || this.mode === "gestural" || this.mode === "magic") {
       this.startInertialLoop();
     }
   }
@@ -205,8 +205,8 @@ export class ConductorClock {
     const nowMs = obs.timestampMs;
     const audioNow = this.getAudioTime();
 
-    // ── Mode E (Continuous Gestural Cruise & Accelerando) ──────────────────────
-    if (this.mode === "gestural") {
+    // ── Mode E & Mode M (Continuous Gestural Cruise / Magic Laser Finger) ─────
+    if (this.mode === "gestural" || this.mode === "magic") {
       // In Mode E, beating hands triggers audio/visual beat feedback for musical feel,
       // but does NOT override the continuous height-controlled tempo!
       this.lastAcceptedTapMs = nowMs;
@@ -595,11 +595,11 @@ export class ConductorClock {
    */
   private startInertialLoop(): void {
     this.cancelInertialLoop();
-    if ((this.mode !== "inertial" && this.mode !== "gestural") || this.acceptedBeatCount < 2) return;
+    if ((this.mode !== "inertial" && this.mode !== "gestural" && this.mode !== "magic") || this.acceptedBeatCount < 2) return;
 
     const scheduleNext = () => {
       this.inertialTimer = setTimeout(() => {
-        if ((this.mode !== "inertial" && this.mode !== "gestural") || this.acceptedBeatCount < 2) return;
+        if ((this.mode !== "inertial" && this.mode !== "gestural" && this.mode !== "magic") || this.acceptedBeatCount < 2) return;
 
         this.inertialFreeWheelCount++;
         const maxFreeWheelPulses = MODE_D_MAX_FREEWHEEL_BARS * MODE_D_PULSES_PER_BAR; // 16 bars = 32 pulses
@@ -641,7 +641,7 @@ export class ConductorClock {
 
   private scheduleStopTimer(): void {
     this.cancelStopTimer();
-    if (this.mode === "autoplay" || this.mode === "inertial" || this.mode === "gestural") return;
+    if (this.mode === "autoplay" || this.mode === "inertial" || this.mode === "gestural" || this.mode === "magic") return;
 
     this.stopTimer = setTimeout(() => {
       this.reset();

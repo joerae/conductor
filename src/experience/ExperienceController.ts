@@ -13,6 +13,7 @@ import type { ClockEvent, TempoMode } from "../clock/ConductorClock";
 import { KeyboardBeatInput } from "../input/KeyboardBeatInput";
 import { CameraBeatInputProvider } from "../camera/CameraBeatInputProvider";
 import type { FocusTelemetry } from "../camera/InstrumentFocusController";
+import type { MagicFingerTelemetry } from "../camera/MagicFingerController";
 import { MidiScore } from "../score/MidiScore";
 import { ScoreTransport } from "../score/ScoreTransport";
 import { Scheduler } from "../scheduler/Scheduler";
@@ -63,6 +64,7 @@ export type UICallbacks = {
   onPartyModeChange?: (isParty: boolean) => void;
   onLoveModeChange?: (isLove: boolean) => void;
   onFocusChange?: (telemetry: FocusTelemetry) => void;
+  onMagicFinger?: (telemetry: MagicFingerTelemetry) => void;
   onAudioReady?: (ctx: AudioContext) => void;
   onCameraMotionSample?: (sample: {
     tempoBpm?: number;
@@ -626,6 +628,34 @@ export class ExperienceController {
         }
       });
 
+      // Wire Magic Finger Mode callbacks & safe acquisition updates
+      const mfController = this.cameraInput.getMagicFingerController();
+      mfController.setCallbacks({
+        onBpmChange: (bpm: number) => {
+          this.setLiveBpm(bpm);
+        },
+        onDynamicChange: (val: number) => {
+          this.setContinuousDynamic(val);
+        },
+      });
+
+      this.cameraInput.onMagicFinger(magicTel => {
+        if (this.inputSource === "camera") {
+          this.cameraInput?.setIndicatedBpm(this.indicatedBpm);
+          const curDyn = this.audioEngine.getContinuousDynamic() ?? 0.5;
+          this.cameraInput?.setContinuousDynamic(curDyn);
+
+          if (magicTel.isActive && (this.state === "ready" || this.state === "paused" || this.state === "completed")) {
+            if (this.state === "completed") {
+              this.restart();
+            }
+            this.startPlayback();
+          }
+
+          this.uiCallbacks.onMagicFinger?.(magicTel);
+        }
+      });
+
       // Wire camera telemetry into debug overlay
       this.cameraInput.onTelemetry(t => {
         this.debug.updateCameraTelemetry(t);
@@ -639,8 +669,9 @@ export class ExperienceController {
         this.isHandsDown = samples.length === 0;
 
         const isFocusActive = this.cameraInput?.getFocusController().isFocusModeActive() ?? false;
+        const isMagicMode = this.clock.getTempoMode() === "magic";
 
-        if (samples.length > 0 && !isFocusActive) {
+        if (samples.length > 0 && !isFocusActive && !isMagicMode) {
           // ── 1. Thumbs Down Cutoff (👎): Dramatically pauses music ──
           const hasThumbDown = samples.some(s => s.gesture === "Thumb_Down");
           if (hasThumbDown) {
@@ -1362,6 +1393,9 @@ export class ExperienceController {
   }
 
   setTempoMode(mode: TempoMode): void {
+    if (mode === "magic" && this.inputSource !== "camera") {
+      void this.setInputSource("camera");
+    }
     this.clock.setTempoMode(mode);
     this.debug.updateTempoMode(mode);
     if (this.cameraInput) {
@@ -1374,7 +1408,51 @@ export class ExperienceController {
       this.clock.setPeriodMs(60000 / this.basePieceBpm);
     } else if (mode === "inertial") {
       this.clock.setPeriodMs((60000 / this.basePieceBpm) * beatsPerTap);
+    } else if (mode === "magic") {
+      this.clock.setPeriodMs(60000 / this.indicatedBpm);
     }
+  }
+
+  setLiveBpm(bpm: number): void {
+    const clamped = Math.max(40, Math.min(220, bpm));
+    this.clock.setBpm(clamped);
+    this.indicatedBpm = Math.round(clamped);
+    this.currentGesturalBpm = clamped;
+    this.debug.updateClock(this.clock.getState());
+
+    if (this.cameraInput) {
+      this.cameraInput.setIndicatedBpm(this.indicatedBpm);
+    }
+
+    if (this.state === "playing") {
+      this.transport.updatePeriod(
+        this.audioEngine.getAudioTime(),
+        60 / clamped,
+        0
+      );
+    }
+
+    this.uiCallbacks.onCameraMotionSample?.({
+      tempoBpm: this.indicatedBpm,
+    });
+  }
+
+  setContinuousDynamic(val: number): void {
+    const clamped = Math.max(0, Math.min(1, val));
+    this.audioEngine.setContinuousDynamic(clamped);
+    if (this.cameraInput) {
+      this.cameraInput.setContinuousDynamic(clamped);
+    }
+    const snappedLevel = this.audioEngine.getDynamicLevel();
+    if (snappedLevel !== this.baseDynamicLevel) {
+      this.baseDynamicLevel = snappedLevel;
+      this.uiCallbacks.onDynamicChange?.(snappedLevel);
+      this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
+    }
+    this.uiCallbacks.onCameraMotionSample?.({
+      dynamicLevel: snappedLevel,
+      dynamicContinuous: clamped,
+    });
   }
 
   startAutoplayInTempo(): void {

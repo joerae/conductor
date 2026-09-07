@@ -17,6 +17,14 @@ export function bpmToPercent(bpm: number): number {
 }
 
 /**
+ * Maps a vertical percentage [0%, 100%] linearly back to BPM [40, 220].
+ */
+export function percentToBpm(percent: number): number {
+  const clamped = Math.max(0, Math.min(100, percent));
+  return MIN_GAUGE_BPM + (clamped / 100) * (MAX_GAUGE_BPM - MIN_GAUGE_BPM);
+}
+
+/**
  * Dynamically positions all BPM gauge tick labels to match the linear formula.
  */
 export function initBpmGaugeTicks(container?: HTMLElement | null): void {

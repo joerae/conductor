@@ -20,6 +20,7 @@
  */
 
 import type { ClockState, TapRejectionReason } from "../clock/clockTypes";
+import type { TempoMode } from "../clock/ConductorClock";
 import type { DynamicsTelemetry, DSPBypassFlags, VelocityDecomposition } from "../audio/dynamicsTypes";
 
 interface DebugSnapshot {
@@ -342,7 +343,7 @@ export class DebugOverlay {
 
   // ── Update methods (called by ExperienceController) ─────────────────────
 
-  updateTempoMode(mode: "balanced" | "instant" | "autoplay" | "inertial" | "gestural"): void {
+  updateTempoMode(mode: TempoMode): void {
     this.snapshot.tempoMode =
       mode === "balanced"
         ? "A (Balanced PLL)"
@@ -352,7 +353,9 @@ export class DebugOverlay {
             ? "C (Autoplay ⚡)"
             : mode === "inertial"
               ? "Beat (Cut Time 🥁)"
-              : "Expressive (Gesture 🪄)";
+              : mode === "magic"
+                ? "Magic Finger (Laser 👆)"
+                : "Expressive (Gesture 🪄)";
 
     const modeButtons = this.container?.querySelectorAll<HTMLButtonElement>(".dbg-tempo-mode-btn");
     modeButtons?.forEach(btn => {

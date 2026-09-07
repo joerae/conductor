@@ -32,6 +32,7 @@ export type HandGesture =
   | "Open_Palm"
   | "Victory"
   | "Pointing_Up"
+  | "Pointing"
   | "Thumb_Up"
   | "Thumb_Down"
   | "ILoveYou"
@@ -297,13 +298,18 @@ export function classifyHandGestureFromLandmarks(landmarks: HandLandmark[]): Han
     const indexHorizontal = Math.abs(indexTip.x - indexMcp.x);
     const indexPointsUp = indexTip.y < indexPip.y - 0.035 && indexVerticalUp > indexHorizontal * 0.85;
 
-    // Middle, Ring, and Pinky must be strictly curled
+    // Middle, Ring, and Pinky must be curled
     const middleCurled = isFingerStrictlyCurled(HAND_LANDMARK_INDICES.MIDDLE_FINGER_TIP, HAND_LANDMARK_INDICES.MIDDLE_FINGER_PIP, HAND_LANDMARK_INDICES.MIDDLE_FINGER_MCP);
     const ringCurled = isFingerStrictlyCurled(HAND_LANDMARK_INDICES.RING_FINGER_TIP, HAND_LANDMARK_INDICES.RING_FINGER_PIP, HAND_LANDMARK_INDICES.RING_FINGER_MCP);
     const pinkyCurled = isFingerStrictlyCurled(HAND_LANDMARK_INDICES.PINKY_TIP, HAND_LANDMARK_INDICES.PINKY_PIP, HAND_LANDMARK_INDICES.PINKY_MCP);
 
-    if (handIsVertical && indexPointsUp && middleCurled && ringCurled && pinkyCurled && !isMiddleExt && !isRingExt && !isPinkyExt) {
-      return "Pointing_Up";
+    const otherFingersCurled = (middleCurled && ringCurled && pinkyCurled) || (!isMiddleExt && !isRingExt && !isPinkyExt);
+
+    if (otherFingersCurled) {
+      if (handIsVertical && indexPointsUp && middleCurled && ringCurled && pinkyCurled) {
+        return "Pointing_Up";
+      }
+      return "Pointing";
     }
   }
 
@@ -326,6 +332,13 @@ export function classifyHandGestureFromLandmarks(landmarks: HandLandmark[]): Han
   }
 
   return "none";
+}
+
+/**
+ * Returns true if the gesture is an index pointing gesture (either Pointing_Up or Pointing).
+ */
+export function isPointingGesture(gesture: HandGesture): boolean {
+  return gesture === "Pointing_Up" || gesture === "Pointing";
 }
 
 /**

@@ -25,7 +25,9 @@ import { HandMotionFilter } from "./HandMotionFilter";
 import { HandBeatDetector } from "./HandBeatDetector";
 import { BeatFusion } from "./BeatFusion";
 import { InstrumentFocusController, type FocusTelemetry } from "./InstrumentFocusController";
+import { MagicFingerController, type MagicFingerTelemetry } from "./MagicFingerController";
 import type { PieceSection } from "../score/repertoire";
+import type { TempoMode } from "../clock/ConductorClock";
 
 export interface CameraBeatInputOptions {
   config?: Partial<CameraConfig>;
@@ -36,6 +38,7 @@ export interface CameraBeatInputOptions {
   onSamples?: (samples: HandSample[]) => void;
   onDynamics?: (dynamics: DynamicsObservation) => void;
   onFocus?: (telemetry: FocusTelemetry) => void;
+  onMagicFinger?: (telemetry: MagicFingerTelemetry) => void;
 }
 
 export class CameraBeatInputProvider implements BeatInputProvider {
@@ -46,6 +49,10 @@ export class CameraBeatInputProvider implements BeatInputProvider {
   private beatDetector: HandBeatDetector;
   private beatFusion: BeatFusion;
   private focusController: InstrumentFocusController;
+  private magicFingerController: MagicFingerController;
+  private tempoMode: TempoMode = "gestural";
+  private indicatedBpm: number = 100;
+  private continuousDynamic: number = 0.5;
   private previewOverlay: CameraPreviewOverlay | null = null;
   private lastThumbsUpBurstTime = new Map<number, number>();
   private isThumbsUpVFXEnabled: boolean = false;
@@ -59,6 +66,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
   private sampleCallbacks: Set<(samples: HandSample[]) => void> = new Set();
   private dynamicsCallbacks: Set<(dynamics: DynamicsObservation) => void> = new Set();
   private focusCallbacks: Set<(telemetry: FocusTelemetry) => void> = new Set();
+  private magicFingerCallbacks: Set<(telemetry: MagicFingerTelemetry) => void> = new Set();
 
   private isStarted = false;
   private currentTelemetry: CameraTelemetry = {
@@ -82,6 +90,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     this.beatDetector = new HandBeatDetector();
     this.beatFusion = new BeatFusion();
     this.focusController = new InstrumentFocusController();
+    this.magicFingerController = new MagicFingerController();
 
     if (options?.mountOverlay !== false && typeof document !== "undefined") {
       this.previewOverlay = new CameraPreviewOverlay({
@@ -101,6 +110,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     if (options?.onSamples) this.onSamples(options.onSamples);
     if (options?.onDynamics) this.onDynamics(options.onDynamics);
     if (options?.onFocus) this.onFocus(options.onFocus);
+    if (options?.onMagicFinger) this.onMagicFinger(options.onMagicFinger);
 
     // Track last beat for telemetry
     let lastBeatDetail: CameraTelemetry["lastBeat"] = undefined;
@@ -132,9 +142,45 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     // Wire tracker frame output to focus controller, motion filter, beat detector, dynamics estimator, preview overlay & callbacks
     this.handTracker.onFrame((samples, telemetry) => {
       const now = performance.now();
+      const isMirrored = this.handTracker.getConfig().mirrorPreview ?? true;
+
+      // ── Magic Finger Mode ──────────────────────────────────────────────────
+      if (this.tempoMode === "magic") {
+        const magicTelemetry = this.magicFingerController.update({
+          samples,
+          indicatedBpm: this.indicatedBpm,
+          continuousDynamic: this.continuousDynamic,
+          isMirrored,
+        });
+
+        // Synthesize focus telemetry for instrument spotlighting
+        const synthFocusTelemetry: FocusTelemetry = {
+          isActive: magicTelemetry.targetedSectionId !== null,
+          state: magicTelemetry.targetedSectionId !== null ? "grabbed" : "idle",
+          hoveredSectionId: magicTelemetry.targetedSectionId,
+          grabbedSectionId: magicTelemetry.targetedSectionId,
+          sectionFocus: magicTelemetry.targetedSectionId !== null ? 1.0 : 0,
+          pointerScreenPoint: null,
+          pointingHandIndex: magicTelemetry.pointingHandIndex ?? null,
+          pinchDistanceRatio: 1.0,
+        };
+
+        const fullTelemetry: CameraTelemetry = {
+          ...telemetry,
+          beatDebug: this.beatDetector.getDebugSnapshot(),
+          lastBeat: lastBeatDetail,
+        };
+
+        this.currentTelemetry = fullTelemetry;
+        this.previewOverlay?.render(samples, fullTelemetry, synthFocusTelemetry, magicTelemetry);
+        this.telemetryCallbacks.forEach(cb => cb(fullTelemetry));
+        this.sampleCallbacks.forEach(cb => cb(samples));
+        this.magicFingerCallbacks.forEach(cb => cb(magicTelemetry));
+        this.focusCallbacks.forEach(cb => cb(synthFocusTelemetry));
+        return;
+      }
 
       // 0. Process Instrument Focus Mode
-      const isMirrored = this.handTracker.getConfig().mirrorPreview ?? true;
       const focusTelemetry = this.focusController.update(samples, this.currentSections, now, isMirrored);
       this.previewOverlay?.setFocusModeActive(focusTelemetry.isActive);
 
@@ -215,6 +261,35 @@ export class CameraBeatInputProvider implements BeatInputProvider {
   onFocus(callback: (telemetry: FocusTelemetry) => void): () => void {
     this.focusCallbacks.add(callback);
     return () => this.focusCallbacks.delete(callback);
+  }
+
+  onMagicFinger(callback: (telemetry: MagicFingerTelemetry) => void): () => void {
+    this.magicFingerCallbacks.add(callback);
+    return () => this.magicFingerCallbacks.delete(callback);
+  }
+
+  setTempoMode(mode: TempoMode): void {
+    this.tempoMode = mode;
+    this.focusController.setTempoMode(mode);
+    if (mode !== "magic") {
+      this.magicFingerController.reset();
+    }
+  }
+
+  getTempoMode(): TempoMode {
+    return this.tempoMode;
+  }
+
+  setIndicatedBpm(bpm: number): void {
+    this.indicatedBpm = bpm;
+  }
+
+  setContinuousDynamic(value: number): void {
+    this.continuousDynamic = value;
+  }
+
+  getMagicFingerController(): MagicFingerController {
+    return this.magicFingerController;
   }
 
   setSections(sections: PieceSection[]): void {
@@ -298,6 +373,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     this.beatDetector.reset();
     this.beatFusion.reset();
     this.focusController.reset();
+    this.magicFingerController.reset();
 
     if (this.previewOverlay) {
       this.previewOverlay.updateState("stopped");
@@ -321,6 +397,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
     this.sampleCallbacks.clear();
     this.dynamicsCallbacks.clear();
     this.focusCallbacks.clear();
+    this.magicFingerCallbacks.clear();
   }
 
   /**
@@ -355,13 +432,6 @@ export class CameraBeatInputProvider implements BeatInputProvider {
 
   getFocusModeEnabled(): boolean {
     return this.focusController.getEnabled();
-  }
-
-  /**
-   * Updates tempo mode on focus controller to tailor gesture triggers.
-   */
-  setTempoMode(mode: string): void {
-    this.focusController.setTempoMode(mode);
   }
 
   private handleCameraStateChange(state: CameraState, error?: string): void {

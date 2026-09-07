@@ -6,16 +6,15 @@
  * and live performance telemetry.
  */
 
-import type {
-  CameraState,
-  CameraTelemetry,
-  HandSample,
-} from "./cameraTypes";
 import {
+  type CameraState,
+  type CameraTelemetry,
+  type HandSample,
   HAND_CONNECTIONS,
   HAND_LANDMARK_INDICES,
 } from "./cameraTypes";
 import type { FocusTelemetry } from "./InstrumentFocusController";
+import type { MagicFingerTelemetry } from "./MagicFingerController";
 
 export interface CameraPreviewOverlayOptions {
   onClose?: () => void;
@@ -216,7 +215,12 @@ export class CameraPreviewOverlay {
   /**
    * Renders detected landmarks, bones, conducting point halos, telemetry, and focus visuals.
    */
-  render(samples: HandSample[], telemetry: CameraTelemetry, focusTelemetry?: FocusTelemetry): void {
+  render(
+    samples: HandSample[],
+    telemetry: CameraTelemetry,
+    focusTelemetry?: FocusTelemetry,
+    magicFingerTelemetry?: MagicFingerTelemetry | null
+  ): void {
     this.updateTelemetry(telemetry);
 
     if (!this.canvasEl || !this.ctx || !this.videoEl) return;
@@ -391,10 +395,16 @@ export class CameraPreviewOverlay {
       return true;
     });
 
-    // 7. Render Focus Mode pointer & targeting visual cues
-    if (focusTelemetry && focusTelemetry.isActive && samples.length > 0) {
-      const pointingHand = (focusTelemetry.pointingHandIndex !== null
-        ? samples.find(s => s.handIndex === focusTelemetry.pointingHandIndex)
+    // 7. Render Focus Mode or Magic Finger pointer & targeting visual cues
+    const isMagicActive = Boolean(magicFingerTelemetry && magicFingerTelemetry.isActive && magicFingerTelemetry.ray);
+    const isFocusActive = Boolean(focusTelemetry && focusTelemetry.isActive);
+
+    if ((isMagicActive || isFocusActive) && samples.length > 0) {
+      const pointingHandIndex = isMagicActive
+        ? magicFingerTelemetry!.pointingHandIndex
+        : focusTelemetry!.pointingHandIndex;
+      const pointingHand = (pointingHandIndex !== null && pointingHandIndex !== undefined
+        ? samples.find(s => s.handIndex === pointingHandIndex)
         : null) || samples[0];
 
       if (pointingHand) {
@@ -403,43 +413,10 @@ export class CameraPreviewOverlay {
         const fy = tip.y * height;
         const pulse = (Math.sin(now / 120) + 1) / 2; // 0..1 pulse
 
-        // 1. Full-Stage Angled Laser Ray (Pierces straight out of camera box to targeted orchestra section)
+        // 1. Full-Stage Angled Laser Ray (Pierces straight out of camera box)
         const stageOverlay = document.getElementById("stage-spotlight-ray-overlay") as SVGSVGElement | null;
 
-        if (stageOverlay && (focusTelemetry.state === "grabbed" || focusTelemetry.state === "hovering") && this.canvasEl) {
-          const canvasRect = this.canvasEl.getBoundingClientRect();
-          const svgRect = stageOverlay.getBoundingClientRect();
-          const isMirrored = this.mirror;
-
-          // Fingertip start position in stage-spotlight-ray-overlay coordinate space
-          const screenNormX = isMirrored ? (1.0 - tip.x) : tip.x;
-          const stageStartX = (canvasRect.left - svgRect.left) + screenNormX * canvasRect.width;
-          const stageStartY = (canvasRect.top - svgRect.top) + tip.y * canvasRect.height;
-
-          // Pointing direction vector in screen pixels
-          const pip = pointingHand.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] || pointingHand.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
-          const pipNormX = pip ? (isMirrored ? (1.0 - pip.x) : pip.x) : screenNormX;
-          const pipNormY = pip ? pip.y : (tip.y + 0.05);
-          const dirX = (screenNormX - pipNormX) * canvasRect.width;
-          const dirY = (tip.y - pipNormY) * canvasRect.height;
-          const len = Math.hypot(dirX, dirY) || 1;
-          const unitX = dirX / len;
-          const unitY = dirY / len;
-
-          // Pure straight ray projecting freely across the stage directly to the bottom baseline of the instrument eggs
-          let targetBaselineY = 100;
-          const firstSecEl = document.getElementById("section-0") || document.querySelector(".instrument-section");
-          if (firstSecEl) {
-            const firstRect = firstSecEl.getBoundingClientRect();
-            targetBaselineY = (firstRect.top - svgRect.top) + firstRect.height * 0.78;
-          }
-
-          const rayDist = unitY < -0.02 ? ((stageStartY - targetBaselineY) / -unitY) : 320;
-          const stageEndX = stageStartX + unitX * rayDist;
-          const stageEndY = stageStartY + unitY * rayDist;
-
-          const activeSecId = focusTelemetry.grabbedSectionId || focusTelemetry.hoveredSectionId;
-
+        if (stageOverlay && this.canvasEl) {
           const outerRay = stageOverlay.querySelector("#spotlight-stage-outer-ray") as SVGLineElement | null;
           const mainRay = stageOverlay.querySelector("#spotlight-stage-ray") as SVGLineElement | null;
           const coreRay = stageOverlay.querySelector("#spotlight-stage-core") as SVGLineElement | null;
@@ -448,6 +425,55 @@ export class CameraPreviewOverlay {
           const targetPip = stageOverlay.querySelector("#spotlight-stage-target-pip") as SVGCircleElement | null;
 
           if (outerRay && mainRay && coreRay && targetGlow && targetRing && targetPip) {
+            let stageStartX = 0;
+            let stageStartY = 0;
+            let stageEndX = 0;
+            let stageEndY = 0;
+            let isAcquired = false;
+            let showImpact = false;
+
+            if (isMagicActive && magicFingerTelemetry?.ray) {
+              const ray = magicFingerTelemetry.ray;
+              stageStartX = ray.startX;
+              stageStartY = ray.startY;
+              stageEndX = ray.endX;
+              stageEndY = ray.endY;
+              isAcquired = ray.isAcquired;
+              showImpact = ray.targetType !== "open";
+            } else if (focusTelemetry && (focusTelemetry.state === "grabbed" || focusTelemetry.state === "hovering")) {
+              const canvasRect = this.canvasEl.getBoundingClientRect();
+              const svgRect = stageOverlay.getBoundingClientRect();
+              const isMirrored = this.mirror;
+
+              const screenNormX = isMirrored ? (1.0 - tip.x) : tip.x;
+              stageStartX = (canvasRect.left - svgRect.left) + screenNormX * canvasRect.width;
+              stageStartY = (canvasRect.top - svgRect.top) + tip.y * canvasRect.height;
+
+              const pip = pointingHand.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] || pointingHand.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
+              const pipNormX = pip ? (isMirrored ? (1.0 - pip.x) : pip.x) : screenNormX;
+              const pipNormY = pip ? pip.y : (tip.y + 0.05);
+              const dirX = (screenNormX - pipNormX) * canvasRect.width;
+              const dirY = (tip.y - pipNormY) * canvasRect.height;
+              const len = Math.hypot(dirX, dirY) || 1;
+              const unitX = dirX / len;
+              const unitY = dirY / len;
+
+              let targetBaselineY = 100;
+              const firstSecEl = document.getElementById("section-0") || document.querySelector(".instrument-section");
+              if (firstSecEl) {
+                const firstRect = firstSecEl.getBoundingClientRect();
+                targetBaselineY = (firstRect.top - svgRect.top) + firstRect.height * 0.78;
+              }
+
+              const rayDist = unitY < -0.02 ? ((stageStartY - targetBaselineY) / -unitY) : 320;
+              stageEndX = stageStartX + unitX * rayDist;
+              stageEndY = stageStartY + unitY * rayDist;
+
+              const activeSecId = focusTelemetry.grabbedSectionId || focusTelemetry.hoveredSectionId;
+              showImpact = Boolean(activeSecId);
+              isAcquired = focusTelemetry.state === "grabbed";
+            }
+
             outerRay.setAttribute("x1", stageStartX.toFixed(1));
             outerRay.setAttribute("y1", stageStartY.toFixed(1));
             outerRay.setAttribute("x2", stageEndX.toFixed(1));
@@ -465,20 +491,35 @@ export class CameraPreviewOverlay {
 
             targetGlow.setAttribute("cx", stageEndX.toFixed(1));
             targetGlow.setAttribute("cy", stageEndY.toFixed(1));
-            targetGlow.setAttribute("r", (16 + pulse * 6).toFixed(1));
+            targetGlow.setAttribute("r", (isAcquired ? 22 + pulse * 6 : 16 + pulse * 4).toFixed(1));
 
             targetRing.setAttribute("cx", stageEndX.toFixed(1));
             targetRing.setAttribute("cy", stageEndY.toFixed(1));
-            targetRing.setAttribute("r", (10 + pulse * 3).toFixed(1));
+            targetRing.setAttribute("r", (isAcquired ? 13 + pulse * 4 : 10 + pulse * 2).toFixed(1));
 
             targetPip.setAttribute("cx", stageEndX.toFixed(1));
             targetPip.setAttribute("cy", stageEndY.toFixed(1));
 
-            // Only show impact flare & ring if actively intersecting an instrument section
-            const showImpact = Boolean(activeSecId);
             targetGlow.style.display = showImpact ? "" : "none";
             targetRing.style.display = showImpact ? "" : "none";
             targetPip.style.display = showImpact ? "" : "none";
+
+            // Visual styling: energetic gold when acquired, luminous cyan-gold when pointing/hovering
+            if (isAcquired) {
+              outerRay.setAttribute("stroke", "rgba(255, 213, 107, 0.40)");
+              outerRay.setAttribute("stroke-width", "12");
+              mainRay.setAttribute("stroke", "#ffd56b");
+              mainRay.setAttribute("stroke-width", "4.5");
+              coreRay.setAttribute("stroke", "#ffffff");
+              coreRay.setAttribute("stroke-width", "2");
+            } else {
+              outerRay.setAttribute("stroke", "rgba(107, 231, 255, 0.28)");
+              outerRay.setAttribute("stroke-width", "9");
+              mainRay.setAttribute("stroke", "#6be7ff");
+              mainRay.setAttribute("stroke-width", "3");
+              coreRay.setAttribute("stroke", "#ffffff");
+              coreRay.setAttribute("stroke-width", "1.5");
+            }
 
             stageOverlay.style.display = "block";
           }
@@ -487,14 +528,18 @@ export class CameraPreviewOverlay {
         }
 
         // 2. Fingertip targeting reticle ring & glowing aura
+        const isAcquiredOrGrabbed = isMagicActive
+          ? Boolean(magicFingerTelemetry?.ray?.isAcquired)
+          : focusTelemetry?.state === "grabbed";
+
         ctx.save();
         ctx.beginPath();
         ctx.arc(fx, fy, 14 + pulse * 4, 0, Math.PI * 2);
-        ctx.fillStyle = focusTelemetry.state === "grabbed"
-          ? "rgba(255, 213, 107, 0.20)"
+        ctx.fillStyle = isAcquiredOrGrabbed
+          ? "rgba(255, 213, 107, 0.25)"
           : "rgba(107, 231, 255, 0.16)";
         ctx.fill();
-        ctx.strokeStyle = focusTelemetry.state === "grabbed"
+        ctx.strokeStyle = isAcquiredOrGrabbed
           ? "rgba(255, 213, 107, 0.95)"
           : "rgba(107, 231, 255, 0.85)";
         ctx.lineWidth = 2.2;
