@@ -62,6 +62,23 @@ function swingBaton(): void {
 function getPromptText(state: ExperienceState, pausedBeat: number, inputSource: InputSource = "keyboard"): string {
   const tempoMode = controller.getTempoMode();
   if (inputSource === "camera") {
+    if (tempoMode === "magic") {
+      switch (state) {
+        case "loading":
+          return "Preparing orchestra and loading hand tracking AI model…";
+        case "ready":
+          return "Raise your hand (point) to begin conducting";
+        case "preparing":
+          return "Magic finger active — starting orchestra…";
+        case "playing":
+          return "👆 Aim laser pointer at Tempo Gauge, Dynamics Ribbon, or Orchestra Sections";
+        case "paused":
+          return `Orchestra paused at beat ${pausedBeat.toFixed(1)}. Raise hand to resume.`;
+        case "completed":
+          return "Bravo! Masterpiece concluded. Raise hand to conduct again.";
+      }
+    }
+
     if (tempoMode === "gestural") {
       switch (state) {
         case "loading":
@@ -117,6 +134,23 @@ function getPromptText(state: ExperienceState, pausedBeat: number, inputSource: 
   }
 
   // Keyboard input source
+  if (tempoMode === "magic") {
+    switch (state) {
+      case "loading":
+        return "Preparing the orchestra and instruments…";
+      case "ready":
+        return "Magic Finger active. Switch to Camera (C) to point, or press SPACE to begin.";
+      case "preparing":
+        return "Starting orchestra…";
+      case "playing":
+        return "Playing! Switch to Camera (C) to use laser pointer, or press SPACE / P to pause.";
+      case "paused":
+        return `Orchestra paused at beat ${pausedBeat.toFixed(1)}. Press SPACE or P to resume.`;
+      case "completed":
+        return "Bravo! Masterpiece concluded. Press SPACE to conduct again.";
+    }
+  }
+
   if (tempoMode === "gestural") {
     switch (state) {
       case "loading":
@@ -791,7 +825,7 @@ function updateBpmGaugeUI(overrideIndicatedBpm?: number, overrideOrchestraBpm?: 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const clockState = (controller as any).clock?.getState?.();
   const orchestraBpm = overrideOrchestraBpm ?? (clockState?.bpm || 0);
-  const indicatedBpm = overrideIndicatedBpm ?? (controller.getIndicatedBpm() || orchestraBpm || 0);
+  const indicatedBpm = overrideIndicatedBpm ?? (controller.getIndicatedBpm() || orchestraBpm || controller.getNominalPieceBpm?.() || 0);
 
   if (orchestraBpm > 0) {
     if (valOrchestraBpm) valOrchestraBpm.textContent = `${orchestraBpm.toFixed(0)}`;
@@ -908,12 +942,12 @@ window.addEventListener("keydown", (e) => {
     setInputSource(current === "keyboard" ? "camera" : "keyboard");
   } else if (e.code === "KeyT" && !e.repeat) {
     const current = controller.getTempoMode();
-    const nextMode: TempoMode = current === "gestural" ? "inertial" : (current === "inertial" ? "magic" : "gestural");
+    const nextMode: TempoMode = current === "magic" ? "gestural" : "magic";
     setMode(nextMode);
   } else if (e.code === "Digit1" && !e.repeat) {
-    setMode("gestural");
+    setMode("magic");
   } else if (e.code === "Digit2" && !e.repeat) {
-    setMode("inertial");
+    setMode("gestural");
   } else if (e.code === "Digit3" && !e.repeat) {
     setMode("magic");
   } else if (e.code === "KeyP" && !e.repeat) {

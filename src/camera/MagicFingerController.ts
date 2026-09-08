@@ -253,9 +253,19 @@ export class MagicFingerController {
   }
 
   /**
+   * Set initial BPM based on the piece's nominal suggested tempo.
+   */
+  setInitialBpm(bpm: number): void {
+    if (bpm > 0) {
+      this.lastBpm = bpm;
+      this.lastValidInBoundsBpm = bpm;
+    }
+  }
+
+  /**
    * Reset all acquired state on mode change or deactivation.
    */
-  reset(): void {
+  reset(suggestedBpm?: number): void {
     this.state = "idle";
     this.activeTarget = null;
     this.hoverTarget = null;
@@ -275,7 +285,12 @@ export class MagicFingerController {
     this.lastHitScreenX = null;
     this.lastHitScreenY = null;
     this.handMotionHistory.clear();
-    this.lastValidInBoundsBpm = this.lastBpm;
+    if (suggestedBpm && suggestedBpm > 0) {
+      this.lastBpm = suggestedBpm;
+      this.lastValidInBoundsBpm = suggestedBpm;
+    } else {
+      this.lastValidInBoundsBpm = this.lastBpm;
+    }
     this.lastValidInBoundsDynamic = this.lastDynamic;
     this.callbacks.onSpotlightChange?.(null);
   }
@@ -697,17 +712,51 @@ export class MagicFingerController {
     // ── EVALUATE LOCKED-IN STATE & ZONE REARMING ────────────────────────────
     if (this.isLockedIn) {
       // 1. Check if pointer clearly aims outside the locked control zone:
+      // Check if pointer is still aiming at the currently locked gauge (including the top of the bar).
+      // The lock should only disappear when pointing to the top section, not when it is locked on the tempo bar.
+      let isAimingAtLockedGauge = false;
+      if (this.lockedTarget === "tempo" && tempoTrackRect && rayDirX > 0.05) {
+        const trackCenterX = (tempoTrackRect.left + tempoTrackRect.right) / 2 - svgRect.left;
+        const trackTop = tempoTrackRect.top - svgRect.top;
+        const trackBottom = tempoTrackRect.bottom - svgRect.top;
+        const t = (trackCenterX - startX) / rayDirX;
+        if (t > 0) {
+          const hitY = startY + rayDirY * t;
+          if (hitY >= trackTop - 15 && hitY <= trackBottom + 30) {
+            isAimingAtLockedGauge = true;
+          }
+        }
+      } else if (
+        this.lockedTarget === "dynamics" &&
+        dynamicsTrackRect &&
+        dynamicsTrackRect.height > dynamicsTrackRect.width &&
+        rayDirX < -0.05
+      ) {
+        const trackCenterX = (dynamicsTrackRect.left + dynamicsTrackRect.right) / 2 - svgRect.left;
+        const trackTop = dynamicsTrackRect.top - svgRect.top;
+        const trackBottom = dynamicsTrackRect.bottom - svgRect.top;
+        const t = (trackCenterX - startX) / rayDirX;
+        if (t > 0) {
+          const hitY = startY + rayDirY * t;
+          if (hitY >= trackTop - 15 && hitY <= trackBottom + 30) {
+            isAimingAtLockedGauge = true;
+          }
+        }
+      }
+
       // A) Pointing up to orchestra / instruments:
-      // Rearm ONLY IF ACTUALLY POINTING AT AN ORCHESTRA INSTRUMENT SECTION!
-      // Simply pointing high along the gauge (e.g. at 200 BPM or fff) will project outside the instrument bounds and stay locked.
-      const targetedInstrument = this.getTargetedInstrumentSection(
-        rayDirX,
-        rayDirY,
-        startX,
-        startY,
-        svgRect,
-        instrumentSections
-      );
+      // Rearm ONLY IF ACTUALLY POINTING AT AN ORCHESTRA INSTRUMENT SECTION (and NOT at the locked gauge)!
+      // Simply pointing high along the gauge (e.g. at 220 BPM or fff) remains locked on the gauge.
+      const targetedInstrument = !isAimingAtLockedGauge
+        ? this.getTargetedInstrumentSection(
+            rayDirX,
+            rayDirY,
+            startX,
+            startY,
+            svgRect,
+            instrumentSections
+          )
+        : null;
       const pointingUpToOrchestra = Boolean(targetedInstrument);
 
       // B) Pointing across to opposite control side:

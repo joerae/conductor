@@ -624,4 +624,47 @@ describe("ExperienceController Lifecycle & Bug Regressions", () => {
       sectionFocus: 0,
     }));
   });
+
+  it("Issue 25: defaults to Magic Finger mode on startup", () => {
+    const controller = new ExperienceController(createMockCallbacks());
+    expect(controller.getTempoMode()).toBe("magic");
+  });
+
+  it("Issue 26: raising hand in magic finger mode starts playback at piece suggested tempo, not minimum BPM", async () => {
+    vi.spyOn(CameraBeatInputProvider.prototype, "start").mockResolvedValue();
+    const controller = new ExperienceController(createMockCallbacks());
+    await controller.load();
+
+    expect(controller.getTempoMode()).toBe("magic");
+    const suggestedBpm = controller.getNominalPieceBpm();
+    expect(suggestedBpm).toBeGreaterThanOrEqual(100);
+
+    // Initial indicated BPM should match suggested BPM
+    expect(controller.getIndicatedBpm()).toBe(Math.round(suggestedBpm));
+
+    // Raising one hand in Magic Finger mode
+    const samples = [
+      {
+        handIndex: 0,
+        timestampMs: 1000,
+        handedness: "Right" as const,
+        confidence: 0.9,
+        landmarks: Array(21).fill({ x: 0.5, y: 0.5, z: 0 }),
+        conductorPoint: { x: 0.5, y: 0.35 },
+        conductorX: 0.5,
+        conductorY: 0.35,
+        speed: 0,
+        acceleration: 0,
+        direction: { x: 0, y: 0 },
+        gesture: "Pointing" as const,
+      },
+    ];
+    (controller as any).cameraInput.sampleCallbacks.forEach((cb: any) => cb(samples));
+    await (controller as any).startPlaybackPromise;
+
+    expect(controller.getState()).toBe("playing");
+    const clockState = (controller as any).clock.getState();
+    // Must be at the piece's suggested tempo (e.g. 140 BPM), NOT minimum BPM (40 BPM)!
+    expect(Math.round(clockState.bpm)).toBe(Math.round(suggestedBpm));
+  });
 });

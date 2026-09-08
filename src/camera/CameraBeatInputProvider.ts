@@ -50,8 +50,8 @@ export class CameraBeatInputProvider implements BeatInputProvider {
   private beatFusion: BeatFusion;
   private focusController: InstrumentFocusController;
   private magicFingerController: MagicFingerController;
-  private tempoMode: TempoMode = "gestural";
-  private indicatedBpm: number = 100;
+  private tempoMode: TempoMode = "magic";
+  private indicatedBpm: number = 140;
   private continuousDynamic: number = 0.5;
   private previewOverlay: CameraPreviewOverlay | null = null;
   private lastThumbsUpBurstTime = new Map<number, number>();
@@ -292,6 +292,7 @@ export class CameraBeatInputProvider implements BeatInputProvider {
 
   setIndicatedBpm(bpm: number): void {
     this.indicatedBpm = bpm;
+    this.magicFingerController.setInitialBpm(bpm);
   }
 
   setContinuousDynamic(value: number): void {

@@ -328,27 +328,26 @@
       <div id="tempo-mode-selector" class="mode-selector-container">
         <span class="mode-label">Mode:</span>
         <div class="mode-pill-group">
-          <button id="mode-btn-e" class="mode-pill active" data-mode="gestural"
-            title="Expressive Mode (Default): Continuous Gestural Conducting (Raise hands to start, height modulates speed, width modulates volume, drop hands to stop)">
+          <button id="mode-btn-magic" class="mode-pill active" data-mode="magic"
+            title="Magic Finger Mode (Default): Laser pointer for direct tempo, dynamics, and instrument control">
+            👆 Magic Finger
+          </button>
+          <button id="mode-btn-e" class="mode-pill" data-mode="gestural"
+            title="Expressive Mode: Continuous Gestural Conducting (Raise hands to start, height modulates speed, width modulates volume, drop hands to stop)">
             🪄 Expressive
           </button>
-          <button id="mode-btn-d" class="mode-pill" data-mode="inertial"
+          <button id="mode-btn-d" class="mode-pill" data-mode="inertial" style="display: none;"
             title="Beat Mode: Conduct in cut time (1 stroke = 2 beats in Camera, 1 tap = 1 beat in Keyboard). Steer tempo with beats">
             🥁 Beat
           </button>
-          <button id="mode-btn-magic" class="mode-pill" data-mode="magic"
-            title="Magic Finger Mode: Laser pointer for direct tempo, dynamics, and instrument control">
-            👆 Magic Finger
-          </button>
         </div>
-        <span id="mode-hint-text" class="mode-shortcut-hint">🪄 <strong>Expressive (Camera)</strong>: Height ↕ controls
-          Tempo • Width ↔ controls Volume • Drop to stop</span>
+        <span id="mode-hint-text" class="mode-shortcut-hint">👆 <strong>Magic Finger</strong>: Aim laser pointer at Tempo Gauge, Dynamics Ribbon, or Orchestra Sections</span>
       </div>
     </div>
 
     <!-- Prompt -->
     <div id="prompt-area">
-      <p id="prompt">Tap SPACE twice to set the pulse.</p>
+      <p id="prompt">Raise your hand to begin conducting</p>
       <div id="space-key-hint" aria-hidden="true">
         <span class="key">SPACE</span>
       </div>

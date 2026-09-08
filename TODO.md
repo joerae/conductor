@@ -3,7 +3,7 @@
 
 [  ] disable warmup for now. I think there's a feature flag. Keep it in there. But just show a loading bar for the moment instead of warmup
 
-[  ] Magic Magic finger mode the default mode. And make Expressive Mode the only other one you can toggle to (i.e. no Beat Mode)
+[x] Magic Magic finger mode the default mode. And make Expressive Mode the only other one you can toggle to (i.e. no Beat Mode)
 
 [  ] Add "Made by Joe Raeburn in 2026" down in the footer
 

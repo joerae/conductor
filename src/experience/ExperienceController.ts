@@ -166,8 +166,10 @@ export class ExperienceController {
     // Clock uses AudioEngine's time function for audio scheduling
     this.clock = new ConductorClock({
       getAudioTime: () => this.audioEngine.getAudioTime(),
-      initialMode: "gestural", // Default to Mode E: Gestural Conducting
+      initialMode: "magic", // Default to Mode: Magic Finger
     });
+    this.clock.setBpm(this.nominalPieceBpm);
+    this.clock.setPeriodMs(60000 / this.nominalPieceBpm);
 
     // Wire debug overlay with A/B DSP bypass control, pause toggle, macro ratio slider, camera dynamics mode, beat sound cue, and jitter deadband
     this.debug = new DebugOverlay(
@@ -330,6 +332,8 @@ export class ExperienceController {
       this.nominalPieceBpm = meta?.embeddedBpm || piece.defaultBpm || 140;
       this.basePieceBpm = this.nominalPieceBpm;
       this.currentGesturalBpm = this.nominalPieceBpm;
+      this.indicatedBpm = Math.round(this.nominalPieceBpm);
+      this.clock.setBpm(this.nominalPieceBpm);
       if (this.clock.getTempoMode() === "inertial") {
         this.clock.setPeriodMs((60000 / this.basePieceBpm) * beatsPerTap);
       } else {
@@ -346,6 +350,8 @@ export class ExperienceController {
 
       if (this.cameraInput) {
         this.cameraInput.setSections(piece.sections);
+        this.cameraInput.setIndicatedBpm(this.indicatedBpm);
+        this.cameraInput.getMagicFingerController().setInitialBpm(this.indicatedBpm);
       }
       this.audioEngine.setDefaultSectionPanning(piece.sections);
       this.audioEngine.setSectionFocus(null, 0);
@@ -402,6 +408,8 @@ export class ExperienceController {
         this.nominalPieceBpm = meta?.embeddedBpm || piece.defaultBpm || 140;
         this.basePieceBpm = this.nominalPieceBpm;
         this.currentGesturalBpm = this.nominalPieceBpm;
+        this.indicatedBpm = Math.round(this.nominalPieceBpm);
+        this.clock.setBpm(this.nominalPieceBpm);
         if (this.clock.getTempoMode() === "inertial") {
           this.clock.setPeriodMs((60000 / this.basePieceBpm) * beatsPerTap);
         } else {
@@ -436,6 +444,8 @@ export class ExperienceController {
 
     if (this.cameraInput) {
       this.cameraInput.setSections(piece.sections);
+      this.cameraInput.setIndicatedBpm(this.indicatedBpm);
+      this.cameraInput.getMagicFingerController().setInitialBpm(this.indicatedBpm);
     }
     this.audioEngine.setDefaultSectionPanning(piece.sections);
     this.audioEngine.setSectionFocus(null, 0);
@@ -465,7 +475,9 @@ export class ExperienceController {
   async setInputSource(source: InputSource): Promise<void> {
     if (source === "camera") {
       this.inputSource = "camera";
-      this.setTempoMode("gestural");
+      if (this.clock.getTempoMode() !== "gestural" && this.clock.getTempoMode() !== "magic") {
+        this.setTempoMode("magic");
+      }
       try {
         await this.initCamera();
       } catch (err) {
@@ -544,6 +556,8 @@ export class ExperienceController {
         this.cameraInput.setThumbsUpVFXEnabled(this.isThumbsUpVFXEnabled);
         this.cameraInput.setFocusModeEnabled(this.isFocusModeEnabled);
         this.cameraInput.setTempoMode(this.clock.getTempoMode());
+        this.cameraInput.setIndicatedBpm(this.indicatedBpm || this.nominalPieceBpm);
+        this.cameraInput.getMagicFingerController().setInitialBpm(this.indicatedBpm || this.nominalPieceBpm);
 
         const piece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
         if (piece) {
@@ -1073,6 +1087,14 @@ export class ExperienceController {
     this.scheduler.reset();
     this.transport.stop();
     this.clock.reset();
+    this.currentGesturalBpm = this.nominalPieceBpm;
+    this.indicatedBpm = Math.round(this.nominalPieceBpm);
+    this.clock.setBpm(this.nominalPieceBpm);
+    this.clock.setPeriodMs(60000 / this.nominalPieceBpm);
+    if (this.cameraInput) {
+      this.cameraInput.setIndicatedBpm(this.indicatedBpm);
+      this.cameraInput.getMagicFingerController().setInitialBpm(this.indicatedBpm);
+    }
     this.audioEngine.stopAllNotes();
     this.prepTapCount = 0;
     this.pausedBeat = 0;
@@ -1252,7 +1274,7 @@ export class ExperienceController {
 
   private beatSoundEnabled = false; // Off by default — VFX flash still fires on beat
   private lastBeatObservationMs = -1;
-  private indicatedBpm = 0;
+  private indicatedBpm = 140;
   private keyboardInactivityPulseCount = 0;
 
   setBeatSoundEnabled(enabled: boolean): void {
@@ -1307,8 +1329,8 @@ export class ExperienceController {
     // Reset inactivity counters
     this.keyboardInactivityPulseCount = 0;
 
-    // In Mode E, beating hands triggers instant cymbal cue and visual pulse, but height governs tempo
-    if (this.clock.getTempoMode() === "gestural") {
+    // In Mode E and Magic Finger Mode, tapping SPACE while ready/paused immediately starts/resumes playback!
+    if (this.clock.getTempoMode() === "gestural" || this.clock.getTempoMode() === "magic") {
       if (this.beatSoundEnabled) {
         this.audioEngine.playImmediateBeatCymbal();
       }
@@ -1316,7 +1338,6 @@ export class ExperienceController {
       this.uiCallbacks.onBeat();
       this.clock.acceptObservation(obs);
 
-      // In Expressive Mode: Tapping SPACE or pressing key while ready/paused immediately starts/resumes playback!
       if (this.state === "ready" || this.state === "paused") {
         this.startPlayback();
       }
@@ -1386,6 +1407,11 @@ export class ExperienceController {
         if (this.clock.getTempoMode() === "gestural") {
           this.clock.setPeriodMs(60000 / this.currentGesturalBpm);
           this.clock.startRunningAtCurrentPeriod();
+        } else if (this.clock.getTempoMode() === "magic") {
+          const bpm = this.indicatedBpm > 0 ? this.indicatedBpm : this.nominalPieceBpm;
+          this.clock.setBpm(bpm);
+          this.clock.setPeriodMs(60000 / bpm);
+          this.clock.startRunningAtCurrentPeriod();
         }
 
         const clockState = this.clock.getState();
@@ -1395,9 +1421,9 @@ export class ExperienceController {
 
         // In Beat Mode: 2 prep taps establish tempo (1, 2). Music begins 1 beat later on nextBeatAudioTime
         // with pristine audio attack and zero dropped opening notes.
-        // In Gestural Mode: Starts immediately with 60ms audio buffer lead time.
-        const isGestural = this.clock.getTempoMode() === "gestural";
-        const startAudioTime = isGestural
+        // In Gestural or Magic Mode: Starts immediately with 60ms audio buffer lead time.
+        const isImmediate = this.clock.getTempoMode() === "gestural" || this.clock.getTempoMode() === "magic";
+        const startAudioTime = isImmediate
           ? audioNow + 0.06
           : (nextBeatAudioTime > audioNow + 0.05 ? nextBeatAudioTime : audioNow + periodSec);
 
@@ -1530,7 +1556,14 @@ export class ExperienceController {
     } else if (mode === "inertial") {
       this.clock.setPeriodMs((60000 / this.basePieceBpm) * beatsPerTap);
     } else if (mode === "magic") {
+      const targetBpm = this.indicatedBpm > 0 ? this.indicatedBpm : this.nominalPieceBpm;
+      this.indicatedBpm = Math.round(targetBpm);
+      this.clock.setBpm(this.indicatedBpm);
       this.clock.setPeriodMs(60000 / this.indicatedBpm);
+      if (this.cameraInput) {
+        this.cameraInput.setIndicatedBpm(this.indicatedBpm);
+        this.cameraInput.getMagicFingerController().setInitialBpm(this.indicatedBpm);
+      }
     }
   }
 

@@ -1,9 +1,20 @@
 {
-  "version": "0.32.2",
+  "version": "0.32.3",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.32.3",
+      "date": "2026-09-08",
+      "summary": "Magic Finger Default Mode, Tempo Lock Retention & Suggested Starting Tempo",
+      "details": [
+        "Hidden Beat Mode: Removed Beat mode button from active UI and updated keyboard shortcut cycling (T key) to alternate directly between Magic Finger and Expressive modes.",
+        "Magic Finger Default Mode: Conductor boots directly into Magic Finger mode on initial load with updated initial prompt, shortcut hints, and default camera laser mode.",
+        "Tempo Lock Retention on Top of Tempo Bar: Enhanced MagicFingerController.ts zone rearming to verify whether the pointer is aiming at the locked tempo gauge before testing for instrument section rearming. Pointing at the top of the tempo bar (up to 220 BPM) now strictly retains the lock without flicking to 220 BPM; unlocking only occurs when aiming up to the top orchestra sections.",
+        "Song Suggested Starting Tempo: Initialized indicatedBpm, ConductorClock, and MagicFingerController to the piece's nominal suggested tempo (140 BPM for Mozart) throughout ExperienceController and CameraBeatInputProvider, ensuring raising a hand to conduct immediately starts playback at the suggested tempo rather than 40 BPM minimum."
+      ]
+    },
     {
       "version": "0.32.2",
       "date": "2026-09-08",

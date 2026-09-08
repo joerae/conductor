@@ -973,6 +973,50 @@ describe("MagicFingerController", () => {
     expect(telRecovered.activeTarget).toBe("tempo");
     expect(telRecovered.state).toBe("tempo_acquired");
   });
+
+  it("tempo lock does not disappear when pointing right at the top of the tempo bar (220 BPM)", () => {
+    // 1. Lock in tempo at 150 BPM
+    const aimSample = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+    controller.update({
+      samples: [aimSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+    controller.update({
+      samples: [aimSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 2300,
+    });
+    expect(controller.isLockInActive()).toBe(true);
+
+    // 2. Point right at the top of the tempo bar (tempoRect: left: 320, right: 360, top: 100, bottom: 500)
+    // Canvas left: 100, width: 200 -> startX = 260.
+    // To hit top of tempo gauge (x=340, y=105): dx = 80, dy = -95 (from startX=260, startY=200)
+    // Tip at (0.8, 0.1), Pip at (0.4, 0.25) -> rayDirX > 0, rayDirY < 0 pointing directly at top of tempo bar
+    const topBarSample = createSample("Pointing", 0.8, 0.1, 0.4, 0.25);
+    const tel = controller.update({
+      samples: [topBarSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 2400,
+    });
+
+    // The lock MUST NOT disappear when pointing at the top of the tempo bar!
+    expect(controller.isLockInActive()).toBe(true);
+    expect(tel.isLockedIn).toBe(true);
+    expect(tel.ray?.isDimmed).toBe(true);
+    expect(tel.liveBpm).toBe(175); // Stays at locked value, does not flick to 220 BPM!
+  });
+
+  it("setInitialBpm sets lastBpm and lastValidInBoundsBpm", () => {
+    controller.setInitialBpm(140);
+    expect(controller.getLastBpm()).toBe(140);
+  });
 });
 
 describe("ConductorClock magic mode", () => {
