@@ -15,10 +15,6 @@
 
 import {
   programToWebAudioFontVar,
-  WEBAUDIOFONT_SCRIPTS,
-  WEBAUDIOFONT_PLAYER_URL,
-  VIOLIN_SCRIPT_URL,
-  getScriptsForPiece,
 } from "./instruments";
 import {
   DYNAMIC_PRESETS,
@@ -34,6 +30,14 @@ import type {
   VelocityDecomposition,
 } from "./dynamicsTypes";
 import type { PieceSection } from "../score/repertoire";
+import { SoundfontLoader } from "./SoundfontLoader";
+import type { WebAudioFontEnvelope, WebAudioFontPlayerInstance } from "./SoundfontLoader";
+import { ChannelMixer, safeCancelAutomation } from "./ChannelMixer";
+import type { ChannelBus } from "./ChannelMixer";
+
+// Re-export types and helpers for backwards compatibility
+export type { ChannelBus, WebAudioFontEnvelope, WebAudioFontPlayerInstance };
+export { safeCancelAutomation };
 
 // ─── Tuning constants ───────────────────────────────────────────────────────
 
@@ -55,42 +59,7 @@ const CLICK_AMPLITUDE = 0.5;
  */
 const CLICK_RELEASE_SEC = 0.015;
 
-// ─── WebAudioFont types ─────────────────────────────────────────────────────
-
-declare global {
-  interface Window {
-    WebAudioFontPlayer: new () => WebAudioFontPlayerInstance;
-    [key: string]: unknown; // for instrument bank variables
-  }
-}
-
-interface WebAudioFontEnvelope {
-  cancel: () => void;
-  audioBufferSourceNode?: AudioBufferSourceNode | null;
-  disconnect?: () => void;
-  when?: number;
-  duration?: number;
-  target?: AudioNode;
-}
-
-interface WebAudioFontPlayerInstance {
-  loader: {
-    decodeAfterLoading: (ctx: AudioContext, varName: string) => void;
-  };
-  queueWaveTable: (
-    ctx: AudioContext,
-    target: AudioNode,
-    preset: unknown,
-    when: number,
-    pitch: number,
-    duration: number,
-    volume?: number
-  ) => WebAudioFontEnvelope;
-  cancelQueue?: (ctx: AudioContext) => void;
-  envelopes?: WebAudioFontEnvelope[];
-}
-
-// ─── Active Voice & Spatial Channel Buses ──────────────────────────────────
+// ─── Active Voice ──────────────────────────────────────────────────────────
 
 interface ActiveVoice {
   noteId: string;
@@ -101,17 +70,6 @@ interface ActiveVoice {
   targetVolume: number;
 }
 
-export interface ChannelBus {
-  channel: number;
-  inputGain: GainNode;
-  panner: StereoPannerNode | null;
-  presenceFilter: BiquadFilterNode | null;
-  defaultPan: number;
-  currentPan: number;
-  currentFocusGain: number;
-  currentPresenceGain: number;
-}
-
 export interface AudioDiagnostics {
   totalVoicesCreated: number;
   activeVoicesCount: number;
@@ -120,30 +78,6 @@ export interface AudioDiagnostics {
   channelBusCount: number;
   automationRequestsPerSec: number;
   fontEnvelopesCount: number;
-}
-
-/**
- * Safely cancels scheduled parameter changes on an AudioParam starting at `time`.
- * Uses native `cancelAndHoldAtTime` if supported, otherwise safely falls back to
- * `cancelScheduledValues` and pinning `setValueAtTime(param.value, time)`.
- */
-export function safeCancelAutomation(param: AudioParam, time: number): void {
-  try {
-    if (typeof (param as unknown as { cancelAndHoldAtTime?: (t: number) => void }).cancelAndHoldAtTime === "function") {
-      (param as unknown as { cancelAndHoldAtTime: (t: number) => void }).cancelAndHoldAtTime(time);
-      return;
-    }
-  } catch {
-    // If cancelAndHoldAtTime threw, fall through to cancelScheduledValues
-  }
-
-  try {
-    const val = param.value;
-    param.cancelScheduledValues(time);
-    param.setValueAtTime(val, time);
-  } catch {
-    // Ignore audio scheduling errors
-  }
 }
 
 /**
@@ -165,9 +99,9 @@ function makeCosineDecayCurve(from: number, to: number, steps: number = 32): Flo
 
 export class AudioEngine {
   private ctx: AudioContext | null = null;
-  private player: WebAudioFontPlayerInstance | null = null;
+  private soundfontLoader: SoundfontLoader = new SoundfontLoader();
+  private channelMixer: ChannelMixer = new ChannelMixer();
   private activeVoices: Map<string, ActiveVoice> = new Map();
-  private samplesLoaded: boolean = false;
 
   // Master bus & Concert Hall acoustics
   private masterGain: GainNode | null = null;
@@ -178,10 +112,6 @@ export class AudioEngine {
   private limiter: DynamicsCompressorNode | null = null;
   private masterVolume: number = 0.60;
   private fadeMultiplier: number = 1.0;
-
-  // Spatial Stereo Buses & Seating Arrangement
-  private channelBuses: Map<number, ChannelBus> = new Map();
-  private channelDefaultPans: Map<number, number> = new Map();
 
   // Dynamics & DSP State
   private dynamicLevel: DynamicLevel = "mf";
@@ -195,20 +125,38 @@ export class AudioEngine {
   private lastAppliedShelfGain: number = -999;
   private lastAppliedReverbWet: number = -1;
 
-  // Section Focus Mode State
-  private focusedChannels: Set<number> | null = null;
-  private focusAmount: number = 0.0;
-  private lastFocusedChannelsKey: string = "";
-  private lastAppliedFocusAmount: number = -1;
-
   // Voice lifecycle & diagnostics
   private totalVoicesCreated: number = 0;
   private totalVoicesCancelled: number = 0;
   private pendingCleanupCount: number = 0;
   private pendingCleanupTimers: Set<ReturnType<typeof setTimeout>> = new Set();
   private automationRequestTimestamps: number[] = [];
-  private loadedScriptUrls: Set<string> = new Set();
-  private pendingScriptLoads: Map<string, Promise<void>> = new Map();
+
+  // ── Compatibility getters & setters ──────────────────────────────────────
+
+  get player(): WebAudioFontPlayerInstance | null {
+    return this.soundfontLoader.player;
+  }
+
+  set player(p: WebAudioFontPlayerInstance | null) {
+    this.soundfontLoader.player = p;
+  }
+
+  get samplesLoaded(): boolean {
+    return this.soundfontLoader.samplesLoaded;
+  }
+
+  set samplesLoaded(v: boolean) {
+    this.soundfontLoader.samplesLoaded = v;
+  }
+
+  get channelBuses(): Map<number, ChannelBus> {
+    return this.channelMixer.channelBuses;
+  }
+
+  get channelDefaultPans(): Map<number, number> {
+    return this.channelMixer.channelDefaultPans;
+  }
 
   // ── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -226,8 +174,8 @@ export class AudioEngine {
       await this.ctx.resume();
     }
     // Decode all loaded instrument soundfonts immediately into the newly created context
-    if (isNew && this.samplesLoaded) {
-      this.decodeLoadedSamples();
+    if (isNew && this.soundfontLoader.samplesLoaded) {
+      this.soundfontLoader.decodeLoadedSamples(this.ctx);
     }
   }
 
@@ -292,10 +240,10 @@ export class AudioEngine {
       activeVoicesCount: this.activeVoices.size,
       totalVoicesCancelled: this.totalVoicesCancelled,
       pendingCleanupCount: this.pendingCleanupCount,
-      channelBusCount: this.channelBuses.size,
+      channelBusCount: this.channelMixer.getChannelBusCount(),
       automationRequestsPerSec: this.automationRequestTimestamps.length,
-      fontEnvelopesCount: (this.player && Array.isArray((this.player as any).envelopes))
-        ? (this.player as any).envelopes.length
+      fontEnvelopesCount: (this.soundfontLoader.player && Array.isArray((this.soundfontLoader.player as any).envelopes))
+        ? (this.soundfontLoader.player as any).envelopes.length
         : 0,
     };
   }
@@ -652,192 +600,40 @@ export class AudioEngine {
     return this.isLoveMode;
   }
 
-  /**
-   * Configures natural stereo seating pan positions for each section across the stage.
-   * Section 0 (leftmost) is panned left (-0.68), moving across to the rightmost section (+0.68).
-   */
+  // ── Spatial Stereo Panning & Section Focus ──────────────────────────────
+
   setDefaultSectionPanning(sections: PieceSection[]): void {
-    const count = sections.length;
-    if (count === 0) return;
-
-    sections.forEach((sec, idx) => {
-      let pan = 0.0;
-      if (count === 1) {
-        pan = 0.0;
-      } else {
-        pan = -0.68 + (idx / (count - 1)) * 1.36;
-      }
-      pan = Math.round(pan * 100) / 100;
-
-      for (const ch of sec.channels) {
-        this.channelDefaultPans.set(ch, pan);
-        const bus = this.getOrCreateChannelBus(ch);
-        if (bus) {
-          bus.defaultPan = pan;
-          bus.currentPan = pan;
-          if (bus.panner && this.ctx) {
-            safeCancelAutomation(bus.panner.pan, this.ctx.currentTime);
-            bus.panner.pan.setTargetAtTime(pan, this.ctx.currentTime, 0.08);
-          }
-        }
-      }
-    });
+    this.channelMixer.setDefaultSectionPanning(sections, this.ctx, this.masterGain || this.ctx?.destination);
   }
 
   getChannelPan(channel: number): number {
-    const bus = this.channelBuses.get(channel);
-    return bus ? bus.currentPan : (this.channelDefaultPans.get(channel) ?? 0.0);
+    return this.channelMixer.getChannelPan(channel);
   }
 
   getOrCreateChannelBus(channel: number): ChannelBus | null {
     if (!this.ctx) return null;
-    let bus = this.channelBuses.get(channel);
-    if (!bus) {
-      const ctx = this.ctx;
-      const inputGain = ctx.createGain();
-      const initialFocusGain = this.getChannelFocusMultiplier(channel);
-      inputGain.gain.setValueAtTime(initialFocusGain, ctx.currentTime);
-
-      let panner: StereoPannerNode | null = null;
-      const defaultPan = this.channelDefaultPans.get(channel) ?? 0.0;
-      if (typeof ctx.createStereoPanner === "function") {
-        panner = ctx.createStereoPanner();
-        panner.pan.setValueAtTime(defaultPan, ctx.currentTime);
-      }
-
-      let initialPresenceGain = 0.0;
-      if (this.focusedChannels && this.focusAmount > 0.001) {
-        initialPresenceGain = this.focusedChannels.has(channel) ? (2.5 * this.focusAmount) : (-1.0 * this.focusAmount);
-      }
-
-      let presenceFilter: BiquadFilterNode | null = null;
-      if (typeof ctx.createBiquadFilter === "function") {
-        presenceFilter = ctx.createBiquadFilter();
-        presenceFilter.type = "highshelf";
-        presenceFilter.frequency.value = 3800;
-        presenceFilter.gain.value = initialPresenceGain;
-      }
-
-      // Chain: inputGain -> presenceFilter -> panner -> masterGain
-      if (presenceFilter && panner) {
-        inputGain.connect(presenceFilter);
-        presenceFilter.connect(panner);
-        panner.connect(this.masterGain || ctx.destination);
-      } else if (panner) {
-        inputGain.connect(panner);
-        panner.connect(this.masterGain || ctx.destination);
-      } else {
-        inputGain.connect(this.masterGain || ctx.destination);
-      }
-
-      bus = {
-        channel,
-        inputGain,
-        panner,
-        presenceFilter,
-        defaultPan,
-        currentPan: defaultPan,
-        currentFocusGain: initialFocusGain,
-        currentPresenceGain: initialPresenceGain,
-      };
-      this.channelBuses.set(channel, bus);
-    }
-    return bus;
+    return this.channelMixer.getOrCreateChannelBus(channel, this.ctx, this.masterGain || this.ctx.destination);
   }
 
-  /**
-   * Sets continuous section focus / spotlight.
-   * When focusAmount > 0 and focusedChannels is provided:
-   * - Spotlighted section: Volume boosted to forte tier (~1.35x, +2.6dB),
-   *   stereo pan pulls smoothly to center stage (0.0), and presence opens up (+2.5dB).
-   * - Other sections: Backgrounded to piano tier (~0.54x, -5.35dB, extra 25% quieter),
-   *   stereo pan disperses outward to the stereo sides (up to ±0.85), and presence softens.
-   * - Applied entirely via persistent per-channel bus gains and filters (O(channels), NOT O(active voices)).
-   */
   setSectionFocus(focusedChannels: number[] | null, focusAmount: number): void {
-    const clamped = Math.max(0.0, Math.min(1.0, focusAmount));
-    const hasFocus = focusedChannels && focusedChannels.length > 0 && clamped > 0.001;
-    const effectiveChannels = hasFocus ? new Set(focusedChannels) : null;
-    const effectiveAmount = hasFocus ? clamped : 0.0;
-    const channelsKey = effectiveChannels ? Array.from(effectiveChannels).sort((a, b) => a - b).join(",") : "";
-
-    // Deduplicate: If focused channels and focus amount have not materially changed, return immediately
-    if (
-      this.lastFocusedChannelsKey === channelsKey &&
-      Math.abs(this.lastAppliedFocusAmount - effectiveAmount) < 0.005
-    ) {
-      return;
-    }
-
-    this.focusedChannels = effectiveChannels;
-    this.focusAmount = effectiveAmount;
-    this.lastFocusedChannelsKey = channelsKey;
-    this.lastAppliedFocusAmount = effectiveAmount;
-
-    if (!this.ctx) return;
-    const now = this.ctx.currentTime;
-    this.recordAutomationRequest();
-
-    // Move focus-volume control entirely onto persistent per-channel bus gain
-    for (const [ch, bus] of this.channelBuses.entries()) {
-      const targetFocusGain = this.getChannelFocusMultiplier(ch);
-      if (Math.abs(bus.currentFocusGain - targetFocusGain) > 0.005) {
-        safeCancelAutomation(bus.inputGain.gain, now);
-        bus.inputGain.gain.setTargetAtTime(targetFocusGain, now, 0.04);
-        bus.currentFocusGain = targetFocusGain;
-      }
-
-      // Keep stereo pan anchored to its natural seating position (no center pull or side dispersion)
-      if (bus.panner && Math.abs(bus.currentPan - bus.defaultPan) > 0.005) {
-        safeCancelAutomation(bus.panner.pan, now);
-        bus.panner.pan.setTargetAtTime(bus.defaultPan, now, 0.06);
-        bus.currentPan = bus.defaultPan;
-      }
-
-      // Presence filter enhancement for spotlighted section
-      if (this.focusedChannels && this.focusAmount > 0.001) {
-        if (this.focusedChannels.has(ch)) {
-          const targetPres = 2.5 * this.focusAmount;
-          if (bus.presenceFilter && Math.abs(bus.currentPresenceGain - targetPres) > 0.05) {
-            safeCancelAutomation(bus.presenceFilter.gain, now);
-            bus.presenceFilter.gain.setTargetAtTime(targetPres, now, 0.06);
-            bus.currentPresenceGain = targetPres;
-          }
-        } else {
-          const targetPres = -1.0 * this.focusAmount;
-          if (bus.presenceFilter && Math.abs(bus.currentPresenceGain - targetPres) > 0.05) {
-            safeCancelAutomation(bus.presenceFilter.gain, now);
-            bus.presenceFilter.gain.setTargetAtTime(targetPres, now, 0.06);
-            bus.currentPresenceGain = targetPres;
-          }
-        }
-      } else {
-        if (bus.presenceFilter && Math.abs(bus.currentPresenceGain - 0.0) > 0.05) {
-          safeCancelAutomation(bus.presenceFilter.gain, now);
-          bus.presenceFilter.gain.setTargetAtTime(0.0, now, 0.10);
-          bus.currentPresenceGain = 0.0;
-        }
-      }
-    }
+    this.channelMixer.setSectionFocus(
+      focusedChannels,
+      focusAmount,
+      this.ctx,
+      () => this.recordAutomationRequest()
+    );
   }
 
   getChannelFocusMultiplier(channel: number): number {
-    if (!this.focusedChannels || this.focusAmount <= 0.001) return 1.0;
-    if (this.focusedChannels.has(channel)) {
-      // Forte foreground boost: 1.0 -> 1.35 (+2.6 dB)
-      return 1.0 + 0.35 * this.focusAmount;
-    } else {
-      // Background reduction (extra 25% quieter): 1.0 -> 0.54 (-5.35 dB)
-      return 1.0 - 0.46 * this.focusAmount;
-    }
+    return this.channelMixer.getChannelFocusMultiplier(channel);
   }
 
   getFocusedChannels(): Set<number> | null {
-    return this.focusedChannels;
+    return this.channelMixer.getFocusedChannels();
   }
 
   getFocusAmount(): number {
-    return this.focusAmount;
+    return this.channelMixer.getFocusAmount();
   }
 
   private setupMasterAcoustics(): void {
@@ -923,85 +719,22 @@ export class AudioEngine {
     return this.ctx?.currentTime ?? 0;
   }
 
-  /**
-   * Load the WebAudioFontPlayer and prioritized violin sample bank (Prog 40)
-   * so the warm-up interactive loop can begin as early as possible.
-   */
+  // ── Sample Bank Loading (Delegated to SoundfontLoader) ────────────────────
+
   async loadWarmupViolin(): Promise<void> {
-    await this.ensurePlayer();
-    await this.loadScript(VIOLIN_SCRIPT_URL);
-
-    if (this.ctx && this.player) {
-      this.decodeScriptUrl(VIOLIN_SCRIPT_URL);
-    }
+    return this.soundfontLoader.loadWarmupViolin(this.ctx, (url) => this.loadScript(url));
   }
 
-  /**
-   * Load only the instrument sample banks required for the given piece.
-   */
   async loadPieceSamples(piece: { sections: Array<{ programs: number[] }> }): Promise<void> {
-    await this.ensurePlayer();
-    const urls = getScriptsForPiece(piece);
-    await Promise.all(urls.map(url => this.loadScript(url)));
-
-    if (this.ctx && this.player) {
-      for (const url of urls) {
-        this.decodeScriptUrl(url);
-      }
-    }
-    this.samplesLoaded = true;
+    return this.soundfontLoader.loadPieceSamples(piece, this.ctx, (url) => this.loadScript(url));
   }
 
-  /**
-   * Preload remaining repertoire soundfonts during browser idle time.
-   */
   preloadRemainingSamples(): void {
-    const loadIdle = () => {
-      Promise.all(WEBAUDIOFONT_SCRIPTS.map(url => this.loadScript(url)))
-        .then(() => {
-          if (this.ctx && this.player) {
-            this.decodeLoadedSamples();
-          }
-        })
-        .catch(err => console.warn("Background SoundFont preload idle warning:", err));
-    };
-
-    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-      (window as any).requestIdleCallback(loadIdle);
-    } else {
-      setTimeout(loadIdle, 3000);
-    }
+    this.soundfontLoader.preloadRemainingSamples(this.ctx, (url) => this.loadScript(url));
   }
 
-  private async ensurePlayer(): Promise<void> {
-    if (this.player) return;
-    await this.loadScript(WEBAUDIOFONT_PLAYER_URL);
-    if (!this.player && typeof window !== "undefined" && (window as any).WebAudioFontPlayer) {
-      this.player = new (window as any).WebAudioFontPlayer();
-      (window as any)._conductorWebAudioFontPlayer = this.player;
-    }
-  }
-
-  /**
-   * Load all WebAudioFont sample banks needed for Phase 1/2/3.
-   * Downloads scripts and initializes the player.
-   * Can be called during app initialization (does not require user gesture).
-   */
   async loadSamples(): Promise<void> {
-    if (this.samplesLoaded) return;
-    await this.ensurePlayer();
-
-    // Load all instrument sample scripts in parallel
-    await Promise.all(
-      WEBAUDIOFONT_SCRIPTS.map(url => this.loadScript(url))
-    );
-
-    // If context is already created, decode sample buffers
-    if (this.ctx && this.player) {
-      this.decodeLoadedSamples();
-    }
-
-    this.samplesLoaded = true;
+    return this.soundfontLoader.loadSamples(this.ctx, (url) => this.loadScript(url));
   }
 
   getAudioContext(): AudioContext | null {
@@ -1009,22 +742,11 @@ export class AudioEngine {
   }
 
   getWebAudioFontPlayer(): WebAudioFontPlayerInstance | null {
-    return this.player;
+    return this.soundfontLoader.player;
   }
 
-  private decodeScriptUrl(url: string): void {
-    if (!this.ctx || !this.player) return;
-    const varName = this.urlToVarName(url);
-    if (varName && (window as any)[varName]) {
-      this.player.loader.decodeAfterLoading(this.ctx, varName);
-    }
-  }
-
-  private decodeLoadedSamples(): void {
-    if (!this.ctx || !this.player) return;
-    for (const url of WEBAUDIOFONT_SCRIPTS) {
-      this.decodeScriptUrl(url);
-    }
+  loadScript(url: string): Promise<void> {
+    return this.soundfontLoader.loadScript(url);
   }
 
   // ── Phase 0: Click ──────────────────────────────────────────────────────
@@ -1098,8 +820,8 @@ export class AudioEngine {
             // Ignore
           }
           // Prune envelope from WebAudioFont player queue to prevent unbounded memory growth
-          if (this.player && Array.isArray((this.player as any).envelopes)) {
-            const envelopes: any[] = (this.player as any).envelopes;
+          if (this.soundfontLoader.player && Array.isArray((this.soundfontLoader.player as any).envelopes)) {
+            const envelopes: any[] = (this.soundfontLoader.player as any).envelopes;
             const idx = envelopes.indexOf(voice.envelope);
             if (idx !== -1) {
               envelopes.splice(idx, 1);
@@ -1119,13 +841,6 @@ export class AudioEngine {
   /**
    * Schedule a note-on event using the WebAudioFont sample bank.
    * Applies proportional velocity scaling, dynamic attack shaping, and voice management.
-   *
-   * @param noteId      Unique identifier for the note instance
-   * @param midiNote    0–127
-   * @param velocity    0–127
-   * @param channel     MIDI channel 0–15
-   * @param program     MIDI program 0–127
-   * @param audioTime   When to start (AudioContext seconds)
    */
   scheduleNoteOn(
     noteId: string,
@@ -1135,7 +850,7 @@ export class AudioEngine {
     program: number,
     audioTime: number
   ): void {
-    if (!this.ctx || !this.player) {
+    if (!this.ctx || !this.soundfontLoader.player) {
       // Fallback: click if samples aren't ready yet
       this.scheduleClick(audioTime);
       return;
@@ -1188,7 +903,6 @@ export class AudioEngine {
 
     const rawVelRatio = Math.max(0.08, effectiveVelocity / 127);
     const baseVolume = Math.min(1.0, Math.pow(rawVelRatio, 1.15) * 1.05);
-    // Note: Volume is baseVolume; focus multiplier is applied directly by ChannelBus.inputGain
     const volume = baseVolume;
 
     // Dynamic Attack Time: Bite on loud notes, gentle swell on quiet notes
@@ -1205,7 +919,7 @@ export class AudioEngine {
     gainNode.connect(bus ? bus.inputGain : (this.masterGain || ctx.destination));
 
     // Queue note with open duration (managed by scheduleNoteOff)
-    const envelope = this.player.queueWaveTable(
+    const envelope = this.soundfontLoader.player.queueWaveTable(
       ctx,
       gainNode,
       preset,
@@ -1228,9 +942,6 @@ export class AudioEngine {
 
   /**
    * Schedule a note-off event with a smooth, musical release.
-   *
-   * @param noteId    Unique identifier for the note instance
-   * @param audioTime When to start release (AudioContext seconds)
    */
   scheduleNoteOff(noteId: string, audioTime: number): void {
     const voice = this.activeVoices.get(noteId);
@@ -1354,13 +1065,13 @@ export class AudioEngine {
     }
     this.activeVoices.clear();
 
-    if (this.player && Array.isArray((this.player as any).envelopes)) {
+    if (this.soundfontLoader.player && Array.isArray((this.soundfontLoader.player as any).envelopes)) {
       try {
-        if (this.ctx && typeof this.player.cancelQueue === "function") {
-          this.player.cancelQueue(this.ctx);
+        if (this.ctx && typeof this.soundfontLoader.player.cancelQueue === "function") {
+          this.soundfontLoader.player.cancelQueue(this.ctx);
         }
       } catch {}
-      (this.player as any).envelopes.length = 0;
+      (this.soundfontLoader.player as any).envelopes.length = 0;
     }
 
     // Clear all pending voice cleanup timers
@@ -1371,65 +1082,5 @@ export class AudioEngine {
     this.pendingCleanupCount = 0;
 
     this.restoreMasterVolume();
-  }
-
-  // ── Private helpers ──────────────────────────────────────────────────────
-
-  private loadScript(url: string): Promise<void> {
-    if (this.loadedScriptUrls.has(url)) {
-      return Promise.resolve();
-    }
-    const pending = this.pendingScriptLoads.get(url);
-    if (pending) {
-      return pending;
-    }
-
-    if (typeof document === "undefined") {
-      return Promise.resolve();
-    }
-
-    const existing = document.querySelector(`script[src="${url}"]`) as HTMLScriptElement | null;
-    if (existing && existing.dataset.loaded === "true") {
-      this.loadedScriptUrls.add(url);
-      return Promise.resolve();
-    }
-
-    const loadPromise = new Promise<void>((resolve, reject) => {
-      const script = existing || document.createElement("script");
-      script.src = url;
-
-      const cleanup = () => {
-        this.pendingScriptLoads.delete(url);
-      };
-
-      script.onload = () => {
-        script.dataset.loaded = "true";
-        this.loadedScriptUrls.add(url);
-        cleanup();
-        resolve();
-      };
-
-      script.onerror = () => {
-        cleanup();
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
-        }
-        reject(new Error(`Failed to load script: ${url}`));
-      };
-
-      if (!existing) {
-        document.head.appendChild(script);
-      }
-    });
-
-    this.pendingScriptLoads.set(url, loadPromise);
-    return loadPromise;
-  }
-
-  private urlToVarName(url: string): string | null {
-    // Match the full filename stem before .js, e.g. "0400_FluidR3_GM_sf2_file"
-    const match = url.match(/\/([^/]+)\.js$/);
-    if (!match) return null;
-    return `_tone_${match[1]}`;
   }
 }

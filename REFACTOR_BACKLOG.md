@@ -35,15 +35,15 @@ This document catalogs high-impact architectural refactorings designed to keep f
 
 ## Priority 2: Subsystem Decoupling
 
-### 4. `src/audio/AudioEngine.ts` (~1,300 lines)
-*Target: Isolate audio caching and channel dynamics.*
-- **Soundfont / Sample Loading Cache**: Extract sample fetch, decode, and caching logic into `src/audio/SoundfontLoader.ts`.
-- **Mixer & Voice Management**: Extract channel gain scheduling, instrument muting, and soloing into `src/audio/ChannelMixer.ts`.
+### 4. [COMPLETED] `src/audio/AudioEngine.ts` (Reduced from ~1,436 to ~1,086 lines)
+- Extracted WebAudioFont player lifecycle, script tag injection, promise deduplication, and soundfont buffer decoding to [`src/audio/SoundfontLoader.ts`](file:///c:/Users/jraeb/Conductor/src/audio/SoundfontLoader.ts) (240 lines).
+- Extracted spatial stereo bus allocation, seating pan distribution, and section focus / spotlight dynamics to [`src/audio/ChannelMixer.ts`](file:///c:/Users/jraeb/Conductor/src/audio/ChannelMixer.ts) (281 lines).
+- Added comprehensive unit tests for script loading and channel mixing in [`tests/soundfontLoader.test.ts`](file:///c:/Users/jraeb/Conductor/tests/soundfontLoader.test.ts) and [`tests/channelMixer.test.ts`](file:///c:/Users/jraeb/Conductor/tests/channelMixer.test.ts).
 
-### 5. `src/ui/DebugOverlay.ts` (~1,400 lines)
-*Target: Decompose monolithic debug UI.*
-- **Telemetry Graph & Monitor**: Separate waveform / beat timing graphs into `src/ui/debug/TelemetryGraph.ts`.
-- **Mode & Feature Flag Panel**: Separate feature flag checkboxes and tuning sliders into `src/ui/debug/FeatureFlagPanel.ts`.
+### 5. [COMPLETED] `src/ui/DebugOverlay.ts` (Reduced from ~1,152 to ~301 lines)
+- Extracted debug controls, feature flag checkboxes, algorithm mode buttons, and tuning sliders to [`src/ui/debug/FeatureFlagPanel.ts`](file:///c:/Users/jraeb/Conductor/src/ui/debug/FeatureFlagPanel.ts) (514 lines).
+- Extracted real-time telemetry tables, kinematics monitors, and rolling beat logs to [`src/ui/debug/TelemetryGraph.ts`](file:///c:/Users/jraeb/Conductor/src/ui/debug/TelemetryGraph.ts) (480 lines).
+- Added comprehensive unit tests for panel controls and telemetry rendering in [`tests/debugOverlayComponents.test.ts`](file:///c:/Users/jraeb/Conductor/tests/debugOverlayComponents.test.ts).
 
 ---
 
