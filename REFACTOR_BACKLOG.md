@@ -6,11 +6,14 @@ This document catalogs high-impact architectural refactorings designed to keep f
 
 ## Priority 1: Large Controller Decompositions
 
-### 1. `src/camera/MagicFingerController.ts` (~1,500 lines)
-*Target: Split into 3-4 focused modules under 400 lines each.*
-- **Stage 1 (Geometry & Hit Testing)**: Extract DOM geometry providers, rectangle conversion, ray intersection, and instrument targeting into `src/camera/magicFingerGeometry.ts`. Pure unit tests for ray-vs-rect.
-- **Stage 2 (Interaction State Machine)**: Consolidate overlapping state flags (`activeTarget`, `hoverTarget`, `isLockedIn`, `lockedTarget`, `lockedValue`) into a single discriminated interaction state.
-- **Stage 3 (Vertical Control Logic)**: Extract duplicated tempo and vertical-dynamics gauge processing into a shared vertical-control function.
+### 1. [COMPLETED] `src/camera/MagicFingerController.ts` (Reduced from ~1,549 to ~590 lines)
+- Extracted DOM geometry providers, ray-vs-AABB intersection, and orchestra targeting to [`src/camera/magicFingerGeometry.ts`](file:///c:/Users/jraeb/Conductor/src/camera/magicFingerGeometry.ts) (216 lines).
+- Extracted pointing gesture arbitration, fist curl detection, and angular velocity direction smoothing to [`src/camera/magicFingerMotion.ts`](file:///c:/Users/jraeb/Conductor/src/camera/magicFingerMotion.ts) (278 lines).
+- Extracted vertical and horizontal slider tracking, trajectory smoothing, and hold-to-lock charge tracking to [`src/camera/magicFingerGauges.ts`](file:///c:/Users/jraeb/Conductor/src/camera/magicFingerGauges.ts) (376 lines).
+- Extracted locked-in state evaluation, rearming checks, and dimmed ray generation to [`src/camera/magicFingerLock.ts`](file:///c:/Users/jraeb/Conductor/src/camera/magicFingerLock.ts) (160 lines).
+- Extracted active target slider control to [`src/camera/magicFingerActive.ts`](file:///c:/Users/jraeb/Conductor/src/camera/magicFingerActive.ts) (354 lines).
+- Extracted safe dwell/delta gauge & spotlight acquisition to [`src/camera/magicFingerAcquisition.ts`](file:///c:/Users/jraeb/Conductor/src/camera/magicFingerAcquisition.ts) (289 lines).
+- Added comprehensive unit tests for ray and geometry math in [`tests/magicFingerGeometry.test.ts`](file:///c:/Users/jraeb/Conductor/tests/magicFingerGeometry.test.ts).
 
 ### 2. [COMPLETED] `src/main.ts` (Reduced from ~1,412 to ~344 lines)
 - Extracted keyboard shortcuts, hotkeys, and wheel handling to [`src/input/keyboardShortcuts.ts`](file:///c:/Users/jraeb/Conductor/src/input/keyboardShortcuts.ts).
