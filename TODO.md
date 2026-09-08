@@ -3,15 +3,15 @@
 
 [  ] disable warmup for now. I think there's a feature flag. Keep it in there. But just show a loading bar for the moment instead of warmup
 
-[ ] Magic finger mode - if my hand isn't on the screen for 1 second, the orchestra stops. That's good, but let's make it 500ms, and let's make a fade down start after 200ms. (This is just for Magic Finger Mode, Expressive mode should stay as it is)
+[  ] Magic Magic finger mode the default mode. And make Expressive Mode the only other one you can toggle to (i.e. no Beat Mode)
 
-[ ] Magic finger instrument highlight mode - I don't think this has the dynamics changes that we have in the Expressive highlight mode - can we get those in please?
-
-[ X ] Let's get rid of cut time (al breve) for Symphony # 5. It is messing up the tempo indicators
+[  ] Add "Made by Joe Raeburn in 2026" down in the footer
 
 
 
 NOT YET is below
+
+[ ] Magic finger mode - if my hand isn't on the screen for 1 second, the orchestra stops. That's good, but let's make it 500ms, and let's make a fade down start after 200ms. (This is just for Magic Finger Mode, Expressive mode should stay as it is)
 
 [  ] Put in rests into the score visualiser! Right now there are no rests unless the whole bar is rests!!
 

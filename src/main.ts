@@ -13,6 +13,7 @@ import { NoteVisualManager } from "./ui/NoteVisualManager";
 import { bpmToPercent, initBpmGaugeTicks } from "./ui/bpmGauge";
 import { SpotlightScoreVisualizer } from "./ui/SpotlightScoreVisualizer";
 import { WarmupManager } from "./warmup/WarmupManager";
+import { LoadingCoordinator } from "./warmup/LoadingCoordinator";
 import "./style.css";
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
@@ -606,7 +607,9 @@ const controller = new ExperienceController({
           const pct = Math.round((telemetry.liveDynamic ?? 0.5) * 100);
           promptEl.textContent = `👆 Adjusting Dynamics (${pct}%) • Hold steady to lock • Point away to continue`;
         } else if (telemetry.targetedSectionId) {
-          promptEl.textContent = `👆 Pointing at Orchestra • Section spotlighted!`;
+          const piece = controller.getCurrentPiece() || getPieceById(controller.getCurrentPieceId()) || REPERTOIRE[0];
+          const sec = piece?.sections?.find(s => s.id === telemetry.targetedSectionId);
+          promptEl.textContent = `✨ Spotlight: ${sec?.name || "Section"} (Forte / Center Stage) • Point away to restore ensemble balance`;
         }
       } else if (targetType !== "open") {
         promptEl.textContent = `👆 Hovering over ${targetType === "tempo" ? "Tempo Gauge" : (targetType === "dynamics" ? "Dynamics Gauge" : "Orchestra")} • Hold steady to grab`;
@@ -1210,11 +1213,70 @@ loadRepertoireCatalog().then(() => {
   titleEl.textContent = initialPiece.title;
   subtitleEl.textContent = `${initialPiece.composer} — ${initialPiece.movement} • ${initialPiece.conductMode || ""}`;
 
+  // Check if warmup is enabled via feature flag
+  const isWarmupEnabled = controller.isWarmupEnabled();
+
   // Check if returning user (has previously completed warm-up onboarding)
   const isReturningUser = typeof localStorage !== "undefined" &&
     localStorage.getItem("conductor:onboarding-version") === "1";
 
-  if (isReturningUser) {
+  if (!isWarmupEnabled) {
+    // Warmup disabled: render orchestra stage and display initial loading bar in camera slot
+    renderOrchestraStage(initialPiece);
+    stageEl.style.display = "flex";
+    stageEl.classList.remove("stage-warming-up");
+    if (loadingEl) loadingEl.style.display = "none";
+
+    updateInputSourceButtons(controller.getInputSource());
+    updateModeButtons(controller.getTempoMode());
+    initBpmGaugeTicks();
+
+    function gaugeRenderLoop(): void {
+      updateBpmGaugeUI();
+      updateAnalogueDynamicUI();
+      requestAnimationFrame(gaugeRenderLoop);
+    }
+    gaugeRenderLoop();
+
+    if (cameraHeroSlot) {
+      const coordinator = new LoadingCoordinator();
+      const card = document.createElement("div");
+      card.className = "initial-loading-card";
+      card.innerHTML = `
+        <div class="initial-loading-title">Loading Orchestra Assets</div>
+        <div class="initial-loading-track">
+          <div class="initial-loading-fill" style="width: 0%"></div>
+        </div>
+        <div class="initial-loading-meta">
+          <span class="initial-loading-status">Preparing audio & score...</span>
+          <span class="initial-loading-pct">0%</span>
+        </div>
+      `;
+      cameraHeroSlot.appendChild(card);
+      const fillEl = card.querySelector<HTMLElement>(".initial-loading-fill");
+      const statusEl = card.querySelector<HTMLElement>(".initial-loading-status");
+      const pctEl = card.querySelector<HTMLElement>(".initial-loading-pct");
+
+      coordinator.onStateChange((state) => {
+        const pct = Math.round(state.progress * 100);
+        if (fillEl) fillEl.style.width = `${pct}%`;
+        if (statusEl && state.statusMessage) statusEl.textContent = state.statusMessage;
+        if (pctEl) pctEl.textContent = `${pct}%`;
+        if (state.isReady) {
+          card.classList.add("fade-out");
+          setTimeout(() => card.remove(), 400);
+        }
+      });
+
+      controller.loadWithCoordinator(coordinator).catch(err => {
+        console.error("Conductor loadWithCoordinator error:", err);
+      });
+    } else {
+      controller.load().catch(err => {
+        console.error("Conductor fallback load error:", err);
+      });
+    }
+  } else if (isReturningUser) {
     // Returning user fast-path: "Just straight into it", no warmup panel or warming-up hold
     renderOrchestraStage(initialPiece);
     stageEl.style.display = "flex";

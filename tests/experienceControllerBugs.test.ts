@@ -500,7 +500,7 @@ describe("ExperienceController Lifecycle & Bug Regressions", () => {
     expect(controller.getState()).toBe("playing");
   });
 
-  it("Issue 22: in magic finger mode, fades down volume after 250ms and pauses at 500ms of no hands", async () => {
+  it("Issue 22: in magic finger mode, fades down volume after 200ms and pauses at 500ms of no hands", async () => {
     vi.spyOn(CameraBeatInputProvider.prototype, "start").mockResolvedValue();
     const controller = new ExperienceController(createMockCallbacks());
     await controller.load();
@@ -523,14 +523,14 @@ describe("ExperienceController Lifecycle & Bug Regressions", () => {
       expect(controller.getState()).toBe("playing");
       expect((controller as any).audioEngine.getFadeMultiplier()).toBe(1.0);
 
-      // t = 1200 (200ms elapsed < 250ms): still 1.0
-      fakeNow = 1200;
+      // t = 1150 (150ms elapsed < 200ms): still 1.0
+      fakeNow = 1150;
       dispatchSamples([]);
       expect(controller.getState()).toBe("playing");
       expect((controller as any).audioEngine.getFadeMultiplier()).toBe(1.0);
 
-      // t = 1375 (375ms elapsed, halfway between 250ms and 500ms): fadeMultiplier should be ~0.5
-      fakeNow = 1375;
+      // t = 1350 (350ms elapsed, halfway between 200ms and 500ms): fadeMultiplier should be 0.5
+      fakeNow = 1350;
       dispatchSamples([]);
       expect(controller.getState()).toBe("playing");
       expect((controller as any).audioEngine.getFadeMultiplier()).toBeCloseTo(0.5, 2);
@@ -565,7 +565,7 @@ describe("ExperienceController Lifecycle & Bug Regressions", () => {
 
       // Hands leave camera at t = 2000
       dispatchSamples([]);
-      fakeNow = 2375; // 375ms elapsed, faded to 0.5
+      fakeNow = 2350; // 350ms elapsed (halfway between 200ms and 500ms), faded to 0.5
       dispatchSamples([]);
       expect((controller as any).audioEngine.getFadeMultiplier()).toBeCloseTo(0.5, 2);
 
@@ -595,8 +595,10 @@ describe("ExperienceController Lifecycle & Bug Regressions", () => {
     }
   });
 
-  it("Issue 24: in magic finger mode, pointing at instrument section sets audio section focus", async () => {
-    const controller = new ExperienceController(createMockCallbacks());
+  it("Issue 24: in magic finger mode, pointing at instrument section sets audio section focus and UI focus telemetry", async () => {
+    vi.spyOn(CameraBeatInputProvider.prototype, "start").mockResolvedValue();
+    const mockCallbacks = createMockCallbacks();
+    const controller = new ExperienceController(mockCallbacks);
     await controller.load();
     controller.setTempoMode("magic");
     (controller as any).inputSource = "camera";
@@ -607,9 +609,19 @@ describe("ExperienceController Lifecycle & Bug Regressions", () => {
     // Trigger spotlight change to violin1 / section-0
     (mfController as any).callbacks.onSpotlightChange?.("violin1");
     expect(focusSpy).toHaveBeenCalledWith(expect.any(Array), 1.0);
+    expect(mockCallbacks.onFocusChange).toHaveBeenCalledWith(expect.objectContaining({
+      isActive: true,
+      grabbedSectionId: "violin1",
+      sectionFocus: 1.0,
+    }));
 
     // Point away to clear spotlight
     (mfController as any).callbacks.onSpotlightChange?.(null);
     expect(focusSpy).toHaveBeenCalledWith(null, 0);
+    expect(mockCallbacks.onFocusChange).toHaveBeenCalledWith(expect.objectContaining({
+      isActive: false,
+      grabbedSectionId: null,
+      sectionFocus: 0,
+    }));
   });
 });

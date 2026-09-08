@@ -112,6 +112,7 @@ export class ExperienceController {
   private isThumbsUpVFXEnabled: boolean = false; // Feature flag (Default: OFF)
   private isFocusModeEnabled: boolean = true; // Feature flag (Default: ON)
   private isScoreVisualizerEnabled: boolean = true; // Feature flag (Default: ON)
+  private isWarmupFeatureEnabled: boolean = false; // Feature flag (Default: OFF for now)
 
   // Overburn decay timer (for ff/fff dynamic)
   private overburnTimer: ReturnType<typeof setTimeout> | null = null;
@@ -152,6 +153,10 @@ export class ExperienceController {
         const saved = localStorage.getItem("conductor_feature_score_visualizer");
         if (saved !== null) {
           this.isScoreVisualizerEnabled = saved === "true";
+        }
+        const savedWarmup = localStorage.getItem("conductor_feature_warmup");
+        if (savedWarmup !== null) {
+          this.isWarmupFeatureEnabled = savedWarmup === "true";
         }
       }
     } catch {
@@ -272,6 +277,14 @@ export class ExperienceController {
     return this.isWarmingUp;
   }
 
+  isWarmupEnabled(): boolean {
+    return this.isWarmupFeatureEnabled;
+  }
+
+  setWarmupEnabled(enabled: boolean): void {
+    this.isWarmupFeatureEnabled = enabled;
+  }
+
   startConducting(): void {
     this.isWarmingUp = false;
     this.currentGesturalBpm = this.nominalPieceBpm;
@@ -359,7 +372,7 @@ export class ExperienceController {
     coordinator: LoadingCoordinator,
     pieceId: string = DEFAULT_PIECE_ID
   ): Promise<void> {
-    this.isWarmingUp = true;
+    this.isWarmingUp = this.isWarmupFeatureEnabled;
     this.activeCoordinator = coordinator;
     this.setState("loading");
     this.currentPieceId = pieceId;
@@ -443,6 +456,9 @@ export class ExperienceController {
 
     this.prepTapCount = 0;
     this.pausedBeat = 0;
+    if (!this.isWarmupFeatureEnabled) {
+      this.isWarmingUp = false;
+    }
     this.setState("ready");
   }
 
@@ -656,9 +672,33 @@ export class ExperienceController {
             );
             if (sec) {
               this.audioEngine.setSectionFocus(sec.channels, 1.0);
+              lastAppliedSectionId = sec.id;
+              lastAppliedSectionFocus = 1.0;
+              this.uiCallbacks.onFocusChange?.({
+                isActive: true,
+                state: "grabbed",
+                hoveredSectionId: sec.id,
+                grabbedSectionId: sec.id,
+                sectionFocus: 1.0,
+                pointerScreenPoint: null,
+                pointingHandIndex: null,
+                pinchDistanceRatio: 1.0,
+              });
             }
           } else {
             this.audioEngine.setSectionFocus(null, 0);
+            lastAppliedSectionId = null;
+            lastAppliedSectionFocus = 0;
+            this.uiCallbacks.onFocusChange?.({
+              isActive: false,
+              state: "idle",
+              hoveredSectionId: null,
+              grabbedSectionId: null,
+              sectionFocus: 0,
+              pointerScreenPoint: null,
+              pointingHandIndex: null,
+              pinchDistanceRatio: 1.0,
+            });
           }
         },
       });
@@ -708,8 +748,8 @@ export class ExperienceController {
                 this.magicNoHandsStartTime = 0;
                 this.audioEngine.restoreMasterVolume();
                 this.pausePlayback();
-              } else if (elapsed >= 250) {
-                const fadeRatio = 1.0 - (elapsed - 250) / 250;
+              } else if (elapsed >= 200) {
+                const fadeRatio = 1.0 - (elapsed - 200) / 300;
                 this.audioEngine.setFadeMultiplier(Math.max(0, Math.min(1, fadeRatio)));
               }
             } else {

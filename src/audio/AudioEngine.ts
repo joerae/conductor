@@ -671,7 +671,7 @@ export class AudioEngine {
 
       for (const ch of sec.channels) {
         this.channelDefaultPans.set(ch, pan);
-        const bus = this.channelBuses.get(ch);
+        const bus = this.getOrCreateChannelBus(ch);
         if (bus) {
           bus.defaultPan = pan;
           bus.currentPan = pan;
@@ -705,12 +705,17 @@ export class AudioEngine {
         panner.pan.setValueAtTime(defaultPan, ctx.currentTime);
       }
 
+      let initialPresenceGain = 0.0;
+      if (this.focusedChannels && this.focusAmount > 0.001) {
+        initialPresenceGain = this.focusedChannels.has(channel) ? (2.5 * this.focusAmount) : (-1.0 * this.focusAmount);
+      }
+
       let presenceFilter: BiquadFilterNode | null = null;
       if (typeof ctx.createBiquadFilter === "function") {
         presenceFilter = ctx.createBiquadFilter();
         presenceFilter.type = "highshelf";
         presenceFilter.frequency.value = 3800;
-        presenceFilter.gain.value = 0.0;
+        presenceFilter.gain.value = initialPresenceGain;
       }
 
       // Chain: inputGain -> presenceFilter -> panner -> masterGain
@@ -733,7 +738,7 @@ export class AudioEngine {
         defaultPan,
         currentPan: defaultPan,
         currentFocusGain: initialFocusGain,
-        currentPresenceGain: 0.0,
+        currentPresenceGain: initialPresenceGain,
       };
       this.channelBuses.set(channel, bus);
     }
