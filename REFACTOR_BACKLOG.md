@@ -12,11 +12,14 @@ This document catalogs high-impact architectural refactorings designed to keep f
 - **Stage 2 (Interaction State Machine)**: Consolidate overlapping state flags (`activeTarget`, `hoverTarget`, `isLockedIn`, `lockedTarget`, `lockedValue`) into a single discriminated interaction state.
 - **Stage 3 (Vertical Control Logic)**: Extract duplicated tempo and vertical-dynamics gauge processing into a shared vertical-control function.
 
-### 2. `src/main.ts` (~1,400 lines)
-*Target: Turn `main.ts` into a lightweight orchestrator (< 250 lines).*
-- **Keyboard & Shortcut Handler**: Extract keyboard shortcuts, playback hotkeys, and mode toggles into `src/input/keyboardShortcuts.ts`.
-- **UI Binding & Mount Orchestration**: Extract manual DOM element lookups and event-listener wiring into a dedicated setup module (`src/ui/appBindings.ts`).
-- **Telemetry & Mode Toggles**: Extract debug mode wiring into a dedicated bridge.
+### 2. [COMPLETED] `src/main.ts` (Reduced from ~1,412 to ~344 lines)
+- Extracted keyboard shortcuts, hotkeys, and wheel handling to [`src/input/keyboardShortcuts.ts`](file:///c:/Users/jraeb/Conductor/src/input/keyboardShortcuts.ts).
+- Extracted DOM elements, HUD synchronization, and UI updates to [`src/ui/appBindings.ts`](file:///c:/Users/jraeb/Conductor/src/ui/appBindings.ts).
+- Extracted SVG stage generation and section node tracking to [`src/ui/orchestraStage.ts`](file:///c:/Users/jraeb/Conductor/src/ui/orchestraStage.ts).
+- Extracted prompt generation to [`src/ui/promptFormatter.ts`](file:///c:/Users/jraeb/Conductor/src/ui/promptFormatter.ts).
+- Extracted version modal to [`src/ui/versionModal.ts`](file:///c:/Users/jraeb/Conductor/src/ui/versionModal.ts).
+- Extracted repertoire modal to [`src/ui/repertoireModal.ts`](file:///c:/Users/jraeb/Conductor/src/ui/repertoireModal.ts).
+- Extracted application bootstrap to [`src/experience/appBootstrap.ts`](file:///c:/Users/jraeb/Conductor/src/experience/appBootstrap.ts).
 
 ### 3. `src/experience/ExperienceController.ts` (~1,500 lines)
 *Target: Separate state coordination from UI/Audio glue.*
