@@ -6,7 +6,7 @@
  */
 
 import { AudioEngine } from "../audio/AudioEngine";
-import type { DSPBypassFlags, DynamicsTelemetry, DynamicLevel } from "../audio/dynamicsTypes";
+import type { DSPBypassFlags, DynamicsTelemetry, DynamicLevel, VelocityDecomposition } from "../audio/dynamicsTypes";
 import { getStepDynamicLevel } from "../audio/dynamicsTypes";
 import { ConductorClock } from "../clock/ConductorClock";
 import type { ClockEvent, TempoMode } from "../clock/ConductorClock";
@@ -14,6 +14,7 @@ import { KeyboardBeatInput } from "../input/KeyboardBeatInput";
 import { CameraBeatInputProvider } from "../camera/CameraBeatInputProvider";
 import type { FocusTelemetry } from "../camera/InstrumentFocusController";
 import type { MagicFingerTelemetry } from "../camera/MagicFingerController";
+import type { HandSample } from "../camera/cameraTypes";
 import { MidiScore } from "../score/MidiScore";
 import { ScoreTransport } from "../score/ScoreTransport";
 import { Scheduler } from "../scheduler/Scheduler";
@@ -21,8 +22,22 @@ import type { NotePlaybackEvent } from "../scheduler/Scheduler";
 import { DebugOverlay } from "../ui/DebugOverlay";
 import { DEFAULT_PIECE_ID, getPieceById, REPERTOIRE } from "../score/repertoire";
 import type { PieceDefinition } from "../score/repertoire";
-import type { VelocityDecomposition } from "../audio/dynamicsTypes";
 import { LoadingCoordinator } from "../warmup/LoadingCoordinator";
+
+import type { CameraAxisMapping } from "./gesturalTempoMath";
+import { calculateGesturalTempoMultiplier } from "./gesturalTempoMath";
+import { resetCameraGestureState } from "./cameraGestureHandler";
+import { wireCameraProvider } from "./cameraWiring";
+import type { CameraWiringHost } from "./cameraWiring";
+import {
+  startPlayback,
+  pausePlayback,
+  restartPlayback,
+  handlePieceComplete,
+  handleClockEvent,
+  handleBeatObservation,
+} from "./playbackCoordinator";
+import type { PlaybackHost } from "./playbackCoordinator";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -37,7 +52,7 @@ export type ExperienceState =
 
 export type InputSource = "keyboard" | "camera";
 
-export type CameraAxisMapping = "flipped" | "classic"; // "flipped" = Width is Tempo, Height is Volume (DEFAULT)
+export type { CameraAxisMapping } from "./gesturalTempoMath";
 
 export type NoteVisualEvent = {
   type: "noteOn" | "noteOff";
@@ -77,71 +92,71 @@ export type UICallbacks = {
 
 // ─── ExperienceController ───────────────────────────────────────────────────
 
-export class ExperienceController {
-  private state: ExperienceState = "uninitialized";
-  private currentPieceId: string = DEFAULT_PIECE_ID;
-  private inputSource: InputSource = "camera";
+export class ExperienceController implements CameraWiringHost, PlaybackHost {
+  state: ExperienceState = "uninitialized";
+  currentPieceId: string = DEFAULT_PIECE_ID;
+  inputSource: InputSource = "camera";
 
   // Subsystems
-  private readonly audioEngine: AudioEngine;
-  private readonly clock: ConductorClock;
-  private readonly keyboardInput: KeyboardBeatInput;
-  private cameraInput: CameraBeatInputProvider | null = null;
-  private readonly midiScore: MidiScore;
-  private readonly transport: ScoreTransport;
-  private readonly scheduler: Scheduler;
-  private readonly debug: DebugOverlay;
+  readonly audioEngine: AudioEngine;
+  readonly clock: ConductorClock;
+  readonly keyboardInput: KeyboardBeatInput;
+  cameraInput: CameraBeatInputProvider | null = null;
+  readonly midiScore: MidiScore;
+  readonly transport: ScoreTransport;
+  readonly scheduler: Scheduler;
+  readonly debug: DebugOverlay;
 
-  private readonly uiCallbacks: UICallbacks;
-  private prepTapCount: number = 0;
-  private pausedBeat: number = 0;
+  readonly uiCallbacks: UICallbacks;
+  prepTapCount: number = 0;
+  pausedBeat: number = 0;
 
   // Sustained conductor dynamic level
-  private baseDynamicLevel: DynamicLevel = "mf";
+  baseDynamicLevel: DynamicLevel = "mf";
 
   // Camera Dynamics Mode: "spread" (default for classic mapping) or "height" (in flipped mode)
-  private cameraDynamicsMode: "spread" | "height" = "spread";
+  cameraDynamicsMode: "spread" | "height" = "spread";
   // Camera Axis Mapping: "classic" (Width is Dynamics, Height is Tempo - DEFAULT) or "flipped"
-  private cameraAxisMapping: CameraAxisMapping = "classic";
+  cameraAxisMapping: CameraAxisMapping = "classic";
 
   // Gesture-driven expressive states
-  private isFistCutoff: boolean = false;
-  private isFermata: boolean = false;
-  private isPartyMode: boolean = false;
-  private isLoveMode: boolean = false;
-  private isThumbsUpVFXEnabled: boolean = false; // Feature flag (Default: OFF)
-  private isFocusModeEnabled: boolean = true; // Feature flag (Default: ON)
-  private isScoreVisualizerEnabled: boolean = true; // Feature flag (Default: ON)
-  private isWarmupFeatureEnabled: boolean = false; // Feature flag (Default: OFF for now)
+  isFistCutoff: boolean = false;
+  isFermata: boolean = false;
+  isPartyMode: boolean = false;
+  isLoveMode: boolean = false;
+  isThumbsUpVFXEnabled: boolean = false; // Feature flag (Default: OFF)
+  isFocusModeEnabled: boolean = true; // Feature flag (Default: ON)
+  isScoreVisualizerEnabled: boolean = true; // Feature flag (Default: ON)
+  isWarmupFeatureEnabled: boolean = false; // Feature flag (Default: OFF for now)
 
   // Overburn decay timer (for ff/fff dynamic)
   private overburnTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Hands-down inactivity tracking (pauses within 2 beats in Mode E, 6 beats in Mode D)
-  // In Mode E: only true when hands are completely off-screen (samples.length === 0)
-  private isHandsDown: boolean = false;
-  private handsDownPulseCount: number = 0;
-  private magicNoHandsStartTime: number = 0;
+  // Hands-down inactivity tracking
+  isHandsDown: boolean = false;
+  handsDownPulseCount: number = 0;
+  magicNoHandsStartTime: number = 0;
 
-  // Mode E: Gestural Conducting (Intended BPM base + continuous height accelerando)
-  private nominalPieceBpm: number = 140;
-  private basePieceBpm: number = 140;
-  private currentGesturalBpm: number = 140;
-  private lastGesturalUpdateMs: number = 0;
+  // Mode E: Gestural Conducting
+  nominalPieceBpm: number = 140;
+  basePieceBpm: number = 140;
+  currentGesturalBpm: number = 140;
+  lastGesturalUpdateMs: number = 0;
 
   // Per-hand recent Y history for detecting "beating" vs "steady" hands (Mode E)
-  // Ring buffer: last N y-values per hand index
-  private readonly HAND_Y_HISTORY_LEN = 12; // ~400ms at 30fps
-  private handYHistory: Map<number, number[]> = new Map();
+  readonly HAND_Y_HISTORY_LEN = 12; // ~400ms at 30fps
+  handYHistory: Map<number, number[]> = new Map();
 
   // Lifecycle & Concurrency Guards
   private unsubscribeKeyboard: (() => void) | null = null;
-  private completionTimer: ReturnType<typeof setTimeout> | null = null;
-  private playbackSessionId: number = 0;
-  private startPlaybackPromise: Promise<void> | null = null;
-  private cutoffInitiatedPause: boolean = false;
-  private isCameraInitializing: boolean = false;
-  private isWarmingUp: boolean = false;
+  completionTimer: ReturnType<typeof setTimeout> | null = null;
+  playbackSessionId: number = 0;
+  startPlaybackPromise: Promise<void> | null = null;
+  cutoffInitiatedPause: boolean = false;
+  isCameraInitializing: boolean = false;
+  isWarmingUp: boolean = false;
+
+  activeCoordinator: LoadingCoordinator | null = null;
 
   constructor(callbacks: UICallbacks) {
     this.uiCallbacks = callbacks;
@@ -171,7 +186,7 @@ export class ExperienceController {
     this.clock.setBpm(this.nominalPieceBpm);
     this.clock.setPeriodMs(60000 / this.nominalPieceBpm);
 
-    // Wire debug overlay with A/B DSP bypass control, pause toggle, macro ratio slider, camera dynamics mode, beat sound cue, and jitter deadband
+    // Wire debug overlay
     this.debug = new DebugOverlay(
       (flag: keyof DSPBypassFlags, enabled: boolean) => {
         this.audioEngine.setDSPBypassFlags({ [flag]: enabled });
@@ -251,25 +266,7 @@ export class ExperienceController {
     });
   }
 
-  private handlePieceComplete(): void {
-    this.setState("completed");
-    if (this.completionTimer) {
-      clearTimeout(this.completionTimer);
-      this.completionTimer = null;
-    }
-    const currentSession = this.playbackSessionId;
-    this.completionTimer = setTimeout(() => {
-      if (this.playbackSessionId === currentSession) {
-        this.scheduler.stop();
-        this.transport.stop();
-      }
-      this.completionTimer = null;
-    }, 2000);
-  }
-
   // ── Lifecycle & Repertoire ────────────────────────────────────────────────
-
-  private activeCoordinator: LoadingCoordinator | null = null;
 
   getAudioEngine(): AudioEngine {
     return this.audioEngine;
@@ -301,6 +298,40 @@ export class ExperienceController {
     this.uiCallbacks.onDynamicChange?.("mf");
   }
 
+  private applyPieceMetadata(piece: PieceDefinition): void {
+    this.transport.setEvents(this.midiScore.getEvents(), this.midiScore.getMetadata().totalBeats);
+    const beatsPerTap = this.getEffectiveBeatsPerTap();
+    this.clock.setBeatsPerTap(beatsPerTap);
+    this.transport.setBeatsPerTap(beatsPerTap);
+
+    const meta = this.midiScore.getMetadata();
+    this.nominalPieceBpm = meta?.embeddedBpm || piece.defaultBpm || 140;
+    this.basePieceBpm = this.nominalPieceBpm;
+    this.currentGesturalBpm = this.nominalPieceBpm;
+    this.indicatedBpm = Math.round(this.nominalPieceBpm);
+    this.clock.setBpm(this.nominalPieceBpm);
+    if (this.clock.getTempoMode() === "inertial") {
+      this.clock.setPeriodMs((60000 / this.basePieceBpm) * beatsPerTap);
+    } else {
+      this.clock.setPeriodMs(60000 / this.basePieceBpm);
+    }
+
+    if (this.unsubscribeKeyboard) {
+      this.unsubscribeKeyboard();
+      this.unsubscribeKeyboard = null;
+    }
+    this.unsubscribeKeyboard = this.keyboardInput.onBeat(obs => this.handleBeatObservation(obs));
+    this.keyboardInput.start();
+
+    if (this.cameraInput) {
+      this.cameraInput.setSections(piece.sections);
+      this.cameraInput.setIndicatedBpm(this.indicatedBpm);
+      this.cameraInput.getMagicFingerController().setInitialBpm(this.indicatedBpm);
+    }
+    this.audioEngine.setDefaultSectionPanning(piece.sections);
+    this.audioEngine.setSectionFocus(null, 0);
+  }
+
   async load(
     pieceId: string = DEFAULT_PIECE_ID,
     coordinator?: LoadingCoordinator
@@ -315,46 +346,13 @@ export class ExperienceController {
     const piece = getPieceById(pieceId) || REPERTOIRE[0];
 
     try {
-      // Prioritize violin asset and piece-specific instrument banks
       await Promise.all([
         this.midiScore.load(piece.midiUrl),
         this.audioEngine.loadPieceSamples(piece).catch(err =>
           console.warn("Conductor: piece sample loading failed, using fallback click", err)
         ),
       ]);
-      this.transport.setEvents(this.midiScore.getEvents(), this.midiScore.getMetadata().totalBeats);
-      const beatsPerTap = this.getEffectiveBeatsPerTap();
-      this.clock.setBeatsPerTap(beatsPerTap);
-      this.transport.setBeatsPerTap(beatsPerTap);
-
-      // Save baseline piece BPM for gestural tempo modulation
-      const meta = this.midiScore.getMetadata();
-      this.nominalPieceBpm = meta?.embeddedBpm || piece.defaultBpm || 140;
-      this.basePieceBpm = this.nominalPieceBpm;
-      this.currentGesturalBpm = this.nominalPieceBpm;
-      this.indicatedBpm = Math.round(this.nominalPieceBpm);
-      this.clock.setBpm(this.nominalPieceBpm);
-      if (this.clock.getTempoMode() === "inertial") {
-        this.clock.setPeriodMs((60000 / this.basePieceBpm) * beatsPerTap);
-      } else {
-        this.clock.setPeriodMs(60000 / this.basePieceBpm);
-      }
-
-      // Wire active input provider → clock (cleanly retain exactly 1 subscription)
-      if (this.unsubscribeKeyboard) {
-        this.unsubscribeKeyboard();
-        this.unsubscribeKeyboard = null;
-      }
-      this.unsubscribeKeyboard = this.keyboardInput.onBeat(obs => this.handleBeatObservation(obs));
-      this.keyboardInput.start();
-
-      if (this.cameraInput) {
-        this.cameraInput.setSections(piece.sections);
-        this.cameraInput.setIndicatedBpm(this.indicatedBpm);
-        this.cameraInput.getMagicFingerController().setInitialBpm(this.indicatedBpm);
-      }
-      this.audioEngine.setDefaultSectionPanning(piece.sections);
-      this.audioEngine.setSectionFocus(null, 0);
+      this.applyPieceMetadata(piece);
 
       if (this.inputSource === "camera") {
         try {
@@ -386,7 +384,6 @@ export class ExperienceController {
 
     coordinator.updateTask("shell", "ready");
 
-    // 1. Kick off Warm-up Violin & Player load immediately (priority asset)
     coordinator.updateTask("warmupViolin", "loading");
     const violinPromise = this.audioEngine.loadWarmupViolin()
       .then(() => coordinator.updateTask("warmupViolin", "ready"))
@@ -395,26 +392,10 @@ export class ExperienceController {
         coordinator.updateTask("warmupViolin", "ready");
       });
 
-    // 2. Kick off MIDI score load
     coordinator.updateTask("score", "loading");
     const scorePromise = this.midiScore.load(piece.midiUrl, piece.trackPrograms)
       .then(() => {
-        this.transport.setEvents(this.midiScore.getEvents(), this.midiScore.getMetadata().totalBeats);
-        const beatsPerTap = this.getEffectiveBeatsPerTap();
-        this.clock.setBeatsPerTap(beatsPerTap);
-        this.transport.setBeatsPerTap(beatsPerTap);
-
-        const meta = this.midiScore.getMetadata();
-        this.nominalPieceBpm = meta?.embeddedBpm || piece.defaultBpm || 140;
-        this.basePieceBpm = this.nominalPieceBpm;
-        this.currentGesturalBpm = this.nominalPieceBpm;
-        this.indicatedBpm = Math.round(this.nominalPieceBpm);
-        this.clock.setBpm(this.nominalPieceBpm);
-        if (this.clock.getTempoMode() === "inertial") {
-          this.clock.setPeriodMs((60000 / this.basePieceBpm) * beatsPerTap);
-        } else {
-          this.clock.setPeriodMs(60000 / this.basePieceBpm);
-        }
+        this.applyPieceMetadata(piece);
         coordinator.updateTask("score", "ready");
       })
       .catch(err => {
@@ -422,7 +403,6 @@ export class ExperienceController {
         throw err;
       });
 
-    // 3. Kick off Piece Instrument Samples load (selective!)
     coordinator.updateTask("instruments", "loading");
     const instrumentsPromise = this.audioEngine.loadPieceSamples(piece)
       .then(() => {
@@ -434,23 +414,6 @@ export class ExperienceController {
         coordinator.updateTask("instruments", "ready");
       });
 
-    // 4. Wire keyboard subscription immediately
-    if (this.unsubscribeKeyboard) {
-      this.unsubscribeKeyboard();
-      this.unsubscribeKeyboard = null;
-    }
-    this.unsubscribeKeyboard = this.keyboardInput.onBeat(obs => this.handleBeatObservation(obs));
-    this.keyboardInput.start();
-
-    if (this.cameraInput) {
-      this.cameraInput.setSections(piece.sections);
-      this.cameraInput.setIndicatedBpm(this.indicatedBpm);
-      this.cameraInput.getMagicFingerController().setInitialBpm(this.indicatedBpm);
-    }
-    this.audioEngine.setDefaultSectionPanning(piece.sections);
-    this.audioEngine.setSectionFocus(null, 0);
-
-    // 5. If camera mode, kick off camera initialization
     let cameraPromise = Promise.resolve();
     if (this.inputSource === "camera") {
       coordinator.updateTask("cameraPermission", "loading");
@@ -499,45 +462,7 @@ export class ExperienceController {
   }
 
   private shutdownCameraState(): void {
-    if (this.cameraInput) {
-      try {
-        this.cameraInput.stop();
-      } catch {
-        // Ignored
-      }
-    }
-    this.audioEngine.setSectionFocus(null, 0);
-    this.uiCallbacks.onFocusChange?.({
-      isActive: false,
-      state: "idle",
-      hoveredSectionId: null,
-      grabbedSectionId: null,
-      sectionFocus: 0,
-      pointerScreenPoint: null,
-      pointingHandIndex: null,
-      pinchDistanceRatio: 1.0,
-    });
-
-    if (this.isFistCutoff) {
-      this.isFistCutoff = false;
-      this.uiCallbacks.onFistCutoffChange?.(false);
-    }
-    this.cutoffInitiatedPause = false;
-
-    if (this.isPartyMode) {
-      this.isPartyMode = false;
-      this.uiCallbacks.onPartyModeChange?.(false);
-    }
-
-    if (this.isFermata) {
-      this.isFermata = false;
-      this.transport.setFermata(false, this.audioEngine.getAudioTime());
-      this.uiCallbacks.onFermataChange?.(false);
-    }
-
-    this.handYHistory.clear();
-    this.isHandsDown = false;
-    this.handsDownPulseCount = 0;
+    resetCameraGestureState(this);
   }
 
   private async initCamera(): Promise<void> {
@@ -558,12 +483,12 @@ export class ExperienceController {
         this.cameraInput.setIndicatedBpm(this.indicatedBpm || this.nominalPieceBpm);
         this.cameraInput.getMagicFingerController().setInitialBpm(this.indicatedBpm || this.nominalPieceBpm);
 
-        const piece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
+        const piece = this.getCurrentPiece();
         if (piece) {
           this.cameraInput.setSections(piece.sections);
         }
 
-        // Pre-warm / resume AudioContext on camera activation asynchronously (do not block camera prompt)
+        // Pre-warm AudioContext on camera activation asynchronously
         void this.audioEngine.resume().then(() => {
           const ctx = this.audioEngine.getAudioContext();
           if (ctx) {
@@ -573,444 +498,23 @@ export class ExperienceController {
           // Ignored
         });
 
-        // Wire camera state to loading coordinator & error fallback to keyboard mode
-        this.cameraInput.onStateChange((state, err) => {
-          if (state === "requesting_permission") {
-            this.activeCoordinator?.updateTask("cameraPermission", "loading");
-          } else if (state === "loading_model") {
-            this.activeCoordinator?.updateTask("cameraPermission", "ready");
-            this.activeCoordinator?.updateTask("handTracking", "loading");
-          } else if (state === "tracking") {
-            this.activeCoordinator?.updateTask("cameraPermission", "ready");
-            this.activeCoordinator?.updateTask("handTracking", "ready");
-          } else if (state === "error") {
-            this.activeCoordinator?.updateTask("cameraPermission", "error");
-            this.activeCoordinator?.updateTask("handTracking", "error");
-            console.warn("Camera failed to load, gracefully falling back to keyboard mode:", err);
-            void this.setInputSource("keyboard");
-          }
-        });
+        wireCameraProvider(this.cameraInput, this);
+      }
 
-      // Wire camera dynamics directly into existing orchestral dynamic ladder & AudioEngine
-      let lastAudioDynUpdateTime = 0;
-      let lastAppliedDynamicValue = -1;
-
-      this.cameraInput.onDynamics(dyn => {
-        if (this.inputSource === "camera") {
-          // Suppress global dynamics if actively in focus mode
-          if (this.cameraInput?.getFocusController().shouldSuppressGlobalDynamics()) {
-            return;
-          }
-          const now = performance.now();
-          // Rate-limit audio engine continuous dynamics to ~20 Hz (50ms interval) unless large step
-          const valDiff = Math.abs(dyn.value - lastAppliedDynamicValue);
-          if (now - lastAudioDynUpdateTime >= 50 || valDiff >= 0.05) {
-            this.audioEngine.setContinuousDynamic(dyn.value);
-            lastAudioDynUpdateTime = now;
-            lastAppliedDynamicValue = dyn.value;
-          }
-          const snappedLevel = this.audioEngine.getDynamicLevel();
-          if (snappedLevel !== this.baseDynamicLevel) {
-            this.baseDynamicLevel = snappedLevel;
-            this.uiCallbacks.onDynamicChange?.(snappedLevel);
-            this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
-          }
-        }
-
-        this.uiCallbacks.onCameraMotionSample?.({
-          dynamicLevel: dyn.level,
-          dynamicContinuous: dyn.value,
-        });
-      });
-
-      // Wire Instrument Focus Mode telemetry & dynamic section mixing
-      let lastAudioFocusUpdateTime = 0;
-      let lastAppliedSectionId: string | null = null;
-      let lastAppliedSectionFocus: number = -1;
-
-      this.cameraInput.onFocus(focusTel => {
-        if (this.inputSource === "camera") {
-          const now = performance.now();
-          const isFocused = focusTel.isActive && focusTel.grabbedSectionId && focusTel.sectionFocus > 0.001;
-          const targetSectionId = isFocused ? focusTel.grabbedSectionId : null;
-          const targetFocusAmount = isFocused ? focusTel.sectionFocus : 0;
-
-          const hasSectionChanged = targetSectionId !== lastAppliedSectionId;
-          const hasAmountChanged = Math.abs(targetFocusAmount - lastAppliedSectionFocus) > 0.005;
-
-          if (hasSectionChanged || hasAmountChanged || (now - lastAudioFocusUpdateTime >= 50)) {
-            if (targetSectionId && targetFocusAmount > 0.001) {
-              const currentPiece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
-              const sec = currentPiece?.sections.find((s, idx) =>
-                s.id === targetSectionId ||
-                `section-${s.id}` === targetSectionId ||
-                String(idx) === targetSectionId ||
-                `section-${idx}` === targetSectionId ||
-                targetSectionId.endsWith(s.id)
-              );
-              if (sec) {
-                this.audioEngine.setSectionFocus(sec.channels, targetFocusAmount);
-              }
-            } else if (lastAppliedSectionId !== null || lastAppliedSectionFocus > 0.001) {
-              this.audioEngine.setSectionFocus(null, 0);
-            }
-            lastAppliedSectionId = targetSectionId;
-            lastAppliedSectionFocus = targetFocusAmount;
-            lastAudioFocusUpdateTime = now;
-          }
-
-          this.uiCallbacks.onFocusChange?.(focusTel);
-        }
-      });
-
-      // Wire Magic Finger Mode callbacks & safe acquisition updates
-      const mfController = this.cameraInput.getMagicFingerController();
-      mfController.setCallbacks({
-        onBpmChange: (bpm: number) => {
-          this.setLiveBpm(bpm);
-        },
-        onDynamicChange: (val: number) => {
-          this.setContinuousDynamic(val);
-        },
-        onSpotlightChange: (sectionId: string | null) => {
-          if (sectionId) {
-            const currentPiece = getPieceById(this.currentPieceId) || REPERTOIRE[0];
-            const sec = currentPiece?.sections.find((s, idx) =>
-              s.id === sectionId ||
-              `section-${s.id}` === sectionId ||
-              String(idx) === sectionId ||
-              `section-${idx}` === sectionId ||
-              sectionId.endsWith(s.id)
-            );
-            if (sec) {
-              this.audioEngine.setSectionFocus(sec.channels, 1.0);
-              lastAppliedSectionId = sec.id;
-              lastAppliedSectionFocus = 1.0;
-              this.uiCallbacks.onFocusChange?.({
-                isActive: true,
-                state: "grabbed",
-                hoveredSectionId: sec.id,
-                grabbedSectionId: sec.id,
-                sectionFocus: 1.0,
-                pointerScreenPoint: null,
-                pointingHandIndex: null,
-                pinchDistanceRatio: 1.0,
-              });
-            }
-          } else {
-            this.audioEngine.setSectionFocus(null, 0);
-            lastAppliedSectionId = null;
-            lastAppliedSectionFocus = 0;
-            this.uiCallbacks.onFocusChange?.({
-              isActive: false,
-              state: "idle",
-              hoveredSectionId: null,
-              grabbedSectionId: null,
-              sectionFocus: 0,
-              pointerScreenPoint: null,
-              pointingHandIndex: null,
-              pinchDistanceRatio: 1.0,
-            });
-          }
-        },
-      });
-
-      this.cameraInput.onMagicFinger(magicTel => {
-        if (this.inputSource === "camera") {
-          this.cameraInput?.setIndicatedBpm(this.indicatedBpm);
-          const curDyn = this.audioEngine.getContinuousDynamic() ?? 0.5;
-          this.cameraInput?.setContinuousDynamic(curDyn);
-
-          if (magicTel.isActive && (this.state === "ready" || this.state === "paused" || this.state === "completed")) {
-            if (this.state === "completed") {
-              this.restart();
-            }
-            this.startPlayback();
-          }
-
-          this.uiCallbacks.onMagicFinger?.(magicTel);
-        }
-      });
-
-      // Wire camera telemetry into debug overlay
-      this.cameraInput.onTelemetry(t => {
-        this.debug.updateCameraTelemetry(t);
-      });
-      // Wire camera beat observations into clock
-      this.cameraInput.onBeat(obs => this.handleBeatObservation(obs));
-      // Wire sample tracking for hands-down detection & Mode E continuous height tempo
-      this.cameraInput.onSamples(samples => {
-        // In Mode E: only pause when hands are completely off-screen.
-        // Low hand position = rallentando, NOT a stop signal.
-        this.isHandsDown = samples.length === 0;
-
-        const isFocusActive = this.cameraInput?.getFocusController().isFocusModeActive() ?? false;
-        const isMagicMode = this.clock.getTempoMode() === "magic";
-
-        // In Magic Finger mode: if no hands are present on screen, pause with 500ms grace period and 250ms fade down!
-        if (isMagicMode && this.inputSource === "camera") {
-          if (samples.length === 0) {
-            if (this.state === "playing") {
-              const now = performance.now();
-              if (this.magicNoHandsStartTime === 0) {
-                this.magicNoHandsStartTime = now;
-              }
-              const elapsed = now - this.magicNoHandsStartTime;
-              if (elapsed >= 500) {
-                this.magicNoHandsStartTime = 0;
-                this.audioEngine.restoreMasterVolume();
-                this.pausePlayback();
-              } else if (elapsed >= 200) {
-                const fadeRatio = 1.0 - (elapsed - 200) / 300;
-                this.audioEngine.setFadeMultiplier(Math.max(0, Math.min(1, fadeRatio)));
-              }
-            } else {
-              this.magicNoHandsStartTime = 0;
-            }
-          } else {
-            if (this.magicNoHandsStartTime > 0) {
-              this.audioEngine.restoreMasterVolume();
-              this.magicNoHandsStartTime = 0;
-            }
-            const isOneHandRaised = samples.some(s => s.conductorPoint.y >= 0.08);
-
-            // Broadcast motion sample for warmup and UI meters in magic mode
-            this.uiCallbacks.onCameraMotionSample?.({
-              tempoBpm: this.indicatedBpm || Math.round(this.clock.getState().bpm || this.nominalPieceBpm),
-              isHandsRaised: isOneHandRaised,
-              handPoints: samples.map(s => ({
-                x: Math.round(Math.max(40, Math.min(560, s.conductorPoint.x * 600))),
-                y: Math.round(Math.max(40, Math.min(360, (1.0 - s.conductorPoint.y) * 400))),
-              })),
-            });
-
-            // Raising ONE hand starts or resumes playback in Magic Finger mode
-            if (!this.isWarmingUp && (this.state === "ready" || this.state === "paused" || this.state === "completed")) {
-              if (isOneHandRaised) {
-                if (this.state === "completed") {
-                  this.restart();
-                }
-                this.startPlayback();
-              }
-            }
-          }
-        }
-
-        if (samples.length > 0 && !isFocusActive && !isMagicMode) {
-          // ── 1. Thumbs Down Cutoff (👎): Dramatically pauses music ──
-          const hasThumbDown = samples.some(s => s.gesture === "Thumb_Down");
-          if (hasThumbDown) {
-            if (!this.isFistCutoff) {
-              this.isFistCutoff = true;
-              if (this.state === "playing") {
-                this.cutoffInitiatedPause = true;
-                this.pausePlayback(true);
-              } else {
-                this.cutoffInitiatedPause = false;
-                this.uiCallbacks.onFistCutoffChange?.(true);
-              }
-            }
-          } else if (this.isFistCutoff) {
-            this.isFistCutoff = false;
-            this.uiCallbacks.onFistCutoffChange?.(false);
-            // Auto-resume playback ONLY if thumbs down initiated the pause
-            if (this.cutoffInitiatedPause && this.state === "paused") {
-              this.cutoffInitiatedPause = false;
-              this.startPlayback();
-            }
-            this.cutoffInitiatedPause = false;
-          }
-
-          // ── 2. Double Peace Signs (✌️ + ✌️): Party Mode ──
-          const hasDoublePeace = samples.length >= 2 &&
-            samples[0].gesture === "Victory" &&
-            samples[1].gesture === "Victory";
-
-          if (hasDoublePeace) {
-            if (!this.isPartyMode) {
-              this.isPartyMode = true;
-              this.uiCallbacks.onPartyModeChange?.(true);
-            }
-          } else if (this.isPartyMode) {
-            this.isPartyMode = false;
-            this.uiCallbacks.onPartyModeChange?.(false);
-          }
-
-          if (this.clock.getTempoMode() === "gestural" && !this.isFistCutoff && !this.isFermata) {
-            // Update per-hand Y history for steady-vs-beating detection
-            for (const s of samples) {
-              let hist = this.handYHistory.get(s.handIndex);
-              if (!hist) { hist = []; this.handYHistory.set(s.handIndex, hist); }
-              hist.push(s.conductorPoint.y);
-              if (hist.length > this.HAND_Y_HISTORY_LEN) hist.shift();
-            }
-
-            const isRaised = samples.some(s => s.conductorPoint.y >= 0.10);
-            const tempoMultiplier = this.calculateGesturalTempoMultiplier(samples);
-            const liveTempoBpm = Math.round((this.basePieceBpm || 108) * tempoMultiplier);
-            const handPoints = samples.map(s => ({
-              x: Math.round(Math.max(40, Math.min(560, s.conductorPoint.x * 600))),
-              y: Math.round(Math.max(40, Math.min(360, (1.0 - s.conductorPoint.y) * 400))),
-            }));
-
-            // Broadcast smoothed tempo when playing to prevent gauge jitter
-            const gesturalBroadcastBpm = this.state === "playing"
-              ? (this.indicatedBpm || Math.round(this.currentGesturalBpm) || liveTempoBpm)
-              : liveTempoBpm;
-
-            // Always broadcast live gestural motion sample for warmup & UI meters
-            this.uiCallbacks.onCameraMotionSample?.({
-              tempoBpm: gesturalBroadcastBpm,
-              isHandsRaised: isRaised,
-              handPoints,
-            });
-
-            // Mode E: Auto-start instantly as soon as user raises hands in front of camera
-            if (!this.isWarmingUp && (this.state === "ready" || this.state === "paused" || this.state === "completed")) {
-              if (isRaised) {
-                if (this.state === "completed") {
-                  this.restart();
-                }
-                this.startPlayback();
-              }
-            } else if (this.state === "playing") {
-              const targetBpm = Math.max(40, Math.min(240, this.basePieceBpm * tempoMultiplier));
-              const now = performance.now();
-              if (this.lastGesturalUpdateMs === 0) this.lastGesturalUpdateMs = now;
-              const dt = Math.max(0.005, (now - this.lastGesturalUpdateMs) / 1000);
-              this.lastGesturalUpdateMs = now;
-
-              // Smooth slew interpolation (~350ms time constant)
-              const alpha = 1 - Math.exp(-dt / 0.35);
-              this.currentGesturalBpm += alpha * (targetBpm - this.currentGesturalBpm);
-
-              this.clock.setBpm(this.currentGesturalBpm);
-              this.indicatedBpm = Math.round(this.currentGesturalBpm);
-
-              // Update transport period in real-time
-              this.transport.updatePeriod(
-                this.audioEngine.getAudioTime(),
-                60 / this.currentGesturalBpm,
-                0
-              );
-            }
-          }
-        } else {
-          // No hands detected on screen
-          if (this.isFermata) {
-            this.isFermata = false;
-            this.transport.setFermata(false, this.audioEngine.getAudioTime());
-            this.uiCallbacks.onFermataChange?.(false);
-          }
-        }
-      });
-      this.cameraInput.setOnClose(() => {
-        void this.setInputSource("keyboard");
-      });
+      try {
+        await this.cameraInput.start();
+      } catch (err) {
+        console.warn("Failed to start camera, falling back to keyboard mode:", err);
+        await this.setInputSource("keyboard");
+        return;
+      }
+    } finally {
+      this.isCameraInitializing = false;
     }
-
-    try {
-      await this.cameraInput.start();
-    } catch (err) {
-      console.warn("Failed to start camera, falling back to keyboard mode:", err);
-      await this.setInputSource("keyboard");
-      return;
-    }
-  } finally {
-    this.isCameraInitializing = false;
   }
-}
 
-  calculateGesturalTempoMultiplier(samples: import("../camera/cameraTypes").HandSample[]): number {
-    if (samples.length === 0) return 1.0;
-    let tempoMultiplier = 1.0;
-
-    if (this.cameraAxisMapping === "flipped") {
-      // ── FLIPPED: Horizontal Span (Width) modulates Tempo ──
-      // Spreading hands apart -> Accelerando (up to 1.65x piece BPM)
-      // Bringing hands together -> Rallentando (down to 0.35x piece BPM)
-      if (samples.length >= 2) {
-        const s0 = samples[0];
-        const s1 = samples[1];
-        const centerSpan = Math.abs(s0.conductorPoint.x - s1.conductorPoint.x);
-
-        let avgHandSize = 0.10;
-        if (s0.landmarks && s1.landmarks && s0.landmarks.length >= 5 && s1.landmarks.length >= 5) {
-          const xs0 = s0.landmarks.map(p => p.x);
-          const xs1 = s1.landmarks.map(p => p.x);
-          const size0 = Math.max(...xs0) - Math.min(...xs0);
-          const size1 = Math.max(...xs1) - Math.min(...xs1);
-          avgHandSize = (size0 + size1) / 2;
-        }
-
-        const touchingSpan = Math.max(0.04, avgHandSize * 0.95);
-        const neutralSpan = touchingSpan + 0.18 + avgHandSize * 0.35;
-        const maxSpan = neutralSpan + 0.26 + avgHandSize * 0.40;
-        const DEADBAND = 0.03;
-
-        if (centerSpan > neutralSpan + DEADBAND) {
-          const norm = Math.min(1.0, (centerSpan - (neutralSpan + DEADBAND)) / Math.max(0.05, maxSpan - (neutralSpan + DEADBAND)));
-          tempoMultiplier = 1.0 + 0.65 * norm;
-        } else if (centerSpan < neutralSpan - DEADBAND) {
-          const norm = Math.min(1.0, ((neutralSpan - DEADBAND) - centerSpan) / Math.max(0.05, (neutralSpan - DEADBAND) - touchingSpan));
-          tempoMultiplier = 1.0 - 0.65 * norm;
-        } else {
-          tempoMultiplier = 1.0;
-        }
-      } else if (samples.length === 1) {
-        const dx = Math.abs(samples[0].conductorPoint.x - 0.50);
-        if (dx > 0.25) {
-          tempoMultiplier = 1.0 + 0.65 * Math.min(1.0, (dx - 0.25) / 0.25);
-        } else if (dx < 0.10) {
-          tempoMultiplier = 1.0 - 0.65 * Math.min(1.0, (0.10 - dx) / 0.10);
-        } else {
-          tempoMultiplier = 1.0;
-        }
-      }
-    } else {
-      // ── CLASSIC (DEFAULT): Vertical Height (Y) modulates Tempo ──
-      // Raising hands up -> Accelerando (up to 1.65x piece BPM)
-      // Lowering hands down -> Rallentando (down to 0.35x piece BPM)
-      let effectiveY: number;
-      if (samples.length >= 2) {
-        const stats = samples.map(s => {
-          const hist = this.handYHistory.get(s.handIndex) ?? [s.conductorPoint.y];
-          const mean = hist.reduce((a, b) => a + b, 0) / hist.length;
-          const variance = hist.reduce((a, b) => a + (b - mean) ** 2, 0) / hist.length;
-          return { y: s.conductorPoint.y, mean, variance };
-        });
-
-        const [h0, h1] = stats;
-        const h0Beating = h0.variance > 0.0006 && h0.variance > 2.0 * h1.variance;
-        const h1Beating = h1.variance > 0.0006 && h1.variance > 2.0 * h0.variance;
-
-        if (h0Beating && !h1Beating) {
-          effectiveY = h1.mean;
-        } else if (h1Beating && !h0Beating) {
-          effectiveY = h0.mean;
-        } else {
-          effectiveY = (h0.mean + h1.mean) / 2;
-        }
-      } else {
-        const hist = this.handYHistory.get(samples[0].handIndex) ?? [samples[0].conductorPoint.y];
-        effectiveY = hist.reduce((a, b) => a + b, 0) / hist.length;
-      }
-
-      const NEUTRAL_Y = 0.40;
-      const DEADBAND = 0.03;
-
-      if (effectiveY > NEUTRAL_Y + DEADBAND) {
-        const norm = Math.min(1.0, (effectiveY - (NEUTRAL_Y + DEADBAND)) / (0.85 - (NEUTRAL_Y + DEADBAND)));
-        tempoMultiplier = 1.0 + 0.65 * norm;
-      } else if (effectiveY < NEUTRAL_Y - DEADBAND) {
-        const norm = Math.min(1.0, ((NEUTRAL_Y - DEADBAND) - effectiveY) / ((NEUTRAL_Y - DEADBAND) - 0.10));
-        tempoMultiplier = 1.0 - 0.65 * norm;
-      } else {
-        tempoMultiplier = 1.0;
-      }
-    }
-
-    return tempoMultiplier;
+  calculateGesturalTempoMultiplier(samples: HandSample[]): number {
+    return calculateGesturalTempoMultiplier(samples, this.cameraAxisMapping, this.handYHistory);
   }
 
   getInputSource(): InputSource {
@@ -1023,8 +527,6 @@ export class ExperienceController {
 
   setCameraAxisMapping(mapping: CameraAxisMapping): void {
     this.cameraAxisMapping = mapping;
-    // In flipped mode (default): Height controls Volume -> cameraDynamicsMode = "height"
-    // In classic mode: Width controls Volume -> cameraDynamicsMode = "spread"
     const dynamicsMode = mapping === "flipped" ? "height" : "spread";
     this.setCameraDynamicsMode(dynamicsMode);
     this.uiCallbacks.onCameraAxisMappingChange?.(mapping);
@@ -1076,51 +578,11 @@ export class ExperienceController {
   }
 
   restart(): void {
-    if (this.completionTimer) {
-      clearTimeout(this.completionTimer);
-      this.completionTimer = null;
-    }
-    this.playbackSessionId++;
-    this.scheduler.stop();
-    this.scheduler.reset();
-    this.transport.stop();
-    this.clock.reset();
-    this.currentGesturalBpm = this.nominalPieceBpm;
-    this.indicatedBpm = Math.round(this.nominalPieceBpm);
-    this.clock.setBpm(this.nominalPieceBpm);
-    this.clock.setPeriodMs(60000 / this.nominalPieceBpm);
-    if (this.cameraInput) {
-      this.cameraInput.setIndicatedBpm(this.indicatedBpm);
-      this.cameraInput.getMagicFingerController().setInitialBpm(this.indicatedBpm);
-    }
-    this.audioEngine.stopAllNotes();
-    this.prepTapCount = 0;
-    this.pausedBeat = 0;
-    this.setState("ready");
+    restartPlayback(this);
   }
 
   pausePlayback(isCutoff: boolean = false): void {
-    if (this.state !== "playing") return;
-    if (this.completionTimer) {
-      clearTimeout(this.completionTimer);
-      this.completionTimer = null;
-    }
-    this.playbackSessionId++;
-    if (!isCutoff) {
-      this.cutoffInitiatedPause = false;
-    }
-    this.pausedBeat = this.transport.getCursorBeat();
-    this.scheduler.stop();
-    this.scheduler.reset();
-    this.transport.stop();
-    this.clock.reset();
-    this.audioEngine.stopAllNotes();
-    this.prepTapCount = 0;
-    this.setState("paused");
-    this.debug.updatePauseState(true);
-    if (isCutoff) {
-      this.uiCallbacks.onFistCutoffChange?.(true);
-    }
+    pausePlayback(this, isCutoff);
   }
 
   getIsFistCutoff(): boolean {
@@ -1147,7 +609,7 @@ export class ExperienceController {
       if (this.state === "completed") {
         this.restart();
       }
-      this.startPlayback();
+      void this.startPlayback();
       this.debug.updatePauseState(false);
     }
   }
@@ -1171,7 +633,6 @@ export class ExperienceController {
       this.uiCallbacks.onDynamicChange(level);
     }
 
-    // If pushed to fff (overburn ⚡), schedule automatic decay back to ff after 1.5s
     if (level === "fff") {
       this.overburnTimer = setTimeout(() => {
         if (this.audioEngine.getDynamicLevel() === "fff") {
@@ -1195,14 +656,11 @@ export class ExperienceController {
 
   armAccent(): void {
     const periodMs = this.clock.getState().periodMs || 500;
-
-    // 1. Instantly trigger acoustic burst, voice gain surge, open filter & cranked reverb
     this.audioEngine.triggerAccentBurst(Math.max(380, periodMs * 0.95));
     this.uiCallbacks.onAccentFlash?.();
     this.uiCallbacks.onAccentArmed?.(true);
     this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
 
-    // 2. Clear visual accent mark after the burst window finishes
     if (this.accentClearTimer) clearTimeout(this.accentClearTimer);
     this.accentClearTimer = setTimeout(() => {
       this.uiCallbacks.onAccentArmed?.(false);
@@ -1251,7 +709,7 @@ export class ExperienceController {
         localStorage.setItem("conductor_feature_score_visualizer", String(enabled));
       }
     } catch {
-      // Ignore storage errors in restricted contexts
+      // Ignore storage errors
     }
     this.debug?.setScoreVisualizerCheckbox(enabled);
   }
@@ -1270,10 +728,10 @@ export class ExperienceController {
 
   // ── Beat observation handler ─────────────────────────────────────────────
 
-  private beatSoundEnabled = false; // Off by default — VFX flash still fires on beat
-  private lastBeatObservationMs = -1;
-  private indicatedBpm = 140;
-  private keyboardInactivityPulseCount = 0;
+  beatSoundEnabled = false;
+  lastBeatObservationMs = -1;
+  indicatedBpm = 140;
+  keyboardInactivityPulseCount = 0;
 
   setBeatSoundEnabled(enabled: boolean): void {
     this.beatSoundEnabled = enabled;
@@ -1295,10 +753,6 @@ export class ExperienceController {
     return this.nominalPieceBpm;
   }
 
-  /**
-   * Nudge the Mode E gestural live BPM by deltaBpm.
-   * Adjusts target base BPM so the change persists across subsequent camera samples.
-   */
   nudgeGesturalBpm(deltaBpm: number): void {
     this.basePieceBpm = Math.max(40, Math.min(220, this.basePieceBpm + deltaBpm));
     this.currentGesturalBpm = Math.max(40, Math.min(220, this.currentGesturalBpm + deltaBpm));
@@ -1307,222 +761,33 @@ export class ExperienceController {
     this.transport.updatePeriod(this.audioEngine.getAudioTime(), 60 / this.currentGesturalBpm, 0);
   }
 
-  private async handleBeatObservation(obs: {
+  async handleBeatObservation(obs: {
     timestampMs: number;
     source: "keyboard" | "camera";
     confidence: number;
   }): Promise<void> {
-    if (this.isWarmingUp) {
-      return;
-    }
-
-    // If state is completed, reset to ready so conducting restarts cleanly
-    if (this.state === "completed") {
-      this.restart();
-    }
-
-    // Resume AudioContext on first tap if suspended (requires user gesture)
-    await this.audioEngine.resume();
-
-    // Reset inactivity counters
-    this.keyboardInactivityPulseCount = 0;
-
-    // In Mode E and Magic Finger Mode, tapping SPACE while ready/paused immediately starts/resumes playback!
-    if (this.clock.getTempoMode() === "gestural" || this.clock.getTempoMode() === "magic") {
-      if (this.beatSoundEnabled) {
-        this.audioEngine.playImmediateBeatCymbal();
-      }
-      this.debug.updateTapAccepted();
-      this.uiCallbacks.onBeat();
-      this.clock.acceptObservation(obs);
-
-      if (this.state === "ready" || this.state === "paused") {
-        this.startPlayback();
-      }
-      return;
-    }
-
-    // Compute indicated instantaneous BPM with light smoothing (accounting for cut time in Mode D)
-    const now = obs.timestampMs;
-    const beatsPerTap = this.getEffectiveBeatsPerTap();
-    if (this.lastBeatObservationMs > 0) {
-      const dtMs = now - this.lastBeatObservationMs;
-      if (dtMs >= 100 && dtMs <= 3000) {
-        const instantBpm = (60000 / dtMs) * beatsPerTap;
-        this.indicatedBpm = this.indicatedBpm > 0
-          ? this.indicatedBpm * 0.55 + instantBpm * 0.45
-          : instantBpm;
-      }
-    }
-    this.lastBeatObservationMs = now;
-
-    // If beat sound debug cue is active, play cymbal immediately with zero latency
-    if (this.beatSoundEnabled) {
-      this.audioEngine.playImmediateBeatCymbal();
-    }
-
-    this.prepTapCount++;
-
-    // First tap from ready or paused: enter preparing state
-    if (this.state === "ready" || this.state === "paused") {
-      this.setState("preparing");
-    }
-
-    // Feed observation to clock
-    this.clock.acceptObservation(obs);
-
-    // After second tap: clock has calibrated period, start/resume playback with 1-beat lookahead
-    if (this.prepTapCount === 2 && this.state === "preparing") {
-      this.startPlayback();
-    }
+    return handleBeatObservation(this, obs);
   }
 
   // ── Playback ─────────────────────────────────────────────────────────────
 
-  private async startPlayback(): Promise<void> {
-    if (this.isWarmingUp) return;
-    if (this.state === "playing") return;
-    if (this.startPlaybackPromise) {
-      return this.startPlaybackPromise;
-    }
+  startPlayback(): Promise<void> {
+    return startPlayback(this);
+  }
 
-    this.startPlaybackPromise = (async () => {
-      try {
-        if (this.completionTimer) {
-          clearTimeout(this.completionTimer);
-          this.completionTimer = null;
-        }
-        this.playbackSessionId++;
-
-        try {
-          await this.audioEngine.resume();
-        } catch {
-          // AudioContext resume might fail in non-user-gesture context in some strict browsers
-        }
-
-        if (this.state === "playing") return;
-
-        if (this.clock.getTempoMode() === "gestural") {
-          this.clock.setPeriodMs(60000 / this.currentGesturalBpm);
-          this.clock.startRunningAtCurrentPeriod();
-        } else if (this.clock.getTempoMode() === "magic") {
-          const bpm = this.indicatedBpm > 0 ? this.indicatedBpm : this.nominalPieceBpm;
-          this.clock.setBpm(bpm);
-          this.clock.setPeriodMs(60000 / bpm);
-          this.clock.startRunningAtCurrentPeriod();
-        }
-
-        const clockState = this.clock.getState();
-        const periodSec = clockState.periodMs / 1000;
-        const nextBeatAudioTime = this.clock.predictNextBeatAudioTime();
-        const audioNow = this.audioEngine.getAudioTime();
-
-        // In Beat Mode: 2 prep taps establish tempo (1, 2). Music begins 1 beat later on nextBeatAudioTime
-        // with pristine audio attack and zero dropped opening notes.
-        // In Gestural or Magic Mode: Starts immediately with 60ms audio buffer lead time.
-        const isImmediate = this.clock.getTempoMode() === "gestural" || this.clock.getTempoMode() === "magic";
-        const startAudioTime = isImmediate
-          ? audioNow + 0.06
-          : (nextBeatAudioTime > audioNow + 0.05 ? nextBeatAudioTime : audioNow + periodSec);
-
-        // Start or resume from pausedBeat
-        const startBeat = this.pausedBeat;
-        const beatsPerTap = this.getEffectiveBeatsPerTap();
-        const piece = this.getCurrentPiece();
-        const leadInBeats = (startBeat === 0 && piece?.leadInBeats) ? piece.leadInBeats : 0;
-
-        this.transport.start(startBeat, startAudioTime, periodSec, beatsPerTap, leadInBeats);
-        this.scheduler.start();
-        this.setState("playing");
-
-        // Update audio latency in debug overlay
-        const ctx = (this.audioEngine as unknown as { ctx: AudioContext | null }).ctx;
-        if (ctx) {
-          this.debug.updateAudioLatency(
-            (ctx as AudioContext & { baseLatency?: number }).baseLatency ?? 0,
-            (ctx as AudioContext & { outputLatency?: number }).outputLatency ?? 0
-          );
-        }
-        this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
-      } finally {
-        this.startPlaybackPromise = null;
-      }
-    })();
-
-    return this.startPlaybackPromise;
+  private handlePieceComplete(): void {
+    handlePieceComplete(this);
   }
 
   // ── Clock event handler ──────────────────────────────────────────────────
 
-  private handleClockEvent(event: ClockEvent): void {
-    switch (event.type) {
-      case "beat": {
-        const s = event.state;
-
-        // Check inactivity in Keyboard Beat Mode: pause if user stops tapping (after 4 missed beats)
-        if (this.inputSource === "keyboard" && this.clock.getTempoMode() === "inertial" && this.state === "playing") {
-          this.keyboardInactivityPulseCount++;
-          if (this.keyboardInactivityPulseCount >= 4) {
-            this.keyboardInactivityPulseCount = 0;
-            this.pausePlayback();
-            return;
-          }
-        } else {
-          this.keyboardInactivityPulseCount = 0;
-        }
-
-        // Check hands-down inactivity in camera mode:
-        // In Magic Finger mode: pause after 1 beat of dropping hands (or immediate via onSamples)
-        // In Mode E: pause within 2 beats of dropping hands
-        // In Mode D: pause after 6 beats of dropping hands
-        if (this.inputSource === "camera" && this.state === "playing") {
-          if (this.isHandsDown) {
-            this.handsDownPulseCount++;
-            const maxSilentBeats = this.clock.getTempoMode() === "magic"
-              ? 4
-              : (this.clock.getTempoMode() === "gestural" ? 2 : 6);
-            if (this.handsDownPulseCount >= maxSilentBeats) {
-              this.handsDownPulseCount = 0;
-              this.pausePlayback();
-              return;
-            }
-          } else {
-            this.handsDownPulseCount = 0;
-          }
-        } else {
-          this.handsDownPulseCount = 0;
-        }
-
-        // Update transport period & phase on every accepted tap while playing
-        if (this.state === "playing") {
-          this.transport.updatePeriod(
-            this.audioEngine.getAudioTime(),
-            s.periodMs / 1000,
-            s.phaseCorrectionSec ?? 0
-          );
-        }
-
-        this.debug.updateClock(s);
-        this.debug.updateTapAccepted();
-        this.debug.updateScore(this.transport.getCursorBeat());
-        this.debug.updateScheduler(this.scheduler.horizon, this.scheduler.committedCount);
-        this.debug.updateDynamics(this.audioEngine.getDynamicsTelemetry());
-        this.debug.updateAudioDiagnostics(this.audioEngine.getAudioDiagnostics(), this.scheduler.getDiagnostics());
-        this.uiCallbacks.onBeat();
-        break;
-      }
-      case "rejected":
-        this.debug.updateTapRejected(event.reason);
-        break;
-      case "stopped":
-        this.pausePlayback();
-        break;
-    }
+  handleClockEvent(event: ClockEvent): void {
+    handleClockEvent(this, event);
   }
 
   // ── State ────────────────────────────────────────────────────────────────
 
-  private setState(next: ExperienceState): void {
+  setState(next: ExperienceState): void {
     this.state = next;
     this.uiCallbacks.onStateChange(next);
   }
@@ -1614,16 +879,14 @@ export class ExperienceController {
       this.restart();
     }
     if (this.state === "ready" || this.state === "paused") {
-      this.startPlayback();
+      void this.startPlayback();
     }
   }
 
   getEffectiveBeatsPerTap(): number {
-    // In Keyboard mode, conductor taps every single quarter note beat (1 tap = 1 beat)
     if (this.inputSource === "keyboard") {
       return 1;
     }
-    // In Camera mode, Beat Mode (inertial) conducts in cut time (1 stroke = 2 beats)
     const piece = this.getCurrentPiece();
     return this.clock.getTempoMode() === "inertial" ? 2 : (piece?.beatsPerTap || 1);
   }

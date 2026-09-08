@@ -24,10 +24,12 @@ This document catalogs high-impact architectural refactorings designed to keep f
 - Extracted repertoire modal to [`src/ui/repertoireModal.ts`](file:///c:/Users/jraeb/Conductor/src/ui/repertoireModal.ts).
 - Extracted application bootstrap to [`src/experience/appBootstrap.ts`](file:///c:/Users/jraeb/Conductor/src/experience/appBootstrap.ts).
 
-### 3. `src/experience/ExperienceController.ts` (~1,500 lines)
-*Target: Separate state coordination from UI/Audio glue.*
-- **Lifecycle & Mode Coordinator**: Extract camera-to-fallback transition logic into a dedicated fallback policy helper.
-- **Score Transport Coordination**: Delegate transport state machine transitions directly to `ScoreTransport`.
+### 3. [COMPLETED] `src/experience/ExperienceController.ts` (Reduced from ~1,671 to ~552 lines)
+- Extracted camera-driven tempo math (Classic height vs Flipped span and beating hand variance detection) to [`src/experience/gesturalTempoMath.ts`](file:///c:/Users/jraeb/Conductor/src/experience/gesturalTempoMath.ts) (116 lines).
+- Extracted real-time camera gesture processing (hands-down fade/grace period, thumbs-down cutoff, double victory party mode, gestural tempo slew filter) to [`src/experience/cameraGestureHandler.ts`](file:///c:/Users/jraeb/Conductor/src/experience/cameraGestureHandler.ts) (218 lines).
+- Extracted camera provider lifecycle and telemetry streams (loading coordinator tasks, dynamic ladder rate limiting, section focus mixing, spotlight panning) to [`src/experience/cameraWiring.ts`](file:///c:/Users/jraeb/Conductor/src/experience/cameraWiring.ts) (196 lines).
+- Extracted playback lifecycle and transport coordination (`startPlayback`, `pausePlayback`, `restartPlayback`, `handlePieceComplete`, `handleClockEvent`, `handleBeatObservation`) to [`src/experience/playbackCoordinator.ts`](file:///c:/Users/jraeb/Conductor/src/experience/playbackCoordinator.ts) (274 lines).
+- Added comprehensive unit tests for gestural tempo math in [`tests/gesturalTempoMath.test.ts`](file:///c:/Users/jraeb/Conductor/tests/gesturalTempoMath.test.ts).
 
 ---
 
