@@ -738,25 +738,25 @@ describe("MagicFingerController", () => {
     expect(tel.chargeProgress).toBe(0);
     expect(controller.isLockInActive()).toBe(false);
 
-    // Step 3: At 895ms (steadyDuration = 895ms > 595ms -> 300ms of charge elapsed / 600ms = 50%)
+    // Step 3: At 900ms (steadyDuration = 900ms > 500ms -> 400ms of charge elapsed / 800ms = 50%)
     tel = controller.update({
       samples: [aimSample],
       indicatedBpm: 150,
       continuousDynamic: 0.5,
       isMirrored: false,
-      nowMs: 1895,
+      nowMs: 1900,
     });
     expect(tel.chargeProgress).toBeCloseTo(0.5, 1);
     expect(tel.chargeTarget).toBe("tempo");
     expect(controller.isLockInActive()).toBe(false);
 
-    // Step 4: At 1200ms+ (steadyDuration >= 1195ms -> charge completes 100% and triggers lock-in)
+    // Step 4: At 1300ms+ (steadyDuration >= 1300ms -> charge completes 100% and triggers lock-in)
     tel = controller.update({
       samples: [aimSample],
       indicatedBpm: 150,
       continuousDynamic: 0.5,
       isMirrored: false,
-      nowMs: 2200,
+      nowMs: 2350,
     });
     expect(controller.isLockInActive()).toBe(true);
     expect(controller.getLockedTarget()).toBe("tempo");
@@ -902,6 +902,76 @@ describe("MagicFingerController", () => {
     expect(telRearm.ray?.isDimmed).toBe(false);
     expect(telRearm.state).toBe("instrument_targeted");
     expect(onSpotlightChange).toHaveBeenCalledWith(expect.any(String));
+  });
+
+  it("prevents false orchestra exit and release when pointing at high tempo (180-220 BPM)", () => {
+    const onBpmChange = vi.fn();
+    controller.setCallbacks({ onBpmChange });
+
+    // Acquire tempo at 175 BPM
+    const sampleAcquire = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+    controller.update({
+      samples: [sampleAcquire],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+    expect(controller.getActiveTarget()).toBe("tempo");
+
+    // Point up towards 210 BPM: tipY = 0.45, pipY = 0.50 (rayDirY is negative)
+    const sampleHigh = createSample("Pointing", 0.8, 0.45, 0.4, 0.50);
+    const telHigh = controller.update({
+      samples: [sampleHigh],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1050,
+    });
+
+    // Must remain acquired on tempo and NOT falsely release or target orchestra!
+    expect(telHigh.activeTarget).toBe("tempo");
+    expect(telHigh.state).toBe("tempo_acquired");
+    expect(telHigh.targetedSectionId).toBeNull();
+  });
+
+  it("debounces transient out-of-bounds frame to prevent slider release jitter", () => {
+    // Acquire tempo at 175 BPM
+    const sampleAcquire = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+    controller.update({
+      samples: [sampleAcquire],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+    expect(controller.getActiveTarget()).toBe("tempo");
+
+    // Frame 1: Slow jitter slightly past the release pad boundary (hitY < tempoTrackTop - pad)
+    // with downward/gentle angle so it's not a flick exit (rayDirY > -0.30)
+    // tipY = 0.38, pipY = 0.45 -> startY = 176, rawHitY = -24 (past 0px pad), rayDirY = -0.15 (> -0.35)
+    const sampleDrift = createSample("Pointing", 0.8, 0.38, 0.4, 0.45);
+    const telDrift = controller.update({
+      samples: [sampleDrift],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1033,
+    });
+
+    // Still acquired because of 3-frame debounce!
+    expect(telDrift.activeTarget).toBe("tempo");
+
+    // Frame 2: Back in normal range
+    const telRecovered = controller.update({
+      samples: [sampleAcquire],
+      indicatedBpm: 175,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1066,
+    });
+    expect(telRecovered.activeTarget).toBe("tempo");
+    expect(telRecovered.state).toBe("tempo_acquired");
   });
 });
 

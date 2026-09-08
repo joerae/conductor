@@ -1039,21 +1039,21 @@ export class DebugOverlay {
         </label>
         <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
           <span>Hold Steady Delay (before charging):</span>
-          <span id="dbg-mf-hold-delay-val" style="color:#ffd56b; font-weight:bold;">0.60s</span>
+          <span id="dbg-mf-hold-delay-val" style="color:#ffd56b; font-weight:bold;">0.50s</span>
         </div>
-        <input type="range" id="dbg-mf-hold-delay-slider" min="0.2" max="2.0" step="0.05" value="0.60" style="accent-color:#ffd56b; width:100%;">
+        <input type="range" id="dbg-mf-hold-delay-slider" min="0.2" max="2.0" step="0.05" value="0.50" style="accent-color:#ffd56b; width:100%;">
 
         <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
           <span>Charge Duration (ring fill speed):</span>
-          <span id="dbg-mf-charge-dur-val" style="color:#ffd56b; font-weight:bold;">0.60s</span>
+          <span id="dbg-mf-charge-dur-val" style="color:#ffd56b; font-weight:bold;">0.80s</span>
         </div>
-        <input type="range" id="dbg-mf-charge-dur-slider" min="0.1" max="1.5" step="0.05" value="0.60" style="accent-color:#ffd56b; width:100%;">
+        <input type="range" id="dbg-mf-charge-dur-slider" min="0.1" max="1.5" step="0.05" value="0.80" style="accent-color:#ffd56b; width:100%;">
 
         <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
           <span>Jitter Tolerance (steady threshold):</span>
-          <span id="dbg-mf-tolerance-val" style="color:#ffd56b; font-weight:bold;">±6.4 BPM / ±0.056 Dyn</span>
+          <span id="dbg-mf-tolerance-val" style="color:#ffd56b; font-weight:bold;">±5.0 BPM / ±0.044 Dyn</span>
         </div>
-        <input type="range" id="dbg-mf-tolerance-slider" min="1" max="15" step="0.2" value="6.4" style="accent-color:#ffd56b; width:100%;">
+        <input type="range" id="dbg-mf-tolerance-slider" min="1" max="15" step="0.2" value="5.0" style="accent-color:#ffd56b; width:100%;">
       </div>
 
       <!-- Spotlight Score Visualizer Diagnostics -->

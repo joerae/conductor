@@ -654,13 +654,15 @@ export class CameraPreviewOverlay {
               targetGlow.style.display = "none";
               targetRing.style.display = "none";
               targetPip.style.display = "none";
-            } else if (isAcquired) {
+            } else if (isAcquired || (magicFingerTelemetry?.ray && magicFingerTelemetry.ray.targetType !== "open")) {
               outerRay.setAttribute("stroke", "rgba(255, 213, 107, 0.40)");
               outerRay.setAttribute("stroke-width", "12");
               mainRay.setAttribute("stroke", "#ffd56b");
               mainRay.setAttribute("stroke-width", "4.5");
               coreRay.setAttribute("stroke", "#ffffff");
               coreRay.setAttribute("stroke-width", "2");
+              targetGlow.setAttribute("fill", "rgba(255, 213, 107, 0.35)");
+              targetRing.setAttribute("stroke", "#ffd56b");
             } else {
               outerRay.setAttribute("stroke", "rgba(107, 231, 255, 0.28)");
               outerRay.setAttribute("stroke-width", "9");
@@ -668,6 +670,8 @@ export class CameraPreviewOverlay {
               mainRay.setAttribute("stroke-width", "3");
               coreRay.setAttribute("stroke", "#ffffff");
               coreRay.setAttribute("stroke-width", "1.5");
+              targetGlow.setAttribute("fill", "rgba(107, 231, 255, 0.28)");
+              targetRing.setAttribute("stroke", "#6be7ff");
             }
 
             stageOverlay.style.visibility = "visible";
@@ -679,7 +683,7 @@ export class CameraPreviewOverlay {
 
         // 2. Fingertip targeting reticle ring & glowing aura
         const isAcquiredOrGrabbed = isMagicActive
-          ? Boolean(magicFingerTelemetry?.ray?.isAcquired)
+          ? Boolean(magicFingerTelemetry?.ray?.isAcquired || (magicFingerTelemetry?.ray && magicFingerTelemetry.ray.targetType !== "open"))
           : focusTelemetry?.state === "grabbed";
 
         ctx.save();

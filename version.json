@@ -1,9 +1,37 @@
 {
-  "version": "0.32.0",
+  "version": "0.32.2",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.32.2",
+      "date": "2026-09-08",
+      "summary": "Magic Finger: Distance-Amplified Jitter Elimination, Radiant Gold Target Tracking & Anti-Flicker Debouncing",
+      "details": [
+        "Radiant Gold Target Feedback: Updated CameraPreviewOverlay.ts and MagicFingerController.ts so the laser beam, fingertip reticle, and gauge target ring instantly turn glowing gold (#ffd56b) whenever aiming at any interactive target (Tempo, Dynamics, or Orchestra), completely eliminating silver/cyan ray flickering and circular reticle flashing.",
+        "Adaptive Velocity-Sensitive Angular Smoothing: Implemented dynamic angular smoothing in MagicFingerController.ts. Damps micro-jitter heavily (alpha = 0.20) during steady aiming over long lever-arm distances while ramping up smoothly (alpha = 0.65) during fast sweeps for zero-latency tracking.",
+        "Smoothed Gauge Hit Trajectories: Introduced smoothedTempoHitY and smoothedDynamicsHitY in MagicFingerController.ts to filter projected contact coordinates along vertical sliders, guaranteeing silky BPM and dynamic value transitions without integer bouncing.",
+        "Orchestra False-Exit Safeguard: Restricted orchestra section switching during active tempo/dynamics control to true upward angles (rayDirY < -0.45 and rayDirX < 0.25), preventing high-tempo aiming (180-220 BPM) from falsely intersecting top orchestra sections and dropping tempo.",
+        "Calibrated Upward Flick Exit: Required hitY < trackTop - 25 with deliberate upward speed (>650 px/sec) and upward angle (rayDirY < -0.35) for upward flick exits, preventing normal in-gauge tempo adjustment velocity spikes from dropping the slider.",
+        "3-Frame Boundary Debounce & Expanded Release Padding: Increased TEMPO_RELEASE_PAD_PX and DYNAMICS_RELEASE_PAD_PX to 100px and added a 3-frame debounce before releasing control, protecting against single-frame MediaPipe tracking drops and extremity wandering.",
+        "Relaxed Fist-Curl Threshold: Lowered index extension threshold to 0.48 in MagicFingerController.ts, ensuring horizontal and foreshortened pointing fingers are never falsely classified as fists."
+      ]
+    },
+    {
+      "version": "0.32.1",
+      "date": "2026-09-08",
+      "summary": "Magic Finger: Slider Flickering Fix & Tuned Hold-to-Lock Parameters",
+      "details": [
+        "HOLD_VALUE_TOLERANCE_BPM Tuning: Updated HOLD_VALUE_TOLERANCE_BPM = 5 in MAGIC_FINGER_TUNING (in src/camera/MagicFingerController.ts) for tighter, cleaner tempo steadiness window.",
+        "HOLD_STEADY_TIME_MS (Appearance Delay): Updated HOLD_STEADY_TIME_MS = 500 ms in MAGIC_FINGER_TUNING (in src/camera/MagicFingerController.ts) so the charging circle begins appearing after 0.50s steady hold.",
+        "HOLD_CHARGE_DURATION_MS (Charge Duration): Updated HOLD_CHARGE_DURATION_MS = 800 ms in MAGIC_FINGER_TUNING (in src/camera/MagicFingerController.ts) providing a deliberate 0.80s fill duration (1.30s total hold-to-lock duration).",
+        "Slider Flickering & Rapid Laser Flashing Fix: Eliminated rapid toggling between gold (#ffd56b) and silver/white (#ffffff) when adjusting tempo. Removed the 0-padded boundary (hitY < tempoTrackTop) and arbitrary inward ray angle check (rayDirX < 0.08) that caused a 60fps release/re-acquire flicker loop near high tempos (180–220 BPM).",
+        "Upward Flick Exit Safeguard: Restricted upward flick exit to when the ray moves clearly beyond the top of the gauge (hitY < trackTop) with fast upward velocity, preventing fast in-gauge tempo adjustments from falsely releasing the slider.",
+        "Vertical Movement False Shake-Lock Elimination: Refined isHandShaking in MagicFingerController.ts to require horizontal reversals (xReversals >= 3), preventing normal up-and-down vertical slider movement from triggering false fist-shake locks and white laser pulses.",
+        "SVG Glow & Ring State Consistency: Explicitly reset targetGlow fill and targetRing stroke on every frame in CameraPreviewOverlay.ts to prevent white pulse fills from sticking or rapidly flashing around the indicator pip."
+      ]
+    },
     {
       "version": "0.32.0",
       "date": "2026-09-08",

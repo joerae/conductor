@@ -15,16 +15,16 @@ import type { PieceSection } from "../score/repertoire";
 
 export const MAGIC_FINGER_TUNING = {
   TEMPO_CAPTURE_BPM_DELTA: 35,
-  TEMPO_RELEASE_PAD_PX: 50,
+  TEMPO_RELEASE_PAD_PX: 100,
   DYNAMICS_CAPTURE_DELTA: 0.25,
-  DYNAMICS_RELEASE_PAD_PX: 50,
+  DYNAMICS_RELEASE_PAD_PX: 100,
   DWELL_ACQUIRE_MS: 280,
   SMOOTHING_ALPHA: 0.40,
   RAY_FREE_DISTANCE_PX: 360,
-  UPWARD_FLICK_SPEED_PX_PER_SEC: 350,
+  UPWARD_FLICK_SPEED_PX_PER_SEC: 650,
   HOLD_STEADY_TIME_MS: 500,
   HOLD_CHARGE_DURATION_MS: 800,
-  HOLD_VALUE_TOLERANCE_BPM: 5,
+  HOLD_VALUE_TOLERANCE_BPM: 6.5,
   HOLD_VALUE_TOLERANCE_DYN: 0.056,
   HOLD_LOCK_ENABLED: true,
   SHAKE_LOCK_ENABLED: true,
@@ -178,6 +178,14 @@ export class MagicFingerController {
   private lastHitY: number | null = null;
   private lastHitTime: number = 0;
 
+  // Smoothed slider hit coordinates along gauges
+  private smoothedTempoHitY: number | null = null;
+  private smoothedDynamicsHitY: number | null = null;
+
+  // Release debounce counters (require multiple consecutive out-of-bounds frames before dropping control)
+  private tempoOutOfBoundsFrames: number = 0;
+  private dynamicsOutOfBoundsFrames: number = 0;
+
   // Lock-in state & repointing protection
   private isLockedIn: boolean = false;
   private lockedTarget: "tempo" | "dynamics" | null = null;
@@ -258,6 +266,10 @@ export class MagicFingerController {
     this.lastPointingHandIndex = null;
     this.lastHitY = null;
     this.lastHitTime = 0;
+    this.smoothedTempoHitY = null;
+    this.smoothedDynamicsHitY = null;
+    this.tempoOutOfBoundsFrames = 0;
+    this.dynamicsOutOfBoundsFrames = 0;
     this.isLockedIn = false;
     this.lockedTarget = null;
     this.lastHitScreenX = null;
@@ -269,7 +281,7 @@ export class MagicFingerController {
   }
 
   private isHandShaking(points: Array<{ x: number; y: number; time: number }>): boolean {
-    if (points.length < 4) return false;
+    if (points.length < 5) return false;
     const duration = points[points.length - 1].time - points[0].time;
     if (duration < 80 || duration > 360) return false;
 
@@ -307,8 +319,12 @@ export class MagicFingerController {
 
     const excursionX = maxX - minX;
     const excursionY = maxY - minY;
-    const hasReversals = (xReversals >= 2 && excursionX >= 0.03) || (yReversals >= 2 && excursionY >= 0.03);
-    return hasReversals && totalDist >= 0.05;
+
+    // A deliberate fist-shake has at least 3 direction reversals (shake back, forth, back, forth)
+    // Horizontal shake is the primary natural shake gesture that does not conflict with vertical tempo adjustments
+    const isHorizontalShake = xReversals >= 3 && excursionX >= 0.025;
+    const isMultiAxisShake = xReversals >= 2 && yReversals >= 2 && (excursionX + excursionY) >= 0.05;
+    return (isHorizontalShake || isMultiAxisShake) && totalDist >= 0.06;
   }
 
   private getTargetedInstrumentSection(
@@ -631,8 +647,7 @@ export class MagicFingerController {
 
     // Fingertip & Knuckle coordinates
     const tip = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_TIP];
-    const pip = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP] ||
-      pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_MCP];
+    const pip = pointingSample.landmarks[HAND_LANDMARK_INDICES.INDEX_FINGER_PIP];
 
     const tipScreenNormX = Math.max(0, Math.min(1, isMirrored ? 1.0 - tip.x : tip.x));
     const clampedTipY = Math.max(0, Math.min(1, tip.y));
@@ -643,11 +658,10 @@ export class MagicFingerController {
     const startX = (canvasRect.left - svgRect.left) + tipScreenNormX * canvasRect.width;
     const startY = (canvasRect.top - svgRect.top) + clampedTipY * canvasRect.height;
 
-    // Raw ray direction vector in screen pixels
+    // Calculate ray direction vector in screen pixels
     const rawDirX = (tipScreenNormX - pipScreenNormX) * canvasRect.width;
     const rawDirY = (clampedTipY - pipScreenNormY) * canvasRect.height;
     const rawLen = Math.hypot(rawDirX, rawDirY);
-
     let unitX = 0;
     let unitY = -1;
     if (rawLen > 0.001) {
@@ -655,16 +669,23 @@ export class MagicFingerController {
       unitY = rawDirY / rawLen;
     }
 
-    // Apply smoothing to ray direction
+    // Apply velocity-sensitive adaptive smoothing to ray direction:
+    // When aiming/holding steady (angularSpeed < 0.015 rad/frame): heavy smoothing (alpha ~0.20)
+    // completely kills distance-amplified micro-jitter.
+    // When sweeping or flicking (> 0.12 rad/frame): alpha ramps up to 0.65 for instant, zero-lag response.
     if (!this.hasSmoothedDir) {
       this.smoothedUnitX = unitX;
       this.smoothedUnitY = unitY;
       this.hasSmoothedDir = true;
     } else {
-      const alpha = MAGIC_FINGER_TUNING.SMOOTHING_ALPHA;
       const currentAngle = Math.atan2(this.smoothedUnitY, this.smoothedUnitX);
       const targetAngle = Math.atan2(unitY, unitX);
       const diff = ((targetAngle - currentAngle + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+      const angularSpeed = Math.abs(diff);
+
+      const speedFactor = Math.min(1.0, Math.max(0, (angularSpeed - 0.015) / 0.105));
+      const alpha = 0.20 + speedFactor * 0.45;
+
       const newAngle = currentAngle + alpha * diff;
       this.smoothedUnitX = Math.cos(newAngle);
       this.smoothedUnitY = Math.sin(newAngle);
@@ -778,13 +799,24 @@ export class MagicFingerController {
       const tempoTrackHeight = Math.max(1, tempoTrackBottom - tempoTrackTop);
 
       // Project ray onto vertical line of tempo gauge
-      let hitY = startY;
+      let rawHitY = startY;
       if (Math.abs(rayDirX) > 0.02) {
         const t = (tempoTrackCenterX - startX) / rayDirX;
-        hitY = startY + rayDirY * t;
+        rawHitY = startY + rayDirY * t;
       } else {
-        hitY = startY;
+        rawHitY = startY;
       }
+
+      // Smooth hitY trajectory along gauge to eliminate distance-amplified vertical jitter
+      if (this.smoothedTempoHitY === null) {
+        this.smoothedTempoHitY = rawHitY;
+      } else {
+        const hitDiff = Math.abs(rawHitY - this.smoothedTempoHitY);
+        const hitSpeedNorm = Math.min(1.0, hitDiff / 50);
+        const hitAlpha = 0.28 + hitSpeedNorm * 0.42;
+        this.smoothedTempoHitY = this.smoothedTempoHitY + hitAlpha * (rawHitY - this.smoothedTempoHitY);
+      }
+      const hitY = this.smoothedTempoHitY;
 
       // Track vertical speed along the gauge (positive when moving upward towards top)
       const prevHitY = this.lastHitY ?? hitY;
@@ -803,31 +835,54 @@ export class MagicFingerController {
         if (tip && mcp && wrist && middleMcp) {
           const handScale = Math.max(0.04, Math.hypot(middleMcp.x - wrist.x, middleMcp.y - wrist.y));
           const extension = Math.hypot(tip.x - mcp.x, tip.y - mcp.y) / handScale;
-          if (extension < 0.72) {
+          if (extension < 0.48) {
             isClosingFist = true;
           }
         }
       }
 
-      // Detect upward flick exit to orchestra:
-      // 1. Ray turned inward away from right edge towards orchestra / center stage
-      const turnedInwardToOrchestra = rayDirX < 0.08;
-      // 2. Ray flicked upward rapidly near the top of the gauge
-      const isRapidUpwardFlick = upwardSpeedPxPerSec > MAGIC_FINGER_TUNING.UPWARD_FLICK_SPEED_PX_PER_SEC && hitY < tempoTrackTop + 50;
-      // 3. Ray moved above the top of the gauge
-      const isAboveGauge = hitY < tempoTrackTop;
+      // Detect exit conditions:
+      // 1. Ray actually aimed at an orchestra instrument section:
+      // When actively controlling tempo on the right wall, only exit to orchestra if ray is
+      // genuinely pointed upward and away from the right tempo gauge.
+      let isAimingAtOrchestra = false;
+      if (rayDirY < -0.45 && rayDirX < 0.25) {
+        const targetSection = this.getTargetedInstrumentSection(
+          rayDirX,
+          rayDirY,
+          startX,
+          startY,
+          svgRect,
+          instrumentSections
+        );
+        isAimingAtOrchestra = Boolean(targetSection);
+      }
 
+      // Fast flick upward out of the gauge (pointing clearly above the top of the gauge with rapid upward velocity)
+      const isUpwardFlickExit = hitY < tempoTrackTop - 25 &&
+        upwardSpeedPxPerSec > MAGIC_FINGER_TUNING.UPWARD_FLICK_SPEED_PX_PER_SEC &&
+        rayDirY < -0.35;
+
+      // 2. Ray moved clearly outside the padded gauge bounds:
       const pad = MAGIC_FINGER_TUNING.TEMPO_RELEASE_PAD_PX;
-      const projectedX = (Math.abs(rayDirX) > 0.02)
-        ? tempoTrackCenterX
-        : startX + rayDirX * MAGIC_FINGER_TUNING.RAY_FREE_DISTANCE_PX;
+      const isWayAboveGauge = hitY < tempoTrackTop - pad;
+      const isWayBelowGauge = hitY > tempoTrackBottom + pad;
 
-      const isOutsideBounds =
-        projectedX < tempoTrackLeft - pad ||
-        projectedX > tempoTrackRight + pad ||
-        hitY > tempoTrackBottom + pad;
+      // Pointing clearly leftwards away from the tempo gauge
+      const isPointingAwayLeft = rayDirX < -0.05;
 
-      if (turnedInwardToOrchestra || isRapidUpwardFlick || isAboveGauge || isOutsideBounds || isClosingFist) {
+      const isOutOfBounds = isAimingAtOrchestra || isUpwardFlickExit || isWayAboveGauge || isWayBelowGauge || isPointingAwayLeft || isClosingFist;
+
+      if (isOutOfBounds) {
+        this.tempoOutOfBoundsFrames++;
+      } else {
+        this.tempoOutOfBoundsFrames = 0;
+      }
+
+      // Immediate release for deliberate flick, fist drop, or orchestra aim; 3-frame debounce for boundary jitter
+      const shouldRelease = isUpwardFlickExit || isClosingFist || isAimingAtOrchestra || this.tempoOutOfBoundsFrames >= 3;
+
+      if (shouldRelease) {
         // Release tempo control immediately without committing max/out-of-bounds or dropped fist-curl BPM!
         this.activeTarget = null;
         this.state = "pointing";
@@ -836,6 +891,8 @@ export class MagicFingerController {
         releasedThisFrame = true;
         this.lastHitY = null;
         this.lastHitTime = 0;
+        this.smoothedTempoHitY = null;
+        this.tempoOutOfBoundsFrames = 0;
         this.holdSteadyStartTime = 0;
         this.holdSteadyValue = null;
         this.chargeProgress = 0;
@@ -916,7 +973,7 @@ export class MagicFingerController {
         if (tip && mcp && wrist && middleMcp) {
           const handScale = Math.max(0.04, Math.hypot(middleMcp.x - wrist.x, middleMcp.y - wrist.y));
           const extension = Math.hypot(tip.x - mcp.x, tip.y - mcp.y) / handScale;
-          if (extension < 0.72) {
+          if (extension < 0.48) {
             isClosingFist = true;
           }
         }
@@ -924,13 +981,24 @@ export class MagicFingerController {
 
       if (isVertical) {
         // Project ray onto vertical line of left dynamics gauge
-        let hitY = startY;
+        let rawHitY = startY;
         if (Math.abs(rayDirX) > 0.02) {
           const t = (dynTrackCenterX - startX) / rayDirX;
-          hitY = startY + rayDirY * t;
+          rawHitY = startY + rayDirY * t;
         } else {
-          hitY = startY;
+          rawHitY = startY;
         }
+
+        // Smooth hitY trajectory along gauge to eliminate vertical jitter
+        if (this.smoothedDynamicsHitY === null) {
+          this.smoothedDynamicsHitY = rawHitY;
+        } else {
+          const hitDiff = Math.abs(rawHitY - this.smoothedDynamicsHitY);
+          const hitSpeedNorm = Math.min(1.0, hitDiff / 50);
+          const hitAlpha = 0.28 + hitSpeedNorm * 0.42;
+          this.smoothedDynamicsHitY = this.smoothedDynamicsHitY + hitAlpha * (rawHitY - this.smoothedDynamicsHitY);
+        }
+        const hitY = this.smoothedDynamicsHitY;
 
         // Track vertical speed along the gauge (positive when moving upward towards top)
         const prevHitY = this.lastHitY ?? hitY;
@@ -939,24 +1007,44 @@ export class MagicFingerController {
         this.lastHitY = hitY;
         this.lastHitTime = now;
 
-        // Detect upward flick exit to orchestra:
-        // 1. Ray turned inward away from left edge towards orchestra / center stage
-        const turnedInwardToOrchestra = rayDirX > -0.08;
-        // 2. Ray flicked upward rapidly near the top of the gauge
-        const isRapidUpwardFlick = upwardSpeedPxPerSec > MAGIC_FINGER_TUNING.UPWARD_FLICK_SPEED_PX_PER_SEC && hitY < dynTrackTop + 50;
-        // 3. Ray moved above the top of the gauge
-        const isAboveGauge = hitY < dynTrackTop;
+        // Detect exit conditions:
+        // 1. Ray actually aimed at an orchestra instrument section:
+        let isAimingAtOrchestra = false;
+        if (rayDirY < -0.45 && rayDirX > -0.25) {
+          const targetSection = this.getTargetedInstrumentSection(
+            rayDirX,
+            rayDirY,
+            startX,
+            startY,
+            svgRect,
+            instrumentSections
+          );
+          isAimingAtOrchestra = Boolean(targetSection);
+        }
 
-        const projectedX = (Math.abs(rayDirX) > 0.02)
-          ? dynTrackCenterX
-          : startX + rayDirX * MAGIC_FINGER_TUNING.RAY_FREE_DISTANCE_PX;
+        // Fast flick upward out of the gauge (pointing clearly above top with rapid upward velocity)
+        const isUpwardFlickExit = hitY < dynTrackTop - 25 &&
+          upwardSpeedPxPerSec > MAGIC_FINGER_TUNING.UPWARD_FLICK_SPEED_PX_PER_SEC &&
+          rayDirY < -0.35;
 
-        const isOutsideBounds =
-          projectedX < dynTrackLeft - pad ||
-          projectedX > dynTrackRight + pad ||
-          hitY > dynTrackBottom + pad;
+        // 2. Ray moved clearly outside the padded gauge bounds:
+        const isWayAboveGauge = hitY < dynTrackTop - pad;
+        const isWayBelowGauge = hitY > dynTrackBottom + pad;
 
-        if (turnedInwardToOrchestra || isRapidUpwardFlick || isAboveGauge || isOutsideBounds || isClosingFist) {
+        // Pointing clearly rightwards away from the dynamics gauge
+        const isPointingAwayRight = rayDirX > 0.05;
+
+        const isOutOfBounds = isAimingAtOrchestra || isUpwardFlickExit || isWayAboveGauge || isWayBelowGauge || isPointingAwayRight || isClosingFist;
+
+        if (isOutOfBounds) {
+          this.dynamicsOutOfBoundsFrames++;
+        } else {
+          this.dynamicsOutOfBoundsFrames = 0;
+        }
+
+        const shouldRelease = isUpwardFlickExit || isClosingFist || isAimingAtOrchestra || this.dynamicsOutOfBoundsFrames >= 3;
+
+        if (shouldRelease) {
           // Release dynamics control immediately without committing dropped fist-curl dynamic!
           this.activeTarget = null;
           this.state = "pointing";
@@ -965,6 +1053,8 @@ export class MagicFingerController {
           releasedThisFrame = true;
           this.lastHitY = null;
           this.lastHitTime = 0;
+          this.smoothedDynamicsHitY = null;
+          this.dynamicsOutOfBoundsFrames = 0;
           this.holdSteadyStartTime = 0;
           this.holdSteadyValue = null;
           this.chargeProgress = 0;
@@ -1125,7 +1215,8 @@ export class MagicFingerController {
         const t = (tempoTrackCenterX - startX) / rayDirX;
         if (t > 0) {
           const hitY = startY + rayDirY * t;
-          if (hitY >= tempoTrackTop - 45 && hitY <= tempoTrackBottom + 45) {
+          const pad = MAGIC_FINGER_TUNING.TEMPO_RELEASE_PAD_PX;
+          if (hitY >= tempoTrackTop - pad && hitY <= tempoTrackBottom + pad) {
             const clampedY = Math.max(tempoTrackTop, Math.min(tempoTrackBottom, hitY));
             const pct = ((tempoTrackBottom - clampedY) / tempoTrackHeight) * 100;
             const hitBpm = percentToBpm(pct);
@@ -1184,7 +1275,8 @@ export class MagicFingerController {
           const t = (dynTrackCenterX - startX) / rayDirX;
           if (t > 0) {
             const hitY = startY + rayDirY * t;
-            if (hitY >= dynTrackTop - 45 && hitY <= dynTrackBottom + 45) {
+            const pad = MAGIC_FINGER_TUNING.DYNAMICS_RELEASE_PAD_PX;
+            if (hitY >= dynTrackTop - pad && hitY <= dynTrackBottom + pad) {
               const clampedY = Math.max(dynTrackTop, Math.min(dynTrackBottom, hitY));
               // Top is 1.0 (fff), Bottom is 0.0 (pp)
               const hitVal = Math.max(0, Math.min(1, (dynTrackBottom - clampedY) / dynTrackHeight));
