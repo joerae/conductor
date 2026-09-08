@@ -1013,6 +1013,72 @@ describe("MagicFingerController", () => {
     expect(tel.liveBpm).toBe(175); // Stays at locked value, does not flick to 220 BPM!
   });
 
+  it("unlocks tempo and restores active laser ray when pointing into instrument section clear of tempo box", () => {
+    // 1. Lock in tempo at 150 BPM
+    const aimSample = createSample("Pointing", 0.8, 0.5, 0.4, 0.5);
+    controller.update({
+      samples: [aimSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+    controller.update({
+      samples: [aimSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 2300,
+    });
+    expect(controller.isLockInActive()).toBe(true);
+
+    // 2. Point well above the top of the tempo gauge into cellos section (rect: left 300, top 10, right 400, bottom 80)
+    // Canvas: left 100, top 100, width 200, height 200.
+    // Tip at (0.8, 0.05), Pip at (0.4, 0.35) -> dx = 0.4, dy = -0.3
+    // startX = 100 + 0.8 * 200 = 260. startY = 100 + 0.05 * 200 = 110.
+    // trackCenterX = 340. dx to track = 80.
+    // rayDirX = 0.8, rayDirY = -0.6. t = 80 / 0.8 = 100.
+    // projected hitY = 110 + (-0.6 * 100) = 50 (< trackTop 100, inside cellos [10..80]).
+    const aboveBarSample = createSample("Pointing", 0.8, 0.05, 0.4, 0.35);
+    const telAbove = controller.update({
+      samples: [aboveBarSample],
+      indicatedBpm: 150,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 2400,
+    });
+
+    // Ray is totally clear of tempo box and hitting instrument section:
+    // Tempo lock must be released, bringing back active finger ray without snapping to 220 BPM
+    expect(controller.isLockInActive()).toBe(false);
+    expect(telAbove.isLockedIn).toBe(false);
+    expect(telAbove.ray?.isDimmed).toBe(false);
+    expect(telAbove.targetedSectionId).toBe("cellos");
+    expect(controller.getLastBpm()).toBe(150); // Tempo preserved at current indicated value, never jumps to 220 BPM!
+    expect(controller.getLastBpm()).not.toBe(220);
+  });
+
+  it("does not hover or acquire 220 BPM when aiming above tempo bar in pointing mode", () => {
+    const onBpmChange = vi.fn();
+    controller.setCallbacks({ onBpmChange });
+
+    // Aim above tempo bar: hitY < tempoRect.top (100)
+    const aboveBarSample = createSample("Pointing", 0.8, 0.05, 0.4, 0.35);
+    const tel = controller.update({
+      samples: [aboveBarSample],
+      indicatedBpm: 140,
+      continuousDynamic: 0.5,
+      isMirrored: false,
+      nowMs: 1000,
+    });
+
+    // Must NOT hover or acquire tempo (does not snap to 220 BPM)
+    expect(tel.hoverTarget).not.toBe("tempo");
+    expect(tel.activeTarget).not.toBe("tempo");
+    expect(tel.state).not.toBe("tempo_acquired");
+    expect(onBpmChange).not.toHaveBeenCalled();
+  });
+
   it("setInitialBpm sets lastBpm and lastValidInBoundsBpm", () => {
     controller.setInitialBpm(140);
     expect(controller.getLastBpm()).toBe(140);

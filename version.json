@@ -1,9 +1,22 @@
 {
-  "version": "0.32.3",
+  "version": "0.32.4",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.32.4",
+      "date": "2026-09-09",
+      "summary": "Loading Bar Milestones, Camera Permission Prompt & Magic Finger Max-Tempo Lock Safeguards",
+      "details": [
+        "Loading Bar 7000% Display Fix: Fixed double-percentage multiplication in main.ts so the loading bar correctly renders 0-100% instead of 7000%.",
+        "Calibrated 60% Core Asset Milestone: Re-weighted core loading tasks in LoadingCoordinator.ts (shell 5%, warmup violin 5%, score 10%, soundfonts 40%) to sum to 60%, with camera permission (20%) and hand tracking (20%) bringing the progress up to 100%.",
+        "Non-Blocking Camera Permission Flow: Made AudioContext resume non-blocking in ExperienceController.ts and kept handTracking pending until camera permission is granted, enabling immediate browser camera permission dialogs with prominent 'Waiting for camera permission...' status.",
+        "Free Laser Ray Movement Above Gauges: In MagicFingerController.ts, removed forced ray endpoint clamping to the top of the tempo and dynamics bars when aiming above the gauge, letting the laser pointer move freely into space according to hand pointing angles.",
+        "Geometric Ray-Box Clearance Lock Release: Replaced arbitrary upward angle heuristics in MagicFingerController.ts with 2D ray-AABB intersection testing (doesRayIntersectBox) against the tempo container (#bpm-gauge-container). When the laser ray coming from the finger is totally clear of the tempo box and aims into an orchestra instrument section or across to dynamics, the tempo lock is immediately released, restoring the active golden laser ray and spotlighting the instrument without jumping to 220 BPM.",
+        "Out-of-Bounds Acquisition Guard: Prevented safe-acquisition from hovering or capturing when aiming above gauge tops (hitY < trackTop), eliminating unwanted snaps to 220 BPM max tempo or fff max dynamic when pointing high."
+      ]
+    },
     {
       "version": "0.32.3",
       "date": "2026-09-08",

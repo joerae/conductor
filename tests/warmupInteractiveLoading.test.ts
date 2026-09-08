@@ -137,6 +137,37 @@ describe("Warming Up Interactive Loading Experience", () => {
       coordinator.setFastPathEligible(true);
       expect(coordinator.isFastPathEligible()).toBe(true);
     });
+
+    it("reaches exactly 60% when all core assets are loaded and prioritizes camera permission status", () => {
+      const coordinator = new LoadingCoordinator();
+      coordinator.updateTask("shell", "ready");
+      coordinator.updateTask("warmupViolin", "ready");
+      coordinator.updateTask("score", "ready");
+      coordinator.updateTask("instruments", "ready");
+
+      const assetState = coordinator.getState();
+      expect(assetState.progress).toBe(60);
+
+      // Camera permission begins loading
+      coordinator.updateTask("cameraPermission", "loading");
+      const permState = coordinator.getState();
+      expect(permState.progress).toBe(60);
+      expect(permState.statusMessage).toBe("Waiting for camera permission...");
+
+      // Camera permission granted -> 80%, then hand tracking loading
+      coordinator.updateTask("cameraPermission", "ready");
+      coordinator.updateTask("handTracking", "loading");
+      const trackingState = coordinator.getState();
+      expect(trackingState.progress).toBe(80);
+      expect(trackingState.statusMessage).toBe("Teaching the camera to see your hands...");
+
+      // Hand tracking ready -> 100%
+      coordinator.updateTask("handTracking", "ready");
+      const readyState = coordinator.getState();
+      expect(readyState.progress).toBe(100);
+      expect(readyState.isReady).toBe(true);
+      expect(readyState.statusMessage).toBe("Your orchestra is ready");
+    });
   });
 
   describe("WarmupAudioPlayer", () => {

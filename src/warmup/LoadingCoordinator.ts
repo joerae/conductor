@@ -20,10 +20,10 @@ export interface TaskWeights {
 
 const DEFAULT_WEIGHTS: TaskWeights = {
   shell: 0.05,
-  warmupViolin: 0.10,
-  score: 0.15,
+  warmupViolin: 0.05,
+  score: 0.10,
   instruments: 0.40,
-  cameraPermission: 0.10,
+  cameraPermission: 0.20,
   handTracking: 0.20,
 };
 
@@ -177,12 +177,12 @@ export class LoadingCoordinator {
       return "Camera unavailable. You can continue with keyboard.";
     }
 
-    if (this.state.handTracking === "loading") {
-      return "Teaching the camera to see your hands...";
-    }
-
     if (this.state.cameraPermission === "loading") {
       return "Waiting for camera permission...";
+    }
+
+    if (this.state.handTracking === "loading") {
+      return "Teaching the camera to see your hands...";
     }
 
     if (this.state.instruments === "loading") {

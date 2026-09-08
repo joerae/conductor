@@ -454,7 +454,6 @@ export class ExperienceController {
     let cameraPromise = Promise.resolve();
     if (this.inputSource === "camera") {
       coordinator.updateTask("cameraPermission", "loading");
-      coordinator.updateTask("handTracking", "loading");
       cameraPromise = this.initCamera().catch(err => {
         console.warn("Camera init failed during warmup, continuing with keyboard:", err);
         coordinator.updateTask("cameraPermission", "error");
@@ -564,16 +563,15 @@ export class ExperienceController {
           this.cameraInput.setSections(piece.sections);
         }
 
-        // Pre-warm / resume AudioContext on camera activation
-        try {
-          await this.audioEngine.resume();
+        // Pre-warm / resume AudioContext on camera activation asynchronously (do not block camera prompt)
+        void this.audioEngine.resume().then(() => {
           const ctx = this.audioEngine.getAudioContext();
           if (ctx) {
             this.uiCallbacks.onAudioReady?.(ctx);
           }
-        } catch {
+        }).catch(() => {
           // Ignored
-        }
+        });
 
         // Wire camera state to loading coordinator & error fallback to keyboard mode
         this.cameraInput.onStateChange((state, err) => {

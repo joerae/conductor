@@ -1292,7 +1292,7 @@ loadRepertoireCatalog().then(() => {
       const pctEl = card.querySelector<HTMLElement>(".initial-loading-pct");
 
       coordinator.onStateChange((state) => {
-        const pct = Math.round(state.progress * 100);
+        const pct = Math.min(100, Math.max(0, Math.round(state.progress)));
         if (fillEl) fillEl.style.width = `${pct}%`;
         if (statusEl && state.statusMessage) statusEl.textContent = state.statusMessage;
         if (pctEl) pctEl.textContent = `${pct}%`;

@@ -94,6 +94,8 @@ export interface MagicFingerGeometryProvider {
   getSvgOverlayRect(): ScreenRect | null;
   getTempoTrackRect(): ScreenRect | null;
   getDynamicsTrackRect(): ScreenRect | null;
+  getTempoContainerRect?(): ScreenRect | null;
+  getDynamicsContainerRect?(): ScreenRect | null;
   getInstrumentSections(): InstrumentSectionTarget[];
 }
 
@@ -118,6 +120,11 @@ export class DefaultDOMGeometryProvider implements MagicFingerGeometryProvider {
     const el = document.querySelector<HTMLElement>(".bpm-gauge-track");
     return el ? el.getBoundingClientRect() : null;
   }
+  getTempoContainerRect(): ScreenRect | null {
+    if (typeof document === "undefined") return null;
+    const el = document.getElementById("bpm-gauge-container") || document.querySelector<HTMLElement>(".bpm-vertical-gauge");
+    return el ? el.getBoundingClientRect() : this.getTempoTrackRect();
+  }
   getDynamicsTrackRect(): ScreenRect | null {
     if (typeof document === "undefined") return null;
     const verticalEl = document.getElementById("dynamic-vertical-analogue-track");
@@ -126,6 +133,11 @@ export class DefaultDOMGeometryProvider implements MagicFingerGeometryProvider {
     }
     const el = document.getElementById("dynamic-analogue-track");
     return el ? el.getBoundingClientRect() : null;
+  }
+  getDynamicsContainerRect(): ScreenRect | null {
+    if (typeof document === "undefined") return null;
+    const el = document.getElementById("dynamic-vertical-gauge-container") || document.querySelector<HTMLElement>(".dynamic-vertical-gauge-container");
+    return el ? el.getBoundingClientRect() : this.getDynamicsTrackRect();
   }
   getInstrumentSections(): InstrumentSectionTarget[] {
     if (typeof document === "undefined") return [];
@@ -138,6 +150,53 @@ export class DefaultDOMGeometryProvider implements MagicFingerGeometryProvider {
     });
     return sections;
   }
+}
+
+/**
+ * Slab-method 2D ray vs Axis-Aligned Bounding Box intersection test.
+ * Returns true if ray P(t) = (startX + t*dirX, startY + t*dirY) for t >= 0 intersects box.
+ */
+export function doesRayIntersectBox(
+  startX: number,
+  startY: number,
+  dirX: number,
+  dirY: number,
+  box: { left: number; right: number; top: number; bottom: number },
+  pad: number = 0
+): boolean {
+  const left = box.left - pad;
+  const right = box.right + pad;
+  const top = box.top - pad;
+  const bottom = box.bottom + pad;
+
+  let tMin = 0;
+  let tMax = Infinity;
+
+  if (Math.abs(dirX) < 1e-6) {
+    if (startX < left || startX > right) return false;
+  } else {
+    const t1 = (left - startX) / dirX;
+    const t2 = (right - startX) / dirX;
+    const tNear = Math.min(t1, t2);
+    const tFar = Math.max(t1, t2);
+    tMin = Math.max(tMin, tNear);
+    tMax = Math.min(tMax, tFar);
+    if (tMin > tMax) return false;
+  }
+
+  if (Math.abs(dirY) < 1e-6) {
+    if (startY < top || startY > bottom) return false;
+  } else {
+    const t1 = (top - startY) / dirY;
+    const t2 = (bottom - startY) / dirY;
+    const tNear = Math.min(t1, t2);
+    const tFar = Math.max(t1, t2);
+    tMin = Math.max(tMin, tNear);
+    tMax = Math.min(tMax, tFar);
+    if (tMin > tMax) return false;
+  }
+
+  return tMax > 0 && tMin <= tMax;
 }
 
 export interface MagicFingerCallbacks {
@@ -641,6 +700,8 @@ export class MagicFingerController {
     const svgRect = this.geometry.getSvgOverlayRect();
     const tempoTrackRect = this.geometry.getTempoTrackRect();
     const dynamicsTrackRect = this.geometry.getDynamicsTrackRect();
+    const tempoContainerRect = this.geometry.getTempoContainerRect ? this.geometry.getTempoContainerRect() : tempoTrackRect;
+    const dynamicsContainerRect = this.geometry.getDynamicsContainerRect ? this.geometry.getDynamicsContainerRect() : dynamicsTrackRect;
     const instrumentSections = this.geometry.getInstrumentSections();
 
     // Fallback if DOM geometry is unavailable
@@ -684,18 +745,18 @@ export class MagicFingerController {
       unitY = rawDirY / rawLen;
     }
 
-    // Apply velocity-sensitive adaptive smoothing to ray direction:
-    // When aiming/holding steady (angularSpeed < 0.015 rad/frame): heavy smoothing (alpha ~0.20)
-    // completely kills distance-amplified micro-jitter.
-    // When sweeping or flicking (> 0.12 rad/frame): alpha ramps up to 0.65 for instant, zero-lag response.
+    // ── ANGULAR VELOCITY-SENSITIVE ADAPTIVE SMOOTHING ────────────────────────
+    const targetAngle = Math.atan2(unitY, unitX);
     if (!this.hasSmoothedDir) {
       this.smoothedUnitX = unitX;
       this.smoothedUnitY = unitY;
       this.hasSmoothedDir = true;
     } else {
       const currentAngle = Math.atan2(this.smoothedUnitY, this.smoothedUnitX);
-      const targetAngle = Math.atan2(unitY, unitX);
-      const diff = ((targetAngle - currentAngle + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+      let diff = targetAngle - currentAngle;
+      while (diff < -Math.PI) diff += 2 * Math.PI;
+      while (diff > Math.PI) diff -= 2 * Math.PI;
+
       const angularSpeed = Math.abs(diff);
 
       const speedFactor = Math.min(1.0, Math.max(0, (angularSpeed - 0.015) / 0.105));
@@ -711,43 +772,51 @@ export class MagicFingerController {
 
     // ── EVALUATE LOCKED-IN STATE & ZONE REARMING ────────────────────────────
     if (this.isLockedIn) {
-      // 1. Check if pointer clearly aims outside the locked control zone:
-      // Check if pointer is still aiming at the currently locked gauge (including the top of the bar).
-      // The lock should only disappear when pointing to the top section, not when it is locked on the tempo bar.
-      let isAimingAtLockedGauge = false;
-      if (this.lockedTarget === "tempo" && tempoTrackRect && rayDirX > 0.05) {
-        const trackCenterX = (tempoTrackRect.left + tempoTrackRect.right) / 2 - svgRect.left;
-        const trackTop = tempoTrackRect.top - svgRect.top;
-        const trackBottom = tempoTrackRect.bottom - svgRect.top;
-        const t = (trackCenterX - startX) / rayDirX;
-        if (t > 0) {
-          const hitY = startY + rayDirY * t;
-          if (hitY >= trackTop - 15 && hitY <= trackBottom + 30) {
-            isAimingAtLockedGauge = true;
-          }
-        }
-      } else if (
-        this.lockedTarget === "dynamics" &&
-        dynamicsTrackRect &&
-        dynamicsTrackRect.height > dynamicsTrackRect.width &&
-        rayDirX < -0.05
-      ) {
-        const trackCenterX = (dynamicsTrackRect.left + dynamicsTrackRect.right) / 2 - svgRect.left;
-        const trackTop = dynamicsTrackRect.top - svgRect.top;
-        const trackBottom = dynamicsTrackRect.bottom - svgRect.top;
-        const t = (trackCenterX - startX) / rayDirX;
-        if (t > 0) {
-          const hitY = startY + rayDirY * t;
-          if (hitY >= trackTop - 15 && hitY <= trackBottom + 30) {
-            isAimingAtLockedGauge = true;
+      // Check if the laser ray intersects the currently locked control box:
+      // "is the laser ray coming from my finger totally clear of the tempo box?"
+      const lockedContainerRect = this.lockedTarget === "tempo" ? tempoContainerRect : dynamicsContainerRect;
+      const lockedTrackRect = this.lockedTarget === "tempo" ? tempoTrackRect : dynamicsTrackRect;
+
+      let isAimingAtLockedBox = false;
+      let isWithinTrackBounds = false;
+      let trackCenterX = startX;
+      let trackHitY: number | null = null;
+
+      if (lockedContainerRect) {
+        const box = {
+          left: lockedContainerRect.left - svgRect.left,
+          right: lockedContainerRect.right - svgRect.left,
+          top: lockedContainerRect.top - svgRect.top,
+          bottom: lockedContainerRect.bottom - svgRect.top,
+        };
+        // 10px pad so micro-jitter at the border doesn't rapidly flicker
+        isAimingAtLockedBox = doesRayIntersectBox(startX, startY, rayDirX, rayDirY, box, 10);
+      }
+
+      if (lockedTrackRect) {
+        const trackLeft = lockedTrackRect.left - svgRect.left;
+        const trackRight = lockedTrackRect.right - svgRect.left;
+        const trackTop = lockedTrackRect.top - svgRect.top;
+        const trackBottom = lockedTrackRect.bottom - svgRect.top;
+        trackCenterX = (trackLeft + trackRight) / 2;
+
+        if (Math.abs(rayDirX) > 0.02) {
+          const t = (trackCenterX - startX) / rayDirX;
+          if (t > 0) {
+            const hitY = startY + rayDirY * t;
+            if (hitY >= trackTop && hitY <= trackBottom) {
+              isWithinTrackBounds = true;
+              trackHitY = hitY;
+            }
           }
         }
       }
 
-      // A) Pointing up to orchestra / instruments:
-      // Rearm ONLY IF ACTUALLY POINTING AT AN ORCHESTRA INSTRUMENT SECTION (and NOT at the locked gauge)!
-      // Simply pointing high along the gauge (e.g. at 220 BPM or fff) remains locked on the gauge.
-      const targetedInstrument = !isAimingAtLockedGauge
+      const isTotallyClearOfLockedBox = !isAimingAtLockedBox;
+
+      // A) Pointing at orchestra instrument sections:
+      // When ray is totally clear of the locked box and intersects an instrument section:
+      const targetedInstrument = isTotallyClearOfLockedBox
         ? this.getTargetedInstrumentSection(
             rayDirX,
             rayDirY,
@@ -760,11 +829,16 @@ export class MagicFingerController {
       const pointingUpToOrchestra = Boolean(targetedInstrument);
 
       // B) Pointing across to opposite control side:
-      const pointingAcross = this.lockedTarget === "tempo"
-        ? (dynamicsTrackRect ? (startX + rayDirX * 360 < (dynamicsTrackRect.right - svgRect.left) + 40) : rayDirX < -0.15)
-        : (tempoTrackRect ? (startX + rayDirX * 360 > (tempoTrackRect.left - svgRect.left) - 40) : rayDirX > 0.15);
+      const pointingAcross = isTotallyClearOfLockedBox && (
+        this.lockedTarget === "tempo"
+          ? (dynamicsTrackRect ? (startX + rayDirX * 360 < (dynamicsTrackRect.right - svgRect.left) + 40) : rayDirX < -0.15)
+          : (tempoTrackRect ? (startX + rayDirX * 360 > (tempoTrackRect.left - svgRect.left) - 40) : rayDirX > 0.15)
+      );
 
-      if (pointingUpToOrchestra || pointingAcross) {
+      // C) Pointing upward into the stage/orchestra area, clear of the locked box:
+      const pointingUpClearOfBox = isTotallyClearOfLockedBox && rayDirY < -0.20;
+
+      if (pointingUpToOrchestra || pointingAcross || pointingUpClearOfBox) {
         // REARM! Pointer has exited the locked control zone into another zone
         this.isLockedIn = false;
         this.lockedTarget = null;
@@ -773,25 +847,14 @@ export class MagicFingerController {
         this.holdSteadyValue = null;
         this.chargeProgress = 0;
       } else {
-        // Still pointing within the locked control zone:
-        // Value remains strictly frozen, laser is kept in darker/dimmed inactive state
-        const targetRect = this.lockedTarget === "tempo" ? tempoTrackRect : dynamicsTrackRect;
-        let lockedEndX = startX;
-        let lockedEndY = startY;
+        // Still aiming at the locked control box:
+        // Value remains strictly frozen, laser is kept in darker/dimmed inactive state.
+        let lockedEndX = startX + rayDirX * MAGIC_FINGER_TUNING.RAY_FREE_DISTANCE_PX;
+        let lockedEndY = startY + rayDirY * MAGIC_FINGER_TUNING.RAY_FREE_DISTANCE_PX;
 
-        if (targetRect) {
-          const trackLeft = targetRect.left - svgRect.left;
-          const trackRight = targetRect.right - svgRect.left;
-          const trackTop = targetRect.top - svgRect.top;
-          const trackBottom = targetRect.bottom - svgRect.top;
-          const trackCenterX = (trackLeft + trackRight) / 2;
+        if (isWithinTrackBounds && trackHitY !== null) {
           lockedEndX = trackCenterX;
-          if (Math.abs(rayDirX) > 0.02) {
-            const t = (trackCenterX - startX) / rayDirX;
-            lockedEndY = Math.max(trackTop, Math.min(trackBottom, startY + rayDirY * t));
-          } else {
-            lockedEndY = Math.max(trackTop, Math.min(trackBottom, startY));
-          }
+          lockedEndY = trackHitY;
         }
 
         const dimmedRay: MagicFingerRay = {
@@ -802,8 +865,8 @@ export class MagicFingerController {
           unitX: rayDirX,
           unitY: rayDirY,
           isActive: true,
-          isAcquired: true,
-          targetType: this.lockedTarget,
+          isAcquired: isWithinTrackBounds,
+          targetType: isWithinTrackBounds ? this.lockedTarget : "open",
           isDimmed: true,
         };
 
@@ -914,7 +977,7 @@ export class MagicFingerController {
 
       // 2. Ray moved clearly outside the padded gauge bounds:
       const pad = MAGIC_FINGER_TUNING.TEMPO_RELEASE_PAD_PX;
-      const isWayAboveGauge = hitY < tempoTrackTop - pad;
+      const isWayAboveGauge = hitY < tempoTrackTop - 25;
       const isWayBelowGauge = hitY > tempoTrackBottom + pad;
 
       // Pointing clearly leftwards away from the tempo gauge
@@ -1077,7 +1140,7 @@ export class MagicFingerController {
           rayDirY < -0.35;
 
         // 2. Ray moved clearly outside the padded gauge bounds:
-        const isWayAboveGauge = hitY < dynTrackTop - pad;
+        const isWayAboveGauge = hitY < dynTrackTop - 25;
         const isWayBelowGauge = hitY > dynTrackBottom + pad;
 
         // Pointing clearly rightwards away from the dynamics gauge
@@ -1249,7 +1312,7 @@ export class MagicFingerController {
     }
 
     // ── 2. ACQUISITION & TARGETING (When no slider is acquired) ───────────────
-    if (this.activeTarget === null) {
+    if (this.activeTarget === null && !this.isLockedIn) {
       this.state = "pointing";
 
       // ── A. Check Safe Acquisition on Tempo Gauge (Right) ─────────────────────
@@ -1264,8 +1327,8 @@ export class MagicFingerController {
         const t = (tempoTrackCenterX - startX) / rayDirX;
         if (t > 0) {
           const hitY = startY + rayDirY * t;
-          const pad = MAGIC_FINGER_TUNING.TEMPO_RELEASE_PAD_PX;
-          if (hitY >= tempoTrackTop - pad && hitY <= tempoTrackBottom + pad) {
+          // Only hover and acquire when actually aiming within the gauge track (never above tempoTrackTop!)
+          if (hitY >= tempoTrackTop && hitY <= tempoTrackBottom + 20) {
             const clampedY = Math.max(tempoTrackTop, Math.min(tempoTrackBottom, hitY));
             const pct = ((tempoTrackBottom - clampedY) / tempoTrackHeight) * 100;
             const hitBpm = percentToBpm(pct);
@@ -1324,8 +1387,8 @@ export class MagicFingerController {
           const t = (dynTrackCenterX - startX) / rayDirX;
           if (t > 0) {
             const hitY = startY + rayDirY * t;
-            const pad = MAGIC_FINGER_TUNING.DYNAMICS_RELEASE_PAD_PX;
-            if (hitY >= dynTrackTop - pad && hitY <= dynTrackBottom + pad) {
+            // Only hover and acquire when actually aiming within the gauge track (never above dynTrackTop!)
+            if (hitY >= dynTrackTop && hitY <= dynTrackBottom + 20) {
               const clampedY = Math.max(dynTrackTop, Math.min(dynTrackBottom, hitY));
               // Top is 1.0 (fff), Bottom is 0.0 (pp)
               const hitVal = Math.max(0, Math.min(1, (dynTrackBottom - clampedY) / dynTrackHeight));

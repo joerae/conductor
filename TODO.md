@@ -3,15 +3,53 @@
 
 [  ] disable warmup for now. I think there's a feature flag. Keep it in there. But just show a loading bar for the moment instead of warmup
 
-[x] Magic Magic finger mode the default mode. And make Expressive Mode the only other one you can toggle to (i.e. no Beat Mode)
+
 
 [  ] Add "Made by Joe Raeburn in 2026" down in the footer
 
 
 
+BIG REFACTOR, only do when called
+
+[  ] Refactor MagicFingerController to make future interaction changes easier to
+reason about. Preserve current behaviour during this task.
+
+The present controller is approximately 1,500 lines and duplicates geometry,
+vertical-gauge processing, hold-to-lock, and release logic.
+
+Stage 1:
+- Extract DOM geometry providers, rectangle conversion, ray intersection,
+  and instrument targeting into src/camera/magicFingerGeometry.ts.
+- Add pure unit tests for ray-versus-rectangle and instrument targeting.
+- Make the geometry module return semantic targets: tempo, dynamics,
+  instrument, or open.
+- MagicFingerController must no longer directly inspect DOM elements.
+- Do not change interaction thresholds or behaviour.
+
+Stage 2:
+- Consolidate the overlapping state, activeTarget, hoverTarget,
+  currentHoverTarget, isLockedIn, lockedTarget, and lockedValue fields into
+  one discriminated interaction-state type.
+- Preserve the existing public API and telemetry format.
+- Do not change behaviour.
+
+Stage 3:
+- Extract the duplicated tempo and vertical-dynamics processing into a
+  shared vertical-control function.
+- Keep horizontal dynamics processing separate.
+- Keep target-specific value conversion explicit.
+
+Run tests/magicFinger.test.ts after each stage. Run the full test suite and
+typecheck at the end. Do not update version history. Do not alter visual
+design. Do not create feature flags.
+
+If a stage cannot be completed without changing behaviour, stop after the
+previous successful stage and explain the blocker.
+
+
 NOT YET is below
 
-[ ] Magic finger mode - if my hand isn't on the screen for 1 second, the orchestra stops. That's good, but let's make it 500ms, and let's make a fade down start after 200ms. (This is just for Magic Finger Mode, Expressive mode should stay as it is)
+
 
 [  ] Put in rests into the score visualiser! Right now there are no rests unless the whole bar is rests!!
 
