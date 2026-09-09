@@ -1,9 +1,20 @@
 {
-  "version": "0.33.0",
+  "version": "0.33.1",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.33.1",
+      "date": "2026-09-09",
+      "summary": "Spotlight Score Visualizer Rest Notation & Footer Attribution",
+      "details": [
+        "Score Visualizer Rest Notation: Added automatic rest calculation and engraving to SpotlightScoreVisualizer. Gaps before the first note (e.g. Beethoven 5's opening eighth rest pickup), silences between melody notes, and trailing measure rests (e.g. half note followed by half rest in 4/4) are now accurately rendered using standard musical rest codes (wr, hr, qr, 8r, 16r, 32r).",
+        "Rest Beaming Disconnection: Auto-beaming logic now cleanly disconnects flagged note groups across rests according to classical engraving rules.",
+        "Creator Footer Attribution: Added 'Made by Joe Raeburn in 2026' credit down in the stage footer with clean subtle styling matching the design system.",
+        "Comprehensive Score Visualizer Tests: Added test coverage for rest decomposition and measure rest generation, bringing total test coverage to 271 passing tests across 28 test suites."
+      ]
+    },
     {
       "version": "0.33.0",
       "date": "2026-09-09",

@@ -694,6 +694,7 @@ html, body {
   background: rgba(201, 168, 76, 0.08);
 }
 
+.footer-credit,
 .debug-hint {
   font-size: 0.75rem;
   color: var(--text-muted);

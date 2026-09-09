@@ -9,10 +9,13 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
+import { Voice, Stave } from "vexflow";
 import {
   getClefForSection,
   midiNoteToVexKey,
   durationToBeatsToVexDuration,
+  vexDurationToMusicalBeats,
+  decomposeRestBeats,
   groupNotesByBeat,
   SpotlightScoreVisualizer,
 } from "../src/ui/SpotlightScoreVisualizer";
@@ -172,6 +175,52 @@ describe("SpotlightScoreVisualizer - Clef & VexFlow Mapping", () => {
       const res = durationToBeatsToVexDuration(0.125);
       expect(res.duration).toBe("32");
       expect(res.dots).toBe(0);
+    });
+  });
+
+  describe("VexFlow Musical Beats & Rest Decomposition", () => {
+    it("converts VexFlow duration strings and dots to musical beat lengths", () => {
+      expect(vexDurationToMusicalBeats("w", 0)).toBe(4.0);
+      expect(vexDurationToMusicalBeats("h", 1)).toBe(3.0);
+      expect(vexDurationToMusicalBeats("h", 0)).toBe(2.0);
+      expect(vexDurationToMusicalBeats("q", 1)).toBe(1.5);
+      expect(vexDurationToMusicalBeats("q", 0)).toBe(1.0);
+      expect(vexDurationToMusicalBeats("8", 1)).toBe(0.75);
+      expect(vexDurationToMusicalBeats("8", 0)).toBe(0.5);
+      expect(vexDurationToMusicalBeats("16", 1)).toBe(0.375);
+      expect(vexDurationToMusicalBeats("16", 0)).toBe(0.25);
+      expect(vexDurationToMusicalBeats("32", 0)).toBe(0.125);
+    });
+
+    it("decomposes gaps into binary standard rest codes", () => {
+      // Single rest durations
+      expect(decomposeRestBeats(0.125)).toEqual([{ duration: "32r", beats: 0.125 }]);
+      expect(decomposeRestBeats(0.25)).toEqual([{ duration: "16r", beats: 0.25 }]);
+      expect(decomposeRestBeats(0.5)).toEqual([{ duration: "8r", beats: 0.5 }]);
+      expect(decomposeRestBeats(1.0)).toEqual([{ duration: "qr", beats: 1.0 }]);
+      expect(decomposeRestBeats(2.0)).toEqual([{ duration: "hr", beats: 2.0 }]);
+      expect(decomposeRestBeats(4.0)).toEqual([{ duration: "wr", beats: 4.0 }]);
+
+      // Compound rest durations
+      expect(decomposeRestBeats(0.75)).toEqual([
+        { duration: "8r", beats: 0.5 },
+        { duration: "16r", beats: 0.25 },
+      ]);
+      expect(decomposeRestBeats(1.5)).toEqual([
+        { duration: "qr", beats: 1.0 },
+        { duration: "8r", beats: 0.5 },
+      ]);
+      expect(decomposeRestBeats(2.5)).toEqual([
+        { duration: "hr", beats: 2.0 },
+        { duration: "8r", beats: 0.5 },
+      ]);
+      expect(decomposeRestBeats(3.0)).toEqual([
+        { duration: "hr", beats: 2.0 },
+        { duration: "qr", beats: 1.0 },
+      ]);
+
+      // Micro/negligible gap
+      expect(decomposeRestBeats(0.05)).toEqual([]);
     });
   });
 });
@@ -466,6 +515,85 @@ describe("SpotlightScoreVisualizer - Section Note Extraction & State", () => {
       // topY must be strictly greater than or equal to 0 (inside SVG viewport, not clipped)
       expect(extents.topY).toBeGreaterThanOrEqual(0);
       expect(extents.topY).toBe(8); // 8px clearance from top edge of SVG
+    });
+
+    it("generates rest notes for silence before, between, and after notes within a measure", () => {
+      const addTickablesSpy = vi.spyOn(Voice.prototype, "addTickables");
+      const drawSpy = vi.spyOn(Voice.prototype, "draw").mockImplementation((() => {}) as any);
+
+      const visualizer = new SpotlightScoreVisualizer({
+        getMidiScore: () => mockMidiScore as any,
+        getTransport: () => mockTransport as any,
+        getCurrentPiece: () => mockPiece,
+      });
+
+      // 1. Trailing rest test: 1 half note at beat 0 in a 4/4 bar -> followed by half rest
+      (visualizer as any).currentSectionNotes = [
+        { noteId: "n3", midiNote: 48, beat: 0, durationBeats: 2, velocity: 80, channel: 2, trackId: "Violoncello" },
+      ];
+
+      const stave = new Stave(10, 20, 300);
+      const mockContext = {};
+
+      addTickablesSpy.mockClear();
+      (visualizer as any).renderBarNotes(0, 4, "bass", stave, mockContext, "C");
+
+      expect(addTickablesSpy).toHaveBeenCalled();
+      const bar1Tickables = addTickablesSpy.mock.calls[0][0] as any[];
+      expect(bar1Tickables.length).toBe(2);
+      expect(bar1Tickables[0].isRest()).toBe(false);
+      expect(bar1Tickables[0].getDuration()).toBe("h");
+      expect(bar1Tickables[1].isRest()).toBe(true);
+      expect(bar1Tickables[1].getDuration()).toBe("h");
+
+      // 2. Leading rest test: Beethoven 5 pickup motif with 8th rest at beat 0, then 8th note at 0.5
+      (visualizer as any).currentSectionNotes = [
+        { noteId: "n4", midiNote: 67, beat: 0.5, durationBeats: 0.5, velocity: 90, channel: 0, trackId: "Violin I" },
+        { noteId: "n5", midiNote: 67, beat: 1.0, durationBeats: 0.5, velocity: 90, channel: 0, trackId: "Violin I" },
+        { noteId: "n6", midiNote: 67, beat: 1.5, durationBeats: 0.5, velocity: 90, channel: 0, trackId: "Violin I" },
+      ];
+
+      addTickablesSpy.mockClear();
+      (visualizer as any).renderBarNotes(0, 2, "treble", stave, mockContext, "Cm");
+
+      expect(addTickablesSpy).toHaveBeenCalled();
+      const beethovenTickables = addTickablesSpy.mock.calls[0][0] as any[];
+      expect(beethovenTickables.length).toBe(4);
+      // First tickable is the leading eighth rest!
+      expect(beethovenTickables[0].isRest()).toBe(true);
+      expect(beethovenTickables[0].getDuration()).toBe("8");
+      // Followed by the three eighth notes
+      expect(beethovenTickables[1].isRest()).toBe(false);
+      expect(beethovenTickables[2].isRest()).toBe(false);
+      expect(beethovenTickables[3].isRest()).toBe(false);
+
+      // 3. Gap between notes test: note at beat 0 (1 beat), rest at beat 1 (1 beat), note at beat 2 (1 beat)
+      (visualizer as any).currentSectionNotes = [
+        { noteId: "n7", midiNote: 60, beat: 0, durationBeats: 1.0, velocity: 80, channel: 0, trackId: "Violin I" },
+        { noteId: "n8", midiNote: 64, beat: 2.0, durationBeats: 1.0, velocity: 80, channel: 0, trackId: "Violin I" },
+      ];
+
+      addTickablesSpy.mockClear();
+      (visualizer as any).renderBarNotes(0, 4, "treble", stave, mockContext, "C");
+
+      expect(addTickablesSpy).toHaveBeenCalled();
+      const gapTickables = addTickablesSpy.mock.calls[0][0] as any[];
+      expect(gapTickables.length).toBe(4);
+      // note 1 (quarter note)
+      expect(gapTickables[0].isRest()).toBe(false);
+      expect(gapTickables[0].getDuration()).toBe("q");
+      // gap rest at beat 1 (quarter rest)
+      expect(gapTickables[1].isRest()).toBe(true);
+      expect(gapTickables[1].getDuration()).toBe("q");
+      // note 2 (quarter note)
+      expect(gapTickables[2].isRest()).toBe(false);
+      expect(gapTickables[2].getDuration()).toBe("q");
+      // trailing rest at beat 3 (quarter rest)
+      expect(gapTickables[3].isRest()).toBe(true);
+      expect(gapTickables[3].getDuration()).toBe("q");
+
+      addTickablesSpy.mockRestore();
+      drawSpy.mockRestore();
     });
   });
 });

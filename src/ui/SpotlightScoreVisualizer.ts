@@ -164,6 +164,62 @@ export function durationToBeatsToVexDuration(durationBeats: number): VexDuration
   }
 }
 
+/**
+ * Returns musical length in quarter-note beats of a VexFlow duration code and dot count.
+ */
+export function vexDurationToMusicalBeats(duration: string, dots: number = 0): number {
+  let base = 1;
+  switch (duration) {
+    case "w": base = 4; break;
+    case "h": base = 2; break;
+    case "q": base = 1; break;
+    case "8": base = 0.5; break;
+    case "16": base = 0.25; break;
+    case "32": base = 0.125; break;
+    default: base = 1;
+  }
+  let total = base;
+  let dotVal = base / 2;
+  for (let i = 0; i < dots; i++) {
+    total += dotVal;
+    dotVal /= 2;
+  }
+  return total;
+}
+
+export interface RestItem {
+  duration: string;
+  beats: number;
+}
+
+const BINARY_REST_VALUES: { duration: string; beats: number }[] = [
+  { duration: "wr", beats: 4.0 },
+  { duration: "hr", beats: 2.0 },
+  { duration: "qr", beats: 1.0 },
+  { duration: "8r", beats: 0.5 },
+  { duration: "16r", beats: 0.25 },
+  { duration: "32r", beats: 0.125 },
+];
+
+/**
+ * Decomposes a silence duration in beats into standard VexFlow rest codes (wr, hr, qr, 8r, 16r, 32r).
+ * Uses clean un-dotted rests adhering to standard classical engraving conventions.
+ */
+export function decomposeRestBeats(gapBeats: number): RestItem[] {
+  const rests: RestItem[] = [];
+  let remaining = Math.round(gapBeats * 32) / 32;
+  let iterations = 0;
+
+  while (remaining >= 0.1 && iterations < 16) {
+    iterations++;
+    const match = BINARY_REST_VALUES.find(r => r.beats <= remaining + 0.02);
+    if (!match) break;
+    rests.push(match);
+    remaining = Math.round((remaining - match.beats) * 32) / 32;
+  }
+  return rests;
+}
+
 interface NoteRef {
   staveNote: StaveNote;
   note: VisualNote;
@@ -678,9 +734,10 @@ export class SpotlightScoreVisualizer {
       n => n.beat >= startBeat - 0.05 && n.beat < endBeat
     );
 
+    const restKey = clef === "bass" ? "d/3" : (clef === "alto" ? "c/4" : "b/4");
+
     if (barNotes.length === 0) {
       // Whole measure rest
-      const restKey = clef === "bass" ? "d/3" : (clef === "alto" ? "c/4" : "b/4");
       const restNote = new StaveNote({ keys: [restKey], duration: "wr", clef });
       const voice = new Voice({ numBeats: this.timeSigNum, beatValue: this.timeSigDen });
       voice.setMode(Voice.Mode.SOFT);
@@ -695,7 +752,43 @@ export class SpotlightScoreVisualizer {
     const noteGroups = groupNotesByBeat(barNotes);
     const staveNotes: StaveNote[] = [];
 
+    interface RenderItem {
+      type: "note" | "rest";
+      staveNote: StaveNote;
+      beat: number;
+      durationBeats: number;
+      notes?: VisualNote[];
+    }
+    const items: RenderItem[] = [];
+
+    let timelineBeat = startBeat;
+
+    const addRests = (gapBeats: number, atBeat: number) => {
+      const restPieces = decomposeRestBeats(gapBeats);
+      let currBeat = atBeat;
+      for (const piece of restPieces) {
+        const rn = new StaveNote({ keys: [restKey], duration: piece.duration, clef });
+        items.push({
+          type: "rest",
+          staveNote: rn,
+          beat: currBeat,
+          durationBeats: piece.beats,
+        });
+        staveNotes.push(rn);
+        currBeat += piece.beats;
+      }
+    };
+
     for (const group of noteGroups) {
+      const groupBeat = Math.max(startBeat, group.beat);
+      const gap = groupBeat - timelineBeat;
+      if (gap >= 0.1) {
+        addRests(gap, timelineBeat);
+        timelineBeat = groupBeat;
+      } else if (timelineBeat < groupBeat) {
+        timelineBeat = groupBeat;
+      }
+
       // Sort notes in chord by midiNote ascending (VexFlow requirement)
       group.notes.sort((a, b) => a.midiNote - b.midiNote);
 
@@ -716,7 +809,7 @@ export class SpotlightScoreVisualizer {
       }
 
       if (keys.length === 0) {
-        keys.push(clef === "bass" ? "d/3" : (clef === "alto" ? "c/4" : "b/4"));
+        keys.push(restKey);
       }
 
       const { duration, dots } = durationToBeatsToVexDuration(group.durationBeats);
@@ -729,9 +822,26 @@ export class SpotlightScoreVisualizer {
       }
 
       staveNotes.push(sn);
+      const noteMusicalBeats = vexDurationToMusicalBeats(duration, dots);
+      items.push({
+        type: "note",
+        staveNote: sn,
+        beat: groupBeat,
+        durationBeats: noteMusicalBeats,
+        notes: group.notes,
+      });
+
       for (const n of group.notes) {
         this.currentNoteRefs.push({ staveNote: sn, note: n });
       }
+
+      timelineBeat = Math.max(timelineBeat, groupBeat + noteMusicalBeats);
+    }
+
+    const trailingGap = endBeat - timelineBeat;
+    if (trailingGap >= 0.1) {
+      addRests(trailingGap, timelineBeat);
+      timelineBeat = endBeat;
     }
 
     // Auto-beam consecutive flagged notes (8th, 16th, 32nd) within each quarter-note beat
@@ -739,24 +849,33 @@ export class SpotlightScoreVisualizer {
     let currentBeamGroup: StaveNote[] = [];
     let currentBeatBucket = -1;
 
-    for (let i = 0; i < noteGroups.length; i++) {
-      const g = noteGroups[i];
-      const sn = staveNotes[i];
-      const dur = sn.getDuration();
-      const isFlagged = dur.includes("8") || dur.includes("16") || dur.includes("32");
-      const beatBucket = Math.floor(Math.max(0, g.beat - startBeat + 0.01));
+    for (const item of items) {
+      if (item.type === "note") {
+        const dur = item.staveNote.getDuration();
+        const isFlagged = dur.includes("8") || dur.includes("16") || dur.includes("32");
+        const beatBucket = Math.floor(Math.max(0, item.beat - startBeat + 0.01));
 
-      if (isFlagged && (currentBeatBucket === -1 || currentBeatBucket === beatBucket)) {
-        currentBeamGroup.push(sn);
-        currentBeatBucket = beatBucket;
+        if (isFlagged && (currentBeatBucket === -1 || currentBeatBucket === beatBucket)) {
+          currentBeamGroup.push(item.staveNote);
+          currentBeatBucket = beatBucket;
+        } else {
+          if (currentBeamGroup.length >= 2) {
+            try {
+              beams.push(new Beam(currentBeamGroup));
+            } catch {}
+          }
+          currentBeamGroup = isFlagged ? [item.staveNote] : [];
+          currentBeatBucket = isFlagged ? beatBucket : -1;
+        }
       } else {
+        // Rest breaks the beam
         if (currentBeamGroup.length >= 2) {
           try {
             beams.push(new Beam(currentBeamGroup));
           } catch {}
         }
-        currentBeamGroup = isFlagged ? [sn] : [];
-        currentBeatBucket = isFlagged ? beatBucket : -1;
+        currentBeamGroup = [];
+        currentBeatBucket = -1;
       }
     }
     if (currentBeamGroup.length >= 2) {
