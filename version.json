@@ -1,9 +1,21 @@
 {
-  "version": "0.32.4",
+  "version": "0.33.0",
   "name": "Conductor",
   "description": "Interactive orchestral conducting experience in the browser",
   "localUrl": "http://localhost:5173/",
   "history": [
+    {
+      "version": "0.33.0",
+      "date": "2026-09-09",
+      "summary": "Full Architectural Modularization: Decoupled AudioEngine, Decomposed DebugOverlay, Component Stylesheets & Noise-Free Test Tooling",
+      "details": [
+        "AudioEngine Decoupling: Extracted WebAudioFont player lifecycle, script tag injection, in-flight promise deduplication, and soundfont buffer decoding into SoundfontLoader.ts (240 lines). Extracted spatial stereo bus allocation, seating pan distribution, and section focus / spotlight dynamics into ChannelMixer.ts (281 lines).",
+        "DebugOverlay Decomposition: Decomposed the 1,150-line monolithic debug HUD into a focused FeatureFlagPanel.ts (514 lines) managing algorithm modes and sliders, and TelemetryGraph.ts (480 lines) managing live kinematics and beat logs, reducing DebugOverlay.ts to a clean 300-line facade.",
+        "Component CSS Modularization: Split the 74KB monolithic style.css into 5 focused component stylesheets (base.css, camera.css, score.css, warmup.css, debug.css) imported via a clean style.css entrypoint.",
+        "Vitest VexFlow Noise Suppression: Added tests/setup.ts providing a 2D canvas context mock for Element.setTextMeasurementCanvas across ESM and CommonJS VexFlow instances and filtering fallback warnings, eliminating hundreds of lines of text measurement noise during test runs.",
+        "Comprehensive Unit Test Suites: Added dedicated unit tests for SoundfontLoader, ChannelMixer, and DebugOverlay components, bringing test coverage to 268 passing tests across 28 test suites."
+      ]
+    },
     {
       "version": "0.32.4",
       "date": "2026-09-09",

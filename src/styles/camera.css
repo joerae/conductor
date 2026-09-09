@@ -1,0 +1,1151 @@
+/* ── Horizontal Orchestral Dynamic Ribbon (Below Camera) ───────────────── */
+.dynamic-ladder-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 720px;
+  background: rgba(14, 18, 26, 0.85);
+  border: 1px solid rgba(201, 168, 76, 0.22);
+  border-radius: 12px;
+  padding: 10px 14px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  user-select: none;
+  transition: border-color var(--transition-med), box-shadow var(--transition-med);
+  box-sizing: border-box;
+  margin: 6px 0 10px;
+}
+
+.dynamic-ladder-container:hover {
+  border-color: rgba(201, 168, 76, 0.45);
+  box-shadow: 0 8px 28px rgba(201, 168, 76, 0.18);
+}
+
+.dynamic-ladder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dynamic-icon {
+  font-size: 0.95rem;
+  color: var(--accent-gold);
+  margin-right: 4px;
+}
+
+.dynamic-title {
+  font-family: var(--font-ui);
+  font-size: 0.70rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.dynamic-current-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #ffd56b;
+  letter-spacing: 0.04em;
+  background: rgba(255, 213, 107, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 213, 107, 0.25);
+}
+
+.dynamic-ladder-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 8px;
+  position: relative;
+}
+
+.dynamic-ladder {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+}
+
+.dynamic-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 3px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 6px 4px;
+  cursor: pointer;
+  transition: all 0.12s ease-out;
+  color: var(--text-muted);
+}
+
+.dynamic-step:hover {
+  background: rgba(201, 168, 76, 0.18);
+  border-color: rgba(201, 168, 76, 0.45);
+  color: var(--text-primary);
+  transform: translateY(-2px);
+}
+
+.dynamic-symbol {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: -0.02em;
+}
+
+.dynamic-sparkle {
+  font-size: 0.72rem;
+  margin-left: -1px;
+}
+
+/* Active Dynamic Step */
+.dynamic-step.active {
+  background: linear-gradient(135deg, rgba(201, 168, 76, 0.42), rgba(255, 213, 107, 0.25));
+  border-color: var(--accent-gold);
+  color: #fff2c4;
+  box-shadow: 0 0 14px rgba(255, 213, 107, 0.4);
+  transform: translateY(-2px);
+}
+
+/* Overburn (ff/fff) Active State */
+.dynamic-step[data-dynamic="ff"].active,
+.dynamic-step[data-dynamic="fff"].active {
+  background: linear-gradient(135deg, rgba(255, 107, 61, 0.45), rgba(255, 180, 0, 0.35));
+  border-color: #ff8c42;
+  color: #ffffff;
+  box-shadow: 0 0 18px rgba(255, 140, 66, 0.65);
+  animation: overburnLadderPulse 1s ease-in-out infinite alternate;
+}
+
+.dynamic-ladder-container.overburn {
+  border-color: #ff8c42;
+  box-shadow: 0 0 20px rgba(255, 140, 66, 0.35);
+}
+
+@keyframes overburnLadderPulse {
+  0% { box-shadow: 0 0 10px rgba(255, 140, 66, 0.4); }
+  100% { box-shadow: 0 0 22px rgba(255, 90, 20, 0.85); }
+}
+
+/* Golden sparkle lock-in flash for Magic Finger gauges & handles */
+.sparkle-locked {
+  animation: sparkleLockFlash 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+  box-shadow: 0 0 35px rgba(255, 215, 0, 0.95), inset 0 0 20px rgba(255, 215, 0, 0.6) !important;
+  border-color: #ffd700 !important;
+}
+
+@keyframes sparkleLockFlash {
+  0% {
+    box-shadow: 0 0 50px rgba(255, 215, 0, 1.0), inset 0 0 30px rgba(255, 215, 0, 0.8);
+    border-color: #ffffff;
+    transform: scale(1.15);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.75), inset 0 0 15px rgba(255, 215, 0, 0.35);
+  }
+  100% {
+    box-shadow: none;
+    transform: scale(1.0);
+  }
+}
+
+/* ── Magic Finger: Stage Lock-In Burst Animations (Right at locking circle) ── */
+.lock-shockwave-outer {
+  transform-origin: center;
+  animation: lockShockwaveOuter 0.55s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+
+.lock-shockwave-inner {
+  transform-origin: center;
+  animation: lockShockwaveInner 0.42s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+
+.lock-sparkle-star {
+  transform-origin: center;
+  animation: lockSparkleFly 0.62s cubic-bezier(0.12, 0.8, 0.25, 1) forwards;
+}
+
+@keyframes lockShockwaveOuter {
+  0% {
+    r: 24px;
+    stroke-width: 5px;
+    opacity: 1;
+    filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.9));
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    r: 80px;
+    stroke-width: 1px;
+    opacity: 0;
+  }
+}
+
+@keyframes lockShockwaveInner {
+  0% {
+    r: 12px;
+    stroke-width: 4px;
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 1));
+  }
+  100% {
+    r: 50px;
+    stroke-width: 1px;
+    opacity: 0;
+  }
+}
+
+@keyframes lockSparkleFly {
+  0% {
+    transform: translate(0, 0) scale(0.5) rotate(0deg);
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.95));
+  }
+  20% {
+    transform: translate(calc(var(--tx) * 0.3), calc(var(--ty) * 0.3)) scale(1.3) rotate(calc(var(--rot) * 0.25));
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(var(--tx), var(--ty)) scale(0) rotate(var(--rot));
+    opacity: 0;
+  }
+}
+
+
+/* ── Conductor Camera Preview Overlay ───────────────────────────── */
+.camera-preview-overlay {
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+  background: rgba(10, 14, 22, 0.92);
+  border: 1px solid rgba(255, 213, 107, 0.35);
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85), 0 0 28px rgba(255, 213, 107, 0.15);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 20;
+  overflow: hidden;
+  user-select: none;
+  font-family: var(--font-ui);
+  animation: cameraOverlayFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: box-shadow var(--transition-med), border-color var(--transition-med);
+}
+
+@keyframes cameraOverlayFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.camera-preview-overlay:hover {
+  border-color: rgba(255, 213, 107, 0.55);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.85), 0 0 32px rgba(255, 213, 107, 0.20);
+}
+
+.camera-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.camera-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.camera-icon {
+  font-size: 0.95rem;
+}
+
+.camera-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+
+.camera-status-badge {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.camera-status-badge.badge-active {
+  background: rgba(52, 199, 89, 0.2);
+  color: #5cd87e;
+  border: 1px solid rgba(52, 199, 89, 0.4);
+  animation: badgeGlowPulse 2s infinite alternate;
+}
+
+@keyframes badgeGlowPulse {
+  0% { box-shadow: 0 0 4px rgba(52, 199, 89, 0.2); }
+  100% { box-shadow: 0 0 10px rgba(52, 199, 89, 0.5); }
+}
+
+.camera-status-badge.badge-warning {
+  background: rgba(255, 149, 0, 0.2);
+  color: #ffb340;
+  border: 1px solid rgba(255, 149, 0, 0.4);
+}
+
+.camera-status-badge.badge-info {
+  background: rgba(10, 132, 255, 0.2);
+  color: #70b4ff;
+  border: 1px solid rgba(10, 132, 255, 0.4);
+}
+
+.camera-status-badge.badge-error {
+  background: rgba(255, 59, 48, 0.2);
+  color: #ff736a;
+  border: 1px solid rgba(255, 59, 48, 0.4);
+}
+
+.camera-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.camera-btn-icon {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.75rem;
+  transition: all var(--transition-fast);
+}
+
+.camera-btn-icon:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.camera-preview-body {
+  position: relative;
+}
+
+.camera-media-wrap {
+  position: relative;
+  width: 100%;
+  background: #06090e;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.camera-video {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.camera-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.camera-video.mirrored,
+.camera-canvas.mirrored {
+  transform: scaleX(-1);
+}
+
+.camera-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(6, 9, 14, 0.92);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+  padding: 16px;
+}
+
+.camera-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255, 213, 107, 0.2);
+  border-top-color: var(--accent-gold);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.camera-telemetry-hud {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 6px 10px;
+  background: rgba(6, 8, 12, 0.95);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 9.5px;
+}
+
+.telemetry-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.telemetry-item .label {
+  color: var(--text-muted);
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.telemetry-item .val {
+  color: var(--accent-gold);
+  font-weight: 600;
+}
+
+/* ── Vertical Dynamics Speedometer (Beside Camera on Left, Magic Finger Mode Only) ── */
+.dynamic-vertical-gauge {
+  width: 140px;
+  height: 616px;
+  max-height: calc(100vh - 200px);
+  min-height: 520px;
+  margin: 0;
+  background: rgba(14, 18, 28, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 213, 107, 0.22);
+  border-radius: 14px;
+  padding: 14px 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-sizing: border-box;
+  display: none; /* Hidden by default; visible in magic mode */
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  user-select: none;
+  transition: border-color var(--transition-med), box-shadow var(--transition-med);
+}
+
+.magic-mode-active .stage-camera-row {
+  align-items: stretch;
+}
+
+.magic-mode-active .stage-center-column {
+  justify-content: stretch;
+}
+
+.magic-mode-active .camera-hero-slot {
+  height: 100%;
+}
+
+.magic-mode-active .dynamic-vertical-gauge {
+  display: flex;
+  height: auto;
+  align-self: stretch;
+  min-height: 0;
+  max-height: none;
+}
+
+.magic-mode-active .bpm-vertical-gauge {
+  display: flex;
+  height: auto;
+  align-self: stretch;
+  min-height: 0;
+  max-height: none;
+}
+
+.magic-mode-active .dynamic-gauge-track-wrap,
+.magic-mode-active .bpm-gauge-track-wrap {
+  min-height: 0;
+}
+
+.magic-mode-active #dynamic-ladder-container {
+  display: none !important;
+}
+
+.dynamic-vertical-gauge:hover {
+  border-color: rgba(255, 213, 107, 0.45);
+  box-shadow: 0 8px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(255, 213, 107, 0.15);
+}
+
+.dynamic-gauge-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+}
+
+.dynamic-gauge-title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dynamic-gauge-title {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.dynamic-gauge-track-wrap {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  gap: 12px;
+  flex: 1;
+  width: 100%;
+  min-height: 400px;
+  margin: 12px 0;
+  position: relative;
+}
+
+.dynamic-vertical-steps {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  width: 48px;
+  height: 100%;
+}
+
+.dynamic-vertical-steps .dynamic-step {
+  padding: 4px 6px;
+  font-size: 0.72rem;
+  min-height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dynamic-vertical-track {
+  position: relative;
+  width: 26px;
+  height: 100%;
+  background: linear-gradient(0deg, #102a45 0%, #17423c 25%, #4a401c 55%, #592e16 80%, #61131a 100%);
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  overflow: visible;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+  box-sizing: border-box;
+}
+
+.dynamic-vertical-marker {
+  position: absolute;
+  left: -8px;
+  transform: translateY(50%);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  pointer-events: none;
+  z-index: 12;
+  transition: bottom 0.08s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dynamic-vertical-marker .needle-pip {
+  width: 42px;
+  height: 14px;
+  border-radius: 7px;
+  background: rgba(255, 213, 107, 0.38);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 16px rgba(255, 213, 107, 0.65), 0 0 32px rgba(255, 213, 107, 0.3), inset 0 0 8px rgba(255, 255, 255, 0.4);
+  box-sizing: border-box;
+}
+
+.dynamic-gauge-footer-hint {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 6px;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-align: center;
+  width: 100%;
+  opacity: 0.85;
+}
+
+/* ── Vertical BPM Speedometer Gauge (Beside Camera, Full Video Height) ───────── */
+.bpm-vertical-gauge {
+  width: 140px;
+  height: 616px;
+  max-height: calc(100vh - 200px);
+  min-height: 520px;
+  margin: 0;
+  background: rgba(14, 18, 28, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 213, 107, 0.22);
+  border-radius: 14px;
+  padding: 14px 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  user-select: none;
+  transition: border-color var(--transition-med), box-shadow var(--transition-med);
+}
+
+.bpm-vertical-gauge:hover {
+  border-color: rgba(255, 213, 107, 0.45);
+  box-shadow: 0 8px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(255, 213, 107, 0.15);
+}
+
+.bpm-gauge-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+}
+
+.bpm-gauge-title {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.bpm-current-val-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.bpm-current-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #ffd56b;
+  text-shadow: 0 0 14px rgba(255, 213, 107, 0.6);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.bpm-current-unit {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+
+.bpm-gauge-track-wrap {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  gap: 12px;
+  flex: 1;
+  width: 100%;
+  min-height: 400px;
+  margin: 12px 0;
+  position: relative;
+}
+
+.bpm-gauge-track {
+  position: relative;
+  width: 26px;
+  height: 100%;
+  background: linear-gradient(0deg, #102a45 0%, #17423c 25%, #4a401c 55%, #592e16 80%, #61131a 100%);
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  overflow: visible;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+  box-sizing: border-box;
+}
+
+.bpm-zone-bands {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Target BPM zone band — vertical in Mode E */
+.bpm-green-zone {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  background: rgba(100, 230, 120, 0.22);
+  border-top: 1.5px solid rgba(100, 230, 120, 0.65);
+  border-bottom: 1.5px solid rgba(100, 230, 120, 0.65);
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 1;
+  transition: bottom 0.4s ease, height 0.4s ease;
+}
+
+.bpm-zone {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.38);
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+  box-sizing: border-box;
+}
+
+.bpm-zone:first-child {
+  border-bottom: none;
+}
+
+.bpm-needle {
+  position: absolute;
+  left: -8px;
+  transform: translateY(50%);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  pointer-events: none;
+  z-index: 10;
+  transition: bottom 0.08s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Translucent Frosted Gold Pill indicator for the conductor (YOU) */
+.bpm-needle.indicated-needle {
+  z-index: 12;
+}
+
+.bpm-needle.indicated-needle .needle-pip {
+  width: 42px;
+  height: 14px;
+  border-radius: 7px;
+  background: rgba(255, 213, 107, 0.38);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 16px rgba(255, 213, 107, 0.65), 0 0 32px rgba(255, 213, 107, 0.3), inset 0 0 8px rgba(255, 255, 255, 0.4);
+  box-sizing: border-box;
+}
+
+/* Orchestra Speed Needle (Hidden by default, shown via D debug toggle) */
+.bpm-needle.orchestra-needle {
+  z-index: 8;
+  display: none;
+}
+
+.bpm-vertical-gauge.show-orchestra-speed .bpm-needle.orchestra-needle {
+  display: flex;
+}
+
+.bpm-needle.orchestra-needle .needle-pip {
+  width: 42px;
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(107, 231, 255, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 12px #6be7ff, 0 0 24px rgba(107, 231, 255, 0.5);
+  box-sizing: border-box;
+}
+
+.bpm-gauge-ticks {
+  position: relative;
+  width: 24px;
+  height: 100%;
+}
+
+.bpm-tick {
+  position: absolute;
+  left: 0;
+  transform: translateY(50%);
+  font-size: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.bpm-gauge-footer-hint {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 6px;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-align: center;
+  width: 100%;
+  opacity: 0.85;
+}
+
+/* ── Live Gesture Expressive Banners (Cutoff & Fermata) ──────────────────── */
+.gesture-banner {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9990;
+  padding: 10px 24px;
+  border-radius: 24px;
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
+  transition: all 0.2s ease-out;
+  pointer-events: none;
+  animation: gestureBadgePop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes gestureBadgePop {
+  0% { transform: translateX(-50%) scale(0.85); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+.gesture-banner.cutoff {
+  background: rgba(45, 10, 15, 0.95);
+  border: 2px solid #ff4d6d;
+  color: #ffb3c1;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7), 0 0 25px rgba(255, 77, 109, 0.45);
+}
+
+.gesture-banner.fermata {
+  background: rgba(30, 24, 8, 0.95);
+  border: 2px solid #ffd56b;
+  color: #ffd56b;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7), 0 0 25px rgba(255, 213, 107, 0.5);
+}
+
+.gesture-banner-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+/* ── Party Mode Celebration (✌️✌️ Double Peace Signs) ─────────────────────── */
+.party-banner {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: linear-gradient(135deg, rgba(255, 0, 128, 0.95), rgba(0, 200, 255, 0.95));
+  color: #ffffff;
+  padding: 10px 24px;
+  border-radius: 30px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 35px rgba(255, 0, 180, 0.65);
+  pointer-events: none;
+  animation: partyPulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes partyPulse {
+  0% { transform: translateX(-50%) scale(1); filter: hue-rotate(0deg); }
+  100% { transform: translateX(-50%) scale(1.05); filter: hue-rotate(90deg); }
+}
+
+.party-emoji {
+  font-size: 1.3rem;
+  animation: partyWiggle 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes partyWiggle {
+  0% { transform: rotate(-8deg); }
+  100% { transform: rotate(8deg); }
+}
+
+/* Party Disco Multi-Color Stage Aura (100% GPU Accelerated) */
+#stage.party-mode-active::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(ellipse 90% 90% at 50% 50%, rgba(255, 0, 128, 0.35) 0%, rgba(0, 230, 255, 0.25) 40%, rgba(255, 215, 0, 0.20) 70%, transparent 100%);
+  animation: partyHueSpin 3.5s linear infinite;
+  will-change: filter, opacity;
+}
+
+@keyframes partyHueSpin {
+  0%   { filter: hue-rotate(0deg); opacity: 0.85; }
+  50%  { filter: hue-rotate(180deg); opacity: 1.0; }
+  100% { filter: hue-rotate(360deg); opacity: 0.85; }
+}
+
+/* ── Love Mode Celebration (🤟 ILoveYou Gesture) ─────────────────────────── */
+.love-banner {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: linear-gradient(135deg, rgba(255, 105, 180, 0.95), rgba(255, 20, 147, 0.95));
+  color: #ffffff;
+  padding: 8px 20px;
+  border-radius: 20px;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+  animation: lovePulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes lovePulse {
+  0% { transform: translateX(-50%) scale(1); }
+  100% { transform: translateX(-50%) scale(1.04); }
+}
+
+.love-emoji {
+  font-size: 1.2rem;
+  animation: loveHeartbeat 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes loveHeartbeat {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.2); }
+}
+
+/* Dreamy Romantic Pink Stage Aura (GPU Accelerated) */
+#stage.love-mode-active::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(ellipse 90% 80% at 50% 50%, rgba(255, 105, 180, 0.35) 0%, rgba(139, 0, 80, 0.30) 60%, transparent 100%);
+  animation: lovePulseAura 2.5s ease-in-out infinite alternate;
+  will-change: opacity, transform;
+}
+
+@keyframes lovePulseAura {
+  0%   { opacity: 0.75; transform: scale(0.99); }
+  100% { opacity: 1.0; transform: scale(1.02); }
+}
+
+/* ── Instrument Focus Mode (✨ Pointing & Pinch Section Mix) ─────────────── */
+.focus-banner {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: linear-gradient(135deg, rgba(20, 30, 48, 0.95), rgba(36, 59, 85, 0.95));
+  color: #ffd56b;
+  padding: 6px 18px;
+  border-radius: 20px;
+  border: 1.5px solid rgba(255, 213, 107, 0.85);
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75);
+  pointer-events: none;
+  animation: focusBannerPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.focus-banner.grabbed {
+  border-color: #ffd56b;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.85), 0 0 20px rgba(255, 213, 107, 0.4);
+  background: linear-gradient(135deg, rgba(35, 30, 15, 0.98), rgba(65, 50, 20, 0.98));
+}
+
+@keyframes focusBannerPop {
+  0% { transform: translateX(-50%) scale(0.88); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+.focus-banner-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.focus-banner-badge {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(255, 213, 107, 0.2);
+  color: #ffffff;
+  border: 1px solid rgba(255, 213, 107, 0.4);
+}
+
+/* ── Stage Spotlight Laser Ray Overlay ───────────────────────────────────── */
+.stage-spotlight-ray-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 48;
+  overflow: visible;
+  visibility: hidden;
+}
+
+/* ── Spotlight Focus Mode Clean Elevation & Section Highlighting ───────── */
+#orchestra-silhouette {
+  width: min(720px, 80vw);
+  flex-shrink: 1;
+  position: relative;
+  z-index: 40;
+  margin-top: 2px;
+  margin-bottom: 10px;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.25s ease;
+  transform-origin: center top;
+}
+
+#stage.focus-mode-active #orchestra-silhouette {
+  transform: scale(1.02);
+}
+
+#stage.focus-mode-active:not(.magic-mode-active) #dynamic-ladder-container {
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+/* ── Magic Finger Targeting & Acquisition Highlights ─────────────────────── */
+.bpm-vertical-gauge.magic-hover,
+.dynamic-vertical-gauge.magic-hover,
+#dynamic-ladder-container.magic-hover {
+  border-color: rgba(107, 231, 255, 0.7) !important;
+  box-shadow: 0 0 20px rgba(107, 231, 255, 0.35) !important;
+  transition: all 0.15s ease-out;
+}
+
+.bpm-vertical-gauge.magic-acquired,
+.dynamic-vertical-gauge.magic-acquired,
+#dynamic-ladder-container.magic-acquired {
+  border-color: rgba(255, 213, 107, 0.95) !important;
+  box-shadow: 0 0 30px rgba(255, 213, 107, 0.6), 0 0 10px rgba(255, 255, 255, 0.4) !important;
+  transition: all 0.1s ease-out;
+}
+
+/* ── Section Visual States during Spotlight Focus Mode ───────────────────── */
+#stage.focus-mode-active .instrument-section {
+  opacity: 0.70;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.2s ease;
+}
+
+#stage.focus-mode-active .instrument-section.focus-hover {
+  opacity: 1.0 !important;
+  transform: scale(1.06);
+}
+
+#stage.focus-mode-active .instrument-section.focus-hover .musician {
+  stroke: #ffd56b !important;
+  stroke-width: 2.5 !important;
+}
+
+#stage.focus-mode-active .instrument-section.focus-hover .section-label {
+  fill: #ffd56b !important;
+  font-weight: 700 !important;
+}
+
+#stage.focus-mode-active .instrument-section.focus-grabbed {
+  opacity: 1.0 !important;
+  transform: scale(1.08);
+}
+
+#stage.focus-mode-active .instrument-section.focus-grabbed .musician {
+  fill: #ffd56b !important;
+  stroke: #ffffff !important;
+  stroke-width: 3.5 !important;
+}
+
+#stage.focus-mode-active .instrument-section.focus-grabbed .section-label {
+  fill: #ffffff !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em;
+}
+
+#stage.focus-mode-active.has-grabbed-section .instrument-section:not(.focus-grabbed) {
+  opacity: 0.55 !important;
+}
+
+.stage-center-column {
+  position: relative;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+

@@ -1,0 +1,1030 @@
+/* ─── Conductor — Design System ─────────────────────────────────────────────
+   Dark stage aesthetic. Warm candlelight palette.
+   Typefaces: Playfair Display (titles), Inter (UI)
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Reset & base ──────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Palette */
+  --bg-deep:        #0a0b0e;
+  --bg-stage:       #0f1118;
+  --bg-card:        rgba(255,255,255,0.04);
+  --accent-gold:    #c9a84c;
+  --accent-warm:    #e8c87a;
+  --accent-glow:    rgba(201,168,76,0.18);
+  --text-primary:   #f0e8d8;
+  --text-secondary: #8a8070;
+  --text-muted:     #4a4540;
+  --musician-fill:  #2a2e3a;
+  --musician-wind:  #2e3328;
+  --musician-brass: #332e28;
+  --conductor-fill: #c9a84c;
+  --podium-fill:    #8a7040;
+  --stage-floor:    #1a1a22;
+  --baton-color:    #e8c87a;
+
+  /* Typography */
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-ui:      'Inter', system-ui, sans-serif;
+
+  /* Spacing */
+  --spacing-xs:   4px;
+  --spacing-sm:   8px;
+  --spacing-md:   16px;
+  --spacing-lg:   32px;
+  --spacing-xl:   64px;
+
+  /* Motion */
+  --transition-fast:  120ms ease;
+  --transition-med:   280ms cubic-bezier(0.4,0,0.2,1);
+  --transition-slow:  500ms ease;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+
+
+/* ── Stage ─────────────────────────────────────────────────────────────────── */
+#stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: clamp(12px, 2vh, 24px);
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 80%, rgba(201,168,76,0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(26,22,18,0.8) 0%, transparent 60%),
+    var(--bg-stage);
+  padding: clamp(16px, 2.5vh, 28px) var(--spacing-lg) clamp(16px, 2.5vh, 24px);
+  transition: background var(--transition-slow);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* State-based ambience */
+#stage[data-state="playing"] {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 80%, rgba(201,168,76,0.10) 0%, transparent 70%),
+    var(--bg-stage);
+}
+
+#stage[data-state="coasting"] {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 80%, rgba(201,168,76,0.05) 0%, transparent 70%),
+    var(--bg-stage);
+}
+
+#stage[data-state="paused"] {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 80%, rgba(100,80,150,0.08) 0%, transparent 70%),
+    var(--bg-stage);
+}
+
+/* ── Dynamic Ambient Stage Background Themes (Smooth Acoustic Lighting) ──── */
+#stage.dynamic-pp {
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 75%, rgba(38, 90, 205, 0.20) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(12, 22, 50, 0.88) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-p {
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 75%, rgba(30, 110, 190, 0.17) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(10, 28, 48, 0.85) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-mp {
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 75%, rgba(34, 160, 95, 0.20) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(10, 42, 25, 0.88) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-mf {
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 75%, rgba(46, 185, 110, 0.24) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(12, 52, 30, 0.90) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-f {
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 75%, rgba(255, 190, 45, 0.22) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(55, 38, 12, 0.88) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-ff {
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 75%, rgba(255, 95, 35, 0.28) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(65, 20, 10, 0.90) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-fff {
+  background:
+    radial-gradient(ellipse 95% 75% at 50% 75%, rgba(255, 45, 45, 0.35) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(85, 12, 12, 0.94) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
+/* ── Beat flash ────────────────────────────────────────────────────────────── */
+#beat-flash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  border: 2px solid transparent;
+  border-radius: 0;
+  transition: border-color var(--transition-fast);
+  z-index: 50;
+}
+
+#beat-flash.flash {
+  animation: beatFlash 0.18s ease-out forwards;
+}
+
+@keyframes beatFlash {
+  0%   { border-color: rgba(201,168,76,0.6); background: rgba(201,168,76,0.04); }
+  100% { border-color: transparent;         background: transparent; }
+}
+
+/* ── Orchestra silhouette & Performance Area ──────────────────────────────── */
+.stage-performance-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-lg);
+  width: min(880px, 94vw);
+  position: relative;
+  margin-top: clamp(80px, 12vh, 125px);
+}
+
+#orchestra-silhouette {
+  width: min(720px, 80vw);
+  flex-shrink: 1;
+}
+
+#orchestra-silhouette svg {
+  width: 100%;
+  height: auto;
+  color: var(--baton-color);
+  overflow: visible;
+}
+
+.instrument-section {
+  cursor: default;
+  transition: transform var(--transition-fast);
+}
+
+.musician {
+  fill: #222634;
+  stroke: rgba(201, 168, 76, 0.2);
+  stroke-width: 1.5;
+  transition: fill 0.08s ease, stroke 0.08s ease, filter 0.08s ease, transform 0.08s ease;
+  transform-origin: center;
+}
+
+/* Individual section base styling */
+.musician.violin1 { fill: #242938; }
+.musician.violin2 { fill: #222736; }
+.musician.viola   { fill: #252834; }
+.musician.cello   { fill: #232732; }
+
+/* Visual Note Playing Reaction on Eggs / Musicians */
+.musician.playing {
+  fill: #ffd56b !important;
+  stroke: #fff2c4 !important;
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 14px rgba(255, 213, 107, 0.85)) drop-shadow(0 0 28px rgba(201, 168, 76, 0.5));
+  animation: notePulse 0.12s ease-out;
+}
+
+.instrument-section.playing .section-label {
+  fill: #ffd56b !important;
+  font-weight: 600;
+  filter: drop-shadow(0 0 8px rgba(201, 168, 76, 0.6));
+}
+
+@keyframes notePulse {
+  0%   { transform: scale(1.0); }
+  50%  { transform: scale(1.08) translateY(-2px); }
+  100% { transform: scale(1.04); }
+}
+
+/* Section labels under each group */
+.section-label {
+  fill: #e2e8f0;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: fill 0.15s ease, filter 0.15s ease;
+  user-select: none;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+
+.conductor { fill: var(--conductor-fill); }
+.podium { fill: var(--podium-fill); }
+.stage-floor { fill: var(--stage-floor); }
+.baton { color: var(--baton-color); }
+
+/* Breathing animation during playing */
+#stage[data-state="playing"] .musician {
+  animation: breathe 3.5s ease-in-out infinite;
+}
+
+#stage[data-state="playing"] .egg-1 {
+  animation-delay: 0.6s;
+}
+#stage[data-state="playing"] .egg-2 {
+  animation-delay: 1.2s;
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scaleY(1); }
+  50%       { transform: scaleY(1.03); }
+}
+
+/* Conductor baton swing */
+.baton.swing {
+  animation: batonDownUp 0.22s cubic-bezier(0.2, 0.8, 0.4, 1.2);
+}
+
+@keyframes batonDownUp {
+  0%   { transform: rotate(0deg); }
+  40%  { transform: rotate(18deg) translateY(4px); }
+  100% { transform: rotate(0deg); }
+}
+
+/* ── Piece info ─────────────────────────────────────────────────────────────── */
+#piece-info {
+  text-align: center;
+  margin-bottom: clamp(6px, 1.2vh, 16px);
+}
+
+.piece-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.repertoire-pill-btn,
+.score-pill-btn {
+  background: rgba(14, 18, 28, 0.85);
+  border: 1px solid rgba(255, 213, 107, 0.40);
+  color: #ffd56b;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  backdrop-filter: blur(8px);
+}
+
+.repertoire-pill-btn:hover {
+  background: rgba(255, 213, 107, 0.15);
+  border-color: #ffd56b;
+  box-shadow: 0 0 16px rgba(255, 213, 107, 0.35);
+  transform: translateY(-1px);
+}
+
+.score-pill-btn {
+  border-color: rgba(255, 213, 107, 0.45);
+}
+
+.score-pill-btn.active {
+  background: rgba(255, 213, 107, 0.18);
+  border-color: #ffd56b;
+  color: #ffd56b;
+  box-shadow: 0 0 14px rgba(255, 213, 107, 0.30);
+}
+
+.score-pill-btn:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
+  box-shadow: none;
+}
+
+.score-pill-btn:hover {
+  border-color: #ffd56b;
+  transform: translateY(-1px);
+}
+
+#piece-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(1.6rem, 4vw, 2.8rem);
+  font-weight: 400;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin-bottom: var(--spacing-xs);
+}
+
+#piece-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 300;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ── A/B Tempo & Input Mode Selectors ─────────────────────────────────────── */
+.mode-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(14, 18, 28, 0.85);
+  padding: 6px 16px;
+  border-radius: 30px;
+  border: 1px solid rgba(255, 213, 107, 0.28);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  margin-bottom: var(--spacing-xs);
+  transition: all var(--transition-fast);
+}
+
+.mode-selector-container:hover {
+  border-color: rgba(255, 213, 107, 0.45);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.65), 0 0 12px rgba(255, 213, 107, 0.15);
+}
+
+.mode-label {
+  font-size: 0.76rem;
+  color: #cbd5e1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.mode-pill-group {
+  display: flex;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 20px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.mode-pill {
+  background: none;
+  border: none;
+  color: #cbd5e1;
+  font-family: var(--font-ui);
+  font-size: 0.80rem;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 16px;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: all 0.15s ease-out;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mode-pill:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.mode-pill.active {
+  background: linear-gradient(135deg, #ffd56b 0%, #e6b840 100%);
+  color: #0c1018;
+  font-weight: 700;
+  box-shadow: 0 0 14px rgba(255, 213, 107, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.mode-shortcut-hint {
+  font-size: 0.78rem;
+  color: #e2e8f0;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  opacity: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.mode-shortcut-hint strong {
+  color: #ffd56b;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(255, 213, 107, 0.4);
+}
+
+
+/* ── Prompt area ────────────────────────────────────────────────────────────── */
+#prompt-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+#prompt {
+  font-size: clamp(0.9rem, 2vw, 1.1rem);
+  color: var(--accent-warm);
+  font-weight: 300;
+  letter-spacing: 0.05em;
+  text-align: center;
+  transition: opacity var(--transition-med), color var(--transition-med);
+}
+
+#stage[data-state="playing"] #prompt {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+#stage[data-state="paused"] #prompt {
+  color: #b07070;
+}
+
+/* Space key visual hint */
+#space-key-hint {
+  margin-top: var(--spacing-xs);
+}
+
+.key {
+  display: inline-block;
+  padding: 6px 24px;
+  border: 1px solid var(--accent-gold);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  color: var(--accent-gold);
+  background: rgba(201,168,76,0.06);
+  font-family: var(--font-ui);
+  font-weight: 500;
+  box-shadow: 0 0 12px rgba(201,168,76,0.12);
+  transition: box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+#stage[data-state="playing"] .key,
+#stage[data-state="coasting"] .key {
+  box-shadow: 0 0 24px rgba(201,168,76,0.22);
+  background: rgba(201,168,76,0.10);
+}
+
+.piece-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.repertoire-pill-btn {
+  background: rgba(201, 168, 76, 0.12);
+  border: 1px solid rgba(201, 168, 76, 0.35);
+  color: var(--accent-gold);
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: all var(--transition-fast);
+}
+
+.repertoire-pill-btn:hover {
+  background: rgba(201, 168, 76, 0.25);
+  box-shadow: 0 0 12px rgba(201, 168, 76, 0.3);
+  transform: translateY(-1px);
+}
+
+/* ── Stage actions (restart & switch) ──────────────────────────────────────── */
+#stage-actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  z-index: 30;
+}
+
+.stage-action-btn,
+#repertoire-switch-btn,
+#restart-btn {
+  padding: 8px 22px;
+  border: 1px solid rgba(255, 213, 107, 0.45);
+  border-radius: 24px;
+  background: rgba(14, 18, 28, 0.88);
+  color: #ffd56b;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(12px);
+  transition: all 0.15s ease-out;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.stage-action-btn:hover,
+#repertoire-switch-btn:hover,
+#restart-btn:hover {
+  background: rgba(255, 213, 107, 0.22);
+  border-color: #ffd56b;
+  color: #ffffff;
+  box-shadow: 0 0 18px rgba(255, 213, 107, 0.45), 0 6px 20px rgba(0, 0, 0, 0.6);
+  transform: translateY(-1px);
+}
+
+.stage-action-btn:active,
+#repertoire-switch-btn:active,
+#restart-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+#stage[data-state="completed"] #prompt {
+  color: var(--accent-gold);
+  font-size: 1.25rem;
+  font-weight: 400;
+  text-shadow: 0 0 16px rgba(201, 168, 76, 0.4);
+}
+
+/* ── Repertoire Grid Cards ─────────────────────────────────────────────────── */
+.repertoire-card {
+  max-width: 680px;
+}
+
+.repertoire-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 65vh;
+  overflow-y: auto;
+}
+
+.piece-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  transition: all var(--transition-fast);
+}
+
+.piece-card:hover {
+  background: rgba(201, 168, 76, 0.06);
+  border-color: rgba(201, 168, 76, 0.35);
+  transform: translateX(4px);
+}
+
+.piece-card.active-piece {
+  border-color: var(--accent-gold);
+  background: rgba(201, 168, 76, 0.10);
+  box-shadow: 0 0 16px rgba(201, 168, 76, 0.15);
+}
+
+.piece-card-info {
+  flex: 1;
+}
+
+.piece-card-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.15rem;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.piece-card-composer {
+  font-size: 0.8rem;
+  color: var(--accent-warm);
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.piece-card-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.piece-select-btn {
+  background: var(--accent-gold);
+  color: #12151e;
+  border: none;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.piece-select-btn:hover {
+  background: #ffe08a;
+  box-shadow: 0 0 14px rgba(201, 168, 76, 0.5);
+}
+
+/* ── Stage Footer ───────────────────────────────────────────────────────────── */
+#stage-footer {
+  position: fixed;
+  bottom: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  z-index: 40;
+}
+
+.footer-divider {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.subtle-link {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.subtle-link:hover {
+  color: var(--accent-gold);
+  background: rgba(201, 168, 76, 0.08);
+}
+
+.debug-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+/* ── Version Modal ──────────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: var(--spacing-md);
+  animation: fadeIn 0.15s ease-out;
+}
+
+.modal-card {
+  background: #141720;
+  border: 1px solid rgba(201, 168, 76, 0.25);
+  border-radius: 12px;
+  max-width: 540px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(201, 168, 76, 0.1);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.modal-header h2 {
+  font-size: 1.1rem;
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--accent-gold);
+  margin: 0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.close-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.version-entry {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.version-entry:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.version-tag-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.version-badge {
+  background: rgba(201, 168, 76, 0.15);
+  color: var(--accent-warm);
+  border: 1px solid rgba(201, 168, 76, 0.3);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.version-date {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.version-summary {
+  color: var(--text-primary);
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.version-details-list {
+  padding-left: 18px;
+  color: var(--text-secondary);
+}
+
+.version-details-list li {
+  margin-bottom: 4px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+
+/* ── Dynamic Ambient Stage Lighting ──────────────────────────────────────── */
+#stage.dynamic-fff {
+  background:
+    radial-gradient(ellipse 95% 75% at 50% 80%, rgba(255, 110, 40, 0.28) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(70, 20, 10, 0.96) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-ff {
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 80%, rgba(255, 160, 50, 0.20) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(55, 25, 12, 0.92) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-f {
+  background:
+    radial-gradient(ellipse 85% 65% at 50% 80%, rgba(220, 175, 75, 0.16) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(40, 30, 15, 0.85) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-mf {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 80%, rgba(201, 168, 76, 0.10) 0%, transparent 70%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-mp {
+  background:
+    radial-gradient(ellipse 85% 65% at 50% 80%, rgba(50, 130, 210, 0.14) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(15, 28, 55, 0.85) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-p {
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 80%, rgba(40, 110, 230, 0.22) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(10, 22, 60, 0.92) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
+#stage.dynamic-pp {
+  background:
+    radial-gradient(ellipse 95% 75% at 50% 80%, rgba(30, 95, 245, 0.32) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 100%, rgba(8, 16, 50, 0.96) 0%, transparent 60%),
+    var(--bg-stage);
+}
+
+/* ── Accent Flash & Controls ──────────────────────────────────────────────── */
+#stage.accent-flash {
+  animation: stageAccentFlash 0.38s cubic-bezier(0.1, 0.9, 0.2, 1);
+}
+
+@keyframes stageAccentFlash {
+  0% {
+    box-shadow: inset 0 0 100px rgba(255, 45, 45, 0.85), 0 0 50px rgba(255, 65, 65, 0.65);
+    filter: saturate(1.6) brightness(1.25);
+  }
+  100% {
+    box-shadow: none;
+    filter: none;
+  }
+}
+
+/* ── Accent Badge Icon Next to Active Dynamic Step ────────────────────────── */
+.accent-badge-icon {
+  display: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 900;
+  font-size: 1.15rem;
+  line-height: 1;
+  color: #ff3b30;
+  text-shadow: 0 0 10px rgba(255, 59, 48, 0.9), 0 0 20px rgba(255, 149, 0, 0.6);
+  margin-left: 4px;
+  animation: accentArmedPulse 0.45s infinite alternate ease-in-out;
+}
+
+.dynamic-ladder-container.accent-armed .dynamic-step.active .accent-badge-icon {
+  display: inline-block;
+}
+
+.dynamic-ladder-container.accent-armed {
+  border-color: rgba(255, 59, 48, 0.55);
+  box-shadow: 0 0 24px rgba(255, 59, 48, 0.35);
+}
+
+.dynamic-ladder-container.accent-armed .dynamic-step.active {
+  border-color: #ff3b30;
+  box-shadow: 0 0 20px rgba(255, 59, 48, 0.65);
+}
+
+@keyframes accentArmedPulse {
+  0% {
+    transform: scale(1.0);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1.35) translateX(2px);
+    opacity: 1.0;
+  }
+}
+
+/* ── Control Bars Wrapper (Input Source + Tempo Mode) ────────────────────── */
+.control-bars-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-xs);
+}
+
+.control-bars-wrap .mode-selector-container {
+  margin-bottom: 0;
+}
+
+/* ── Layout Redesign: Hero Camera Center, BPM Gauge Below, Dynamics Right ── */
+.stage-performance-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.stage-camera-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  width: 100%;
+  position: relative;
+}
+
+.stage-center-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  width: 100%;
+  max-width: 740px;
+  gap: 12px;
+}
+
+.camera-hero-slot {
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+  min-height: 380px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(14, 16, 22, 0.75);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 213, 107, 0.15);
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.camera-hero-slot .camera-preview-overlay {
+  position: relative;
+  top: 0;
+  left: 0;
+  width: 100%;
+  max-width: 720px;
+  margin: 0;
+  z-index: 20;
+}
+
+/* Continuous Horizontal Analogue Dynamics Track */
+.dynamic-analogue-track {
+  position: relative;
+  width: 100%;
+  height: 12px;
+  background: linear-gradient(90deg, #102a45 0%, #17423c 25%, #4a401c 55%, #592e16 80%, #61131a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  overflow: visible;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+  margin-top: 4px;
+  box-sizing: border-box;
+}
+
+.dynamic-analogue-marker {
+  position: absolute;
+  top: -8px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 10;
+  transition: left 0.08s cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+
+.dynamic-analogue-marker .analogue-pip {
+  font-size: 13px;
+  color: #ffd56b;
+  text-shadow: 0 0 10px #ffd56b, 0 0 20px rgba(255, 213, 107, 0.9);
+  font-weight: bold;
+  line-height: 1;
+}
+

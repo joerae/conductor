@@ -1,0 +1,120 @@
+/* ── Debug overlay (injected by DebugOverlay.ts) ────────────────────────────── */
+.debug-title {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: rgba(160, 240, 160, 0.6);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.debug-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.debug-table td {
+  padding: 2px 4px 2px 0;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.debug-table td:first-child {
+  color: rgba(160, 240, 160, 0.6);
+  width: 52%;
+}
+
+.debug-table td:last-child {
+  color: #a0f0a0;
+  text-align: right;
+  width: 48%;
+  font-variant-numeric: tabular-nums;
+}
+
+.debug-section-header {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #ffd56b;
+  border-bottom: 1px solid rgba(255, 213, 107, 0.2);
+  padding-bottom: 3px;
+  margin-bottom: 4px;
+}
+
+.debug-toggles-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.debug-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #d0f0d0;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.1s ease;
+}
+
+.debug-checkbox-label:hover {
+  color: #ffffff;
+}
+
+.debug-checkbox-label input[type="checkbox"] {
+  accent-color: #ffd56b;
+  cursor: pointer;
+}
+
+/* ── Section Velocity Debug HUD (3x Larger for Instant Legibility) ────────── */
+.section-debug-hud {
+  display: none;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+body.debug-mode-active .section-debug-hud {
+  display: block;
+}
+
+.debug-vel-pill {
+  fill: rgba(6, 10, 16, 0.94);
+  stroke: rgba(255, 213, 107, 0.65);
+  stroke-width: 1.5px;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.85));
+}
+
+.debug-vel-main {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  fill: #ffd56b;
+  dominant-baseline: middle;
+}
+
+.debug-vel-decomp {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  fill: #7cc5ff;
+  dominant-baseline: middle;
+}
+
+.debug-vel-history {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  fill: #a0f0a0;
+  letter-spacing: 0.3px;
+  dominant-baseline: middle;
+}
+

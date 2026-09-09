@@ -1,0 +1,154 @@
+/* ── Spotlight Mode Score Visualizer Panel ───────────────────────────────── */
+.spotlight-score-panel {
+  position: fixed;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  background: rgba(14, 18, 29, 0.96);
+  border: 1.5px solid rgba(255, 213, 107, 0.60);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.80), 0 0 24px rgba(255, 213, 107, 0.25);
+  backdrop-filter: blur(20px);
+  padding: 6px 12px 6px 12px;
+  pointer-events: none;
+  opacity: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  transform: translateY(-6px) scale(0.97);
+  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.spotlight-score-panel.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.score-svg-wrap {
+  width: 100%;
+  overflow: hidden;
+}
+
+.score-svg-wrap svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: hidden;
+}
+
+/* VexFlow SVG element styling */
+.score-svg-wrap svg path {
+  fill: #f1f5f9;
+  stroke: #f1f5f9;
+}
+
+.score-svg-wrap svg text {
+  fill: #e2e8f0 !important;
+}
+
+/* Stave lines in VexFlow */
+.score-svg-wrap svg .vf-stave path {
+  stroke: rgba(226, 232, 240, 0.45) !important;
+  fill: none !important;
+  stroke-width: 1;
+}
+
+/* Barlines (measure dividers) in VexFlow are rendered as <rect> elements */
+.score-svg-wrap svg .vf-stavebarline rect,
+.score-svg-wrap svg .vf-barline rect {
+  fill: rgba(226, 232, 240, 0.70) !important;
+  stroke: none !important;
+}
+
+/* Clefs (Bravura SMuFL glyphs) */
+.score-svg-wrap svg .vf-clef text,
+.score-svg-wrap svg .vf-clef path {
+  fill: #ffd56b !important;
+  stroke: none;
+  filter: drop-shadow(0 0 4px rgba(255, 213, 107, 0.4));
+}
+
+/* Time Signatures (Bravura SMuFL numbers - e.g. 4/4) */
+.score-svg-wrap svg .vf-timesignature text,
+.score-svg-wrap svg .vf-timesignature path,
+.score-svg-wrap svg .vf-timesignote text,
+.score-svg-wrap svg .vf-timesignote path,
+.score-svg-wrap svg .vf-timesig text,
+.score-svg-wrap svg .vf-timesig path {
+  fill: #e2e8f0 !important;
+  stroke: none !important;
+}
+
+/* Accidentals (Sharps / Flats) */
+.score-svg-wrap svg .vf-accidental text,
+.score-svg-wrap svg .vf-accidental path {
+  fill: #ffd56b !important;
+  stroke: none;
+}
+
+/* Noteheads & Stems */
+.score-svg-wrap svg .vf-stavenote text,
+.score-svg-wrap svg .vf-notehead text {
+  fill: #f1f5f9 !important;
+  stroke: none;
+  transition: fill 0.08s ease, filter 0.08s ease;
+}
+
+.score-svg-wrap svg .vf-stavenote path {
+  fill: #f1f5f9;
+  stroke: #f1f5f9;
+  transition: fill 0.08s ease, stroke 0.08s ease, filter 0.08s ease;
+}
+
+/* Beams connecting quavers / semiquavers */
+.score-svg-wrap svg .vf-beam path {
+  fill: #f1f5f9 !important;
+  stroke: #f1f5f9 !important;
+}
+
+/* VexFlow Stave Text / Section Header only (Measure number e.g. m. 14) */
+.score-svg-wrap svg .vf-stavetext text,
+.score-svg-wrap svg .vf-stavesection text {
+  fill: rgba(201, 168, 76, 0.85) !important;
+  font-family: var(--font-ui) !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+}
+
+/* Note States - Sounding (Active) */
+.score-svg-wrap svg .vf-stavenote.sounding text,
+.score-svg-wrap svg .vf-stavenote.sounding .vf-notehead text {
+  fill: #ffffff !important;
+  filter: drop-shadow(0 0 6px #ffd56b) drop-shadow(0 0 12px rgba(255, 213, 107, 0.9)) !important;
+}
+
+.score-svg-wrap svg .vf-stavenote.sounding path {
+  fill: #ffffff !important;
+  stroke: #ffd56b !important;
+  stroke-width: 1.5 !important;
+  filter: drop-shadow(0 0 6px #ffd56b) drop-shadow(0 0 12px rgba(255, 213, 107, 0.9)) !important;
+}
+
+/* Note States - Past (Already played) */
+.score-svg-wrap svg .vf-stavenote.past text,
+.score-svg-wrap svg .vf-stavenote.past .vf-notehead text {
+  fill: rgba(201, 168, 76, 0.70) !important;
+}
+
+.score-svg-wrap svg .vf-stavenote.past path {
+  fill: rgba(201, 168, 76, 0.70) !important;
+  stroke: rgba(201, 168, 76, 0.70) !important;
+}
+
+/* Note States - Upcoming */
+.score-svg-wrap svg .vf-stavenote.upcoming text,
+.score-svg-wrap svg .vf-stavenote.upcoming .vf-notehead text {
+  fill: #f1f5f9 !important;
+}
+
+.score-svg-wrap svg .vf-stavenote.upcoming path {
+  fill: #f1f5f9 !important;
+  stroke: #f1f5f9 !important;
+}
