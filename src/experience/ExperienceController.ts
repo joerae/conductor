@@ -23,6 +23,7 @@ import { DebugOverlay } from "../ui/DebugOverlay";
 import { DEFAULT_PIECE_ID, getPieceById, REPERTOIRE } from "../score/repertoire";
 import type { PieceDefinition } from "../score/repertoire";
 import { LoadingCoordinator } from "../warmup/LoadingCoordinator";
+import { setGaugeBpmRange, initBpmGaugeTicks } from "../ui/bpmGauge";
 
 import type { CameraAxisMapping } from "./gesturalTempoMath";
 import { calculateGesturalTempoMultiplier } from "./gesturalTempoMath";
@@ -181,7 +182,7 @@ export class ExperienceController implements CameraWiringHost, PlaybackHost {
     // Clock uses AudioEngine's time function for audio scheduling
     this.clock = new ConductorClock({
       getAudioTime: () => this.audioEngine.getAudioTime(),
-      initialMode: "magic", // Default to Mode: Magic Finger
+      initialMode: "gestural", // Default to Mode: Expressive (Mode E)
     });
     this.clock.setBpm(this.nominalPieceBpm);
     this.clock.setPeriodMs(60000 / this.nominalPieceBpm);
@@ -303,6 +304,15 @@ export class ExperienceController implements CameraWiringHost, PlaybackHost {
     const beatsPerTap = this.getEffectiveBeatsPerTap();
     this.clock.setBeatsPerTap(beatsPerTap);
     this.transport.setBeatsPerTap(beatsPerTap);
+    this.pausedBeat = piece.startBeat ?? 0;
+
+    const minBpm = piece.minBpm ?? 40;
+    const maxBpm = piece.maxBpm ?? 220;
+    setGaugeBpmRange(minBpm, maxBpm);
+    this.clock.setBpmRange(minBpm - 20, maxBpm + 20);
+    if (typeof document !== "undefined") {
+      initBpmGaugeTicks();
+    }
 
     const meta = this.midiScore.getMetadata();
     this.nominalPieceBpm = meta?.embeddedBpm || piece.defaultBpm || 140;
@@ -347,7 +357,7 @@ export class ExperienceController implements CameraWiringHost, PlaybackHost {
 
     try {
       await Promise.all([
-        this.midiScore.load(piece.midiUrl),
+        this.midiScore.load(piece.midiUrl, piece.trackPrograms, piece.velocityScale),
         this.audioEngine.loadPieceSamples(piece).catch(err =>
           console.warn("Conductor: piece sample loading failed, using fallback click", err)
         ),
@@ -364,7 +374,7 @@ export class ExperienceController implements CameraWiringHost, PlaybackHost {
       }
 
       this.prepTapCount = 0;
-      this.pausedBeat = 0;
+      this.pausedBeat = piece.startBeat ?? 0;
       this.setState("ready");
     } catch (err) {
       console.error("Conductor: failed to load piece", err);
@@ -393,7 +403,7 @@ export class ExperienceController implements CameraWiringHost, PlaybackHost {
       });
 
     coordinator.updateTask("score", "loading");
-    const scorePromise = this.midiScore.load(piece.midiUrl, piece.trackPrograms)
+    const scorePromise = this.midiScore.load(piece.midiUrl, piece.trackPrograms, piece.velocityScale)
       .then(() => {
         this.applyPieceMetadata(piece);
         coordinator.updateTask("score", "ready");
@@ -427,7 +437,7 @@ export class ExperienceController implements CameraWiringHost, PlaybackHost {
     await Promise.all([violinPromise, scorePromise, instrumentsPromise, cameraPromise]);
 
     this.prepTapCount = 0;
-    this.pausedBeat = 0;
+    this.pausedBeat = piece.startBeat ?? 0;
     if (!this.isWarmupFeatureEnabled) {
       this.isWarmingUp = false;
     }
@@ -438,7 +448,7 @@ export class ExperienceController implements CameraWiringHost, PlaybackHost {
     if (source === "camera") {
       this.inputSource = "camera";
       if (this.clock.getTempoMode() !== "gestural" && this.clock.getTempoMode() !== "magic") {
-        this.setTempoMode("magic");
+        this.setTempoMode("gestural");
       }
       try {
         await this.initCamera();

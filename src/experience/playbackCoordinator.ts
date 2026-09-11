@@ -110,7 +110,8 @@ export async function startPlayback(host: PlaybackHost): Promise<void> {
       const startBeat = host.pausedBeat;
       const beatsPerTap = host.getEffectiveBeatsPerTap();
       const piece = host.getCurrentPiece();
-      const leadInBeats = (startBeat === 0 && piece?.leadInBeats) ? piece.leadInBeats : 0;
+      const initialStart = piece?.startBeat ?? 0;
+      const leadInBeats = (startBeat === initialStart && piece?.leadInBeats) ? piece.leadInBeats : 0;
 
       host.transport.start(startBeat, startAudioTime, periodSec, beatsPerTap, leadInBeats);
       host.scheduler.start();
@@ -184,7 +185,7 @@ export function restartPlayback(host: PlaybackHost): void {
   }
   host.audioEngine.stopAllNotes();
   host.prepTapCount = 0;
-  host.pausedBeat = 0;
+  host.pausedBeat = host.getCurrentPiece()?.startBeat ?? 0;
   host.setState("ready");
 }
 

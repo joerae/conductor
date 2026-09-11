@@ -625,16 +625,17 @@ describe("ExperienceController Lifecycle & Bug Regressions", () => {
     }));
   });
 
-  it("Issue 25: defaults to Magic Finger mode on startup", () => {
+  it("defaults to Expressive mode on startup", () => {
     const controller = new ExperienceController(createMockCallbacks());
-    expect(controller.getTempoMode()).toBe("magic");
+    expect(controller.getTempoMode()).toBe("gestural");
   });
 
-  it("Issue 26: raising hand in magic finger mode starts playback at piece suggested tempo, not minimum BPM", async () => {
+  it("raising hand in magic finger mode starts playback at piece suggested tempo, not minimum BPM", async () => {
     vi.spyOn(CameraBeatInputProvider.prototype, "start").mockResolvedValue();
     const controller = new ExperienceController(createMockCallbacks());
     await controller.load();
 
+    controller.setTempoMode("magic");
     expect(controller.getTempoMode()).toBe("magic");
     const suggestedBpm = controller.getNominalPieceBpm();
     expect(suggestedBpm).toBeGreaterThanOrEqual(100);

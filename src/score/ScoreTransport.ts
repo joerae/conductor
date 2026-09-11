@@ -108,7 +108,7 @@ export class ScoreTransport {
   ): void {
     this.beatsPerTap = Math.max(1, beatsPerTap);
     this.periodSec = periodSec / this.beatsPerTap;
-    const effectiveLeadIn = startBeat === 0 ? Math.max(0, leadInBeats) : 0;
+    const effectiveLeadIn = Math.max(0, leadInBeats);
     this.originBeat = startBeat;
     this.originAudioTime = audioTime + effectiveLeadIn * this.periodSec;
     this.cursorBeat = startBeat - effectiveLeadIn;

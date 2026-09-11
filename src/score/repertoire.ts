@@ -32,6 +32,14 @@ export interface PieceDefinition {
   sections: PieceSection[];
   /** Number of silent beats to count off before score starts (e.g. 1 for Beethoven 5 pickup). */
   leadInBeats?: number;
+  /** Optional beat offset where score playback begins (e.g. 12 for Imperial March to start at music entrance). */
+  startBeat?: number;
+  /** Minimum allowable tempo BPM for this piece. */
+  minBpm?: number;
+  /** Maximum allowable tempo BPM for this piece. */
+  maxBpm?: number;
+  /** Overall note velocity multiplier across the piece (e.g. 0.75 reduces velocity by 25%). */
+  velocityScale?: number;
   /** Optional explicit track index to GM program number mapping for MIDI files without program change events. */
   trackPrograms?: Record<number, number>;
 }
@@ -47,6 +55,8 @@ export const REPERTOIRE: PieceDefinition[] = [
     midiFile: "Eine-Kleine-Nachtmusik1.mid",
     midiUrl: "/midi/Eine-Kleine-Nachtmusik1.mid",
     defaultBpm: 140,
+    minBpm: 50,
+    maxBpm: 210,
     timeSignature: "4/4",
     keySignature: "G",
     beatsPerTap: 1,
@@ -70,6 +80,9 @@ export const REPERTOIRE: PieceDefinition[] = [
     midiFile: "5th-Symphony-Part-1.mid",
     midiUrl: "/midi/5th-Symphony-Part-1.mid",
     defaultBpm: 108,
+    minBpm: 60,
+    maxBpm: 240,
+    velocityScale: 0.75,
     timeSignature: "2/4",
     keySignature: "Cm",
     beatsPerTap: 1,

@@ -87,4 +87,42 @@ describe("Beethoven Metadata & Score Lead-In Timing (Issues 8 & 9)", () => {
     expect(directTransport.getCursorBeat()).toBeCloseTo(0.0, 3);
     expect(directTransport.audioTimeForBeat(0)).toBeCloseTo(10.0, 3);
   });
+
+  it("Metadata: Beethoven velocityScale and min/max tempo bounds are configured", () => {
+    const jsonPath = path.resolve(__dirname, "../public/midi/5th-Symphony-Part-1.json");
+    const jsonData = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
+    const builtInBeethoven = getPieceById("beethoven-5");
+
+    expect(jsonData.velocityScale).toBe(0.75);
+    expect(builtInBeethoven?.velocityScale).toBe(0.75);
+
+    expect(jsonData.minBpm).toBe(60);
+    expect(jsonData.maxBpm).toBe(240);
+    expect(builtInBeethoven?.minBpm).toBe(60);
+    expect(builtInBeethoven?.maxBpm).toBe(240);
+  });
+
+  it("Metadata: Eine Kleine has customized min/max tempo bounds", () => {
+    const jsonPath = path.resolve(__dirname, "../public/midi/Eine-Kleine-Nachtmusik1.json");
+    const jsonData = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
+    const builtInEineKleine = getPieceById("eine-kleine");
+
+    expect(jsonData.minBpm).toBe(50);
+    expect(jsonData.maxBpm).toBe(210);
+    expect(builtInEineKleine?.minBpm).toBe(50);
+    expect(builtInEineKleine?.maxBpm).toBe(210);
+  });
+
+  it("Metadata: Imperial March defines startBeat = 12 to skip leading rests", () => {
+    const jsonPath = path.resolve(__dirname, "../public/midi/The-Imperial-March.json");
+    const jsonData = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
+
+    expect(jsonData.startBeat).toBe(12);
+
+    const transport = new ScoreTransport();
+    transport.setEvents([], 100);
+    transport.start(12, 5.0, 0.5, 1, 0);
+    expect(transport.getCursorBeat()).toBeCloseTo(12.0, 3);
+    expect(transport.audioTimeForBeat(12)).toBeCloseTo(5.0, 3);
+  });
 });

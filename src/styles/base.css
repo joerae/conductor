@@ -1028,4 +1028,69 @@ html, body {
   font-weight: bold;
   line-height: 1;
 }
+
+/* ── Responsive & Mobile Adjustments for Mode Selectors ───────────────────── */
+@media (max-width: 768px) {
+  .control-bars-wrap {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .mode-selector-container {
+    padding: 4px 10px;
+    border-radius: 20px;
+    gap: 6px;
+  }
+
+  .mode-label {
+    font-size: 0.72rem;
+  }
+
+  .mode-pill-group {
+    padding: 2px;
+    gap: 2px;
+  }
+
+  .mode-pill {
+    padding: 5px 9px;
+    font-size: 0.74rem;
+    min-height: 30px;
+  }
+
+  .mode-shortcut-hint {
+    display: none; /* Hide verbose desktop keyboard shortcuts on mobile/touch */
+  }
+}
+
+@media (max-width: 480px) {
+  .control-bars-wrap {
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 0 8px;
+    box-sizing: border-box;
+  }
+
+  .mode-selector-container {
+    width: 100%;
+    max-width: 340px;
+    justify-content: space-between;
+    box-sizing: border-box;
+  }
+
+  .mode-pill-group {
+    flex: 1;
+    justify-content: flex-end;
+  }
+
+  .mode-pill {
+    flex: 1;
+    text-align: center;
+    padding: 6px 4px;
+    font-size: 0.70rem;
+    min-height: 32px;
+  }
+}
+
 

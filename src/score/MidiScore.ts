@@ -25,16 +25,21 @@ export class MidiScore {
   /**
    * Load and parse a MIDI file from a URL (e.g. "/midi/Eine-Kleine-Nachtmusik1.mid").
    * Optional trackProgramMap allows explicit offline mapping of track indices to GM programs.
+   * Optional velocityScale scales authored note velocities (e.g. 0.75 reduces by 25%).
    * Returns self for chaining.
    */
-  async load(url: string, trackProgramMap?: Record<number, number>): Promise<this> {
+  async load(
+    url: string,
+    trackProgramMap?: Record<number, number>,
+    velocityScale: number = 1.0
+  ): Promise<this> {
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch MIDI file: ${url} (${response.status})`);
     }
     const buffer = await response.arrayBuffer();
     const midi = new Midi(buffer);
-    this.parseMidi(midi, trackProgramMap);
+    this.parseMidi(midi, trackProgramMap, velocityScale);
     return this;
   }
 
@@ -51,7 +56,11 @@ export class MidiScore {
 
   // ── Private ─────────────────────────────────────────────────────────────
 
-  private parseMidi(midi: Midi, trackProgramMap?: Record<number, number>): void {
+  private parseMidi(
+    midi: Midi,
+    trackProgramMap?: Record<number, number>,
+    velocityScale: number = 1.0
+  ): void {
     const ppq = midi.header.ppq;
     const events: ScoreEvent[] = [];
 
@@ -113,7 +122,7 @@ export class MidiScore {
           trackId,
           noteId,
           midiNote: note.midi,
-          velocity: Math.round(note.velocity * 127),
+          velocity: Math.max(1, Math.min(127, Math.round(note.velocity * 127 * velocityScale))),
           channel,
           program,
         });

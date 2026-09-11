@@ -7,6 +7,7 @@
   "year": 1980,
   "midiFile": "The-Imperial-March.mid",
   "defaultBpm": 105,
+  "startBeat": 12,
   "timeSignature": "4/4",
   "keySignature": "Gm",
   "beatsPerTap": 1,

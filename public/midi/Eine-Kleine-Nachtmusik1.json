@@ -7,6 +7,8 @@
   "year": 1787,
   "midiFile": "Eine-Kleine-Nachtmusik1.mid",
   "defaultBpm": 140,
+  "minBpm": 50,
+  "maxBpm": 210,
   "timeSignature": "4/4",
   "beatsPerTap": 1,
   "conductMode": "In 4 (1 tap = 1 beat)",

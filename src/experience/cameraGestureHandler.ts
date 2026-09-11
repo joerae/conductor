@@ -197,7 +197,9 @@ export function processCameraSamples(samples: HandSample[], host: CameraGestureH
           void host.startPlayback();
         }
       } else if (host.state === "playing") {
-        const targetBpm = Math.max(40, Math.min(240, host.basePieceBpm * tempoMultiplier));
+        const pieceMinBpm = host.getCurrentPiece()?.minBpm ?? 40;
+        const pieceMaxBpm = host.getCurrentPiece()?.maxBpm ?? 240;
+        const targetBpm = Math.max(pieceMinBpm, Math.min(pieceMaxBpm, host.basePieceBpm * tempoMultiplier));
         const now = performance.now();
         if (host.lastGesturalUpdateMs === 0) host.lastGesturalUpdateMs = now;
         const dt = Math.max(0.005, (now - host.lastGesturalUpdateMs) / 1000);

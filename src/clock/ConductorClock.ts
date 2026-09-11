@@ -158,21 +158,30 @@ export class ConductorClock {
     this.tempoDeadband = Math.max(0, Math.min(0.25, deadbandRatio));
   }
 
+  private minBpm: number = BPM_MIN;
+  private maxBpm: number = BPM_MAX;
+
   /** Get the current jitter deadband ratio. */
   getTempoDeadband(): number {
     return this.tempoDeadband;
   }
 
+  /** Configure minimum and maximum allowable BPM for the piece. */
+  setBpmRange(minBpm: number = BPM_MIN, maxBpm: number = BPM_MAX): void {
+    this.minBpm = minBpm;
+    this.maxBpm = maxBpm;
+  }
+
   /** Set base period directly in milliseconds (used for intended piece BPM or gestural modulation). */
   setPeriodMs(periodMs: number): void {
-    const clamped = Math.max(60000 / BPM_MAX, Math.min(60000 / BPM_MIN, periodMs));
+    const clamped = Math.max(60000 / this.maxBpm, Math.min(60000 / this.minBpm, periodMs));
     this.periodMs = clamped;
     this.prevIntervalMs = clamped;
   }
 
   /** Directly set BPM (used in Mode E for continuous height-based accelerando/rallentando). */
   setBpm(bpm: number): void {
-    const clamped = Math.max(BPM_MIN, Math.min(BPM_MAX, bpm));
+    const clamped = Math.max(this.minBpm, Math.min(this.maxBpm, bpm));
     this.periodMs = (60000 / clamped) * this.beatsPerTap;
     this.prevIntervalMs = this.periodMs;
   }

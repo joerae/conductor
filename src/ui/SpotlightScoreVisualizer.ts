@@ -598,7 +598,10 @@ export class SpotlightScoreVisualizer {
       const keySig = piece?.keySignature || "C";
 
       const transport = this.getTransport();
-      const cursorBeat = transport ? transport.getCursorBeat() : 0;
+      const isPlaying = typeof transport?.isPlaying === "function" ? transport.isPlaying() : false;
+      const cursorBeat = isPlaying
+        ? transport!.getCursorBeat()
+        : (transport && transport.getCursorBeat() > 0 ? transport.getCursorBeat() : (piece?.startBeat ?? 0));
       const currentBar = Math.floor(Math.max(0, cursorBeat) / this.beatsPerBar);
 
       this.lastRenderedBar = currentBar;
@@ -909,7 +912,11 @@ export class SpotlightScoreVisualizer {
     if (!this.container || !this.isVisible || typeof document === "undefined") return;
 
     const transport = this.getTransport();
-    const cursorBeat = transport ? transport.getCursorBeat() : 0;
+    const piece = this.getCurrentPiece();
+    const isPlaying = typeof transport?.isPlaying === "function" ? transport.isPlaying() : false;
+    const cursorBeat = isPlaying
+      ? transport!.getCursorBeat()
+      : (transport && transport.getCursorBeat() > 0 ? transport.getCursorBeat() : (piece?.startBeat ?? 0));
     const currentBar = Math.floor(Math.max(0, cursorBeat) / this.beatsPerBar);
 
     // If measure window advances, re-render full VexFlow score

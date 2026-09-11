@@ -8,20 +8,38 @@
 export const MIN_GAUGE_BPM = 40;
 export const MAX_GAUGE_BPM = 220;
 
+let activeMinBpm = MIN_GAUGE_BPM;
+let activeMaxBpm = MAX_GAUGE_BPM;
+
 /**
- * Maps a BPM value [40, 220] linearly to vertical percentage [0%, 100%].
+ * Sets the active BPM range for the gauge display and pointer mapping.
  */
-export function bpmToPercent(bpm: number): number {
-  const clamped = Math.max(MIN_GAUGE_BPM, Math.min(MAX_GAUGE_BPM, bpm));
-  return ((clamped - MIN_GAUGE_BPM) / (MAX_GAUGE_BPM - MIN_GAUGE_BPM)) * 100;
+export function setGaugeBpmRange(minBpm: number = MIN_GAUGE_BPM, maxBpm: number = MAX_GAUGE_BPM): void {
+  activeMinBpm = minBpm;
+  activeMaxBpm = maxBpm;
 }
 
 /**
- * Maps a vertical percentage [0%, 100%] linearly back to BPM [40, 220].
+ * Returns the currently configured BPM gauge range.
  */
-export function percentToBpm(percent: number): number {
+export function getGaugeBpmRange(): { minBpm: number; maxBpm: number } {
+  return { minBpm: activeMinBpm, maxBpm: activeMaxBpm };
+}
+
+/**
+ * Maps a BPM value linearly to vertical percentage [0%, 100%] according to active gauge bounds.
+ */
+export function bpmToPercent(bpm: number, minBpm = activeMinBpm, maxBpm = activeMaxBpm): number {
+  const clamped = Math.max(minBpm, Math.min(maxBpm, bpm));
+  return ((clamped - minBpm) / Math.max(1, maxBpm - minBpm)) * 100;
+}
+
+/**
+ * Maps a vertical percentage [0%, 100%] linearly back to BPM according to active gauge bounds.
+ */
+export function percentToBpm(percent: number, minBpm = activeMinBpm, maxBpm = activeMaxBpm): number {
   const clamped = Math.max(0, Math.min(100, percent));
-  return MIN_GAUGE_BPM + (clamped / 100) * (MAX_GAUGE_BPM - MIN_GAUGE_BPM);
+  return minBpm + (clamped / 100) * (maxBpm - minBpm);
 }
 
 /**
@@ -35,10 +53,19 @@ export function initBpmGaugeTicks(container?: HTMLElement | null): void {
       : null);
   if (!ticksContainer) return;
   const ticks = ticksContainer.querySelectorAll<HTMLElement>(".bpm-tick");
+  if (ticks.length >= 2 && (activeMinBpm !== MIN_GAUGE_BPM || activeMaxBpm !== MAX_GAUGE_BPM)) {
+    ticks[0].textContent = `${activeMaxBpm}`;
+    ticks[ticks.length - 1].textContent = `${activeMinBpm}`;
+  }
   ticks.forEach(tick => {
     const val = parseFloat(tick.textContent || "");
     if (!isNaN(val)) {
-      tick.style.bottom = `${bpmToPercent(val).toFixed(2)}%`;
+      if (val < activeMinBpm || val > activeMaxBpm) {
+        tick.style.display = "none";
+      } else {
+        tick.style.display = "";
+        tick.style.bottom = `${bpmToPercent(val).toFixed(2)}%`;
+      }
     }
   });
 }
