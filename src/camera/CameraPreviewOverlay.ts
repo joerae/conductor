@@ -31,6 +31,7 @@ export class CameraPreviewOverlay {
 
   private isMounted = false;
   private isCollapsed = false;
+  private lastVideoAspect = 0;
   private mirror: boolean;
   private onClose?: () => void;
   private activeBeatFlashes: Array<{ x: number; y: number; startTime: number; direction: "trough" | "apex" }> = [];
@@ -306,6 +307,12 @@ export class CameraPreviewOverlay {
 
     const width = this.videoEl.videoWidth || 320;
     const height = this.videoEl.videoHeight || 240;
+    const videoAspect = width / Math.max(1, height);
+
+    if (this.containerEl && Math.abs(videoAspect - this.lastVideoAspect) > 0.001) {
+      this.lastVideoAspect = videoAspect;
+      this.containerEl.style.setProperty("--camera-source-aspect", `${width} / ${height}`);
+    }
 
     if (this.canvasEl.width !== width || this.canvasEl.height !== height) {
       this.canvasEl.width = width;
@@ -767,6 +774,7 @@ export class CameraPreviewOverlay {
     this.ctx = null;
     this.statusBadgeEl = null;
     this.telemetryEl = null;
+    this.lastVideoAspect = 0;
     this.isMounted = false;
   }
 

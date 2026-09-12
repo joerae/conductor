@@ -1,0 +1,663 @@
+/* Responsive performance layout. Imported last so these rules can coordinate
+   the independently-owned stage, camera, score, warmup, and debug surfaces. */
+
+:root {
+  --stage-inline-padding: 32px;
+  --stage-block-padding: clamp(16px, 2.5vh, 28px);
+  --stage-layout-gap: clamp(12px, 2vh, 24px);
+  --performance-gap: clamp(10px, 1.5vw, 20px);
+  --side-gauge-width: clamp(104px, 10vw, 140px);
+  --camera-inline-size: min(
+    720px,
+    calc(
+      100vw - var(--stage-inline-padding) - var(--stage-inline-padding) -
+      var(--side-gauge-width) - var(--side-gauge-width) -
+      var(--performance-gap) - var(--performance-gap)
+    )
+  );
+  --orchestra-inline-size: min(720px, 80vw);
+}
+
+#stage {
+  gap: var(--stage-layout-gap);
+  padding: var(--stage-block-padding) var(--stage-inline-padding);
+  padding-bottom: max(var(--stage-block-padding), env(safe-area-inset-bottom));
+}
+
+.stage-performance-area {
+  gap: var(--stage-layout-gap);
+}
+
+#orchestra-silhouette {
+  width: var(--orchestra-inline-size);
+}
+
+.stage-camera-row {
+  display: grid;
+  grid-template-columns: var(--side-gauge-width) minmax(0, var(--camera-inline-size)) var(--side-gauge-width);
+  grid-template-areas: "dynamics camera tempo";
+  align-items: center;
+  justify-content: center;
+  gap: var(--performance-gap);
+}
+
+.stage-center-column {
+  grid-area: camera;
+  min-width: 0;
+  width: 100%;
+  max-width: var(--camera-inline-size);
+}
+
+.camera-hero-slot {
+  width: 100%;
+  max-width: var(--camera-inline-size);
+  min-height: 0;
+}
+
+.camera-hero-slot .camera-preview-overlay,
+.camera-preview-overlay,
+.dynamic-ladder-container {
+  max-width: var(--camera-inline-size);
+}
+
+.camera-preview-overlay {
+  --camera-source-aspect: 4 / 3;
+}
+
+.camera-media-wrap {
+  aspect-ratio: var(--camera-source-aspect);
+}
+
+.camera-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.camera-title-group {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.camera-title {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.camera-status-badge {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dynamic-vertical-gauge {
+  grid-area: dynamics;
+  width: var(--side-gauge-width);
+}
+
+.bpm-vertical-gauge {
+  grid-area: tempo;
+  width: var(--side-gauge-width);
+}
+
+#stage-footer {
+  position: relative;
+  bottom: auto;
+  justify-content: center;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.compact-details-btn {
+  display: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  color: var(--text-secondary);
+  font: 500 0.7rem var(--font-ui);
+  letter-spacing: 0.04em;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.stage-warming-up .camera-hero-slot {
+  min-height: min(480px, 60dvh);
+}
+
+/* Medium-height desktop tier: retain the full heading while constraining the
+   live performance area until the spacious desktop composition really fits. */
+@media (min-width: 721px) and (min-height: 1001px) and (max-height: 1250px) {
+  :root {
+    --stage-inline-padding: clamp(12px, 1.5vw, 20px);
+    --stage-block-padding: clamp(8px, 1.2vh, 12px);
+    --stage-layout-gap: clamp(6px, 0.8vh, 8px);
+    --performance-gap: clamp(8px, 1vw, 14px);
+    --side-gauge-width: clamp(96px, 9vw, 120px);
+    --camera-inline-size: min(720px, 58vw, calc(37dvh + 200px));
+    --orchestra-inline-size: min(680px, 72vw);
+  }
+
+  #piece-info,
+  #orchestra-silhouette,
+  .control-bars-wrap,
+  .mode-selector-container {
+    margin-bottom: 0;
+  }
+
+  #orchestra-silhouette {
+    margin-top: 0;
+  }
+
+  .stage-camera-row {
+    align-items: stretch;
+  }
+
+  .stage-center-column {
+    gap: 8px;
+  }
+
+  .camera-preview-header {
+    padding: 7px 10px;
+  }
+
+  .camera-telemetry-hud {
+    padding: 4px 8px;
+  }
+
+  .dynamic-ladder-container {
+    padding: 7px 10px;
+    margin: 3px 0 5px;
+  }
+
+  .dynamic-ladder-header {
+    margin-bottom: 5px;
+    padding-bottom: 3px;
+  }
+
+  .dynamic-vertical-gauge,
+  .bpm-vertical-gauge {
+    width: var(--side-gauge-width);
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    align-self: stretch;
+    padding: 10px 8px;
+  }
+
+  .dynamic-gauge-track-wrap,
+  .bpm-gauge-track-wrap {
+    min-height: 0;
+    gap: 8px;
+    margin: 8px 0;
+  }
+
+  .control-bars-wrap {
+    gap: 8px;
+  }
+
+  .mode-selector-container {
+    gap: 7px;
+    padding: 4px 10px;
+  }
+
+  .mode-pill {
+    min-height: 34px;
+    padding: 5px 10px;
+    font-size: 0.74rem;
+  }
+
+  .mode-shortcut-hint,
+  #stage-footer .footer-divider,
+  #stage-footer .footer-credit,
+  #stage-footer .debug-hint {
+    display: none;
+  }
+
+  .compact-details-btn {
+    display: inline-flex;
+  }
+
+  #stage.compact-details-open .mode-shortcut-hint,
+  #stage.compact-details-open #stage-footer .footer-divider,
+  #stage.compact-details-open #stage-footer .footer-credit,
+  #stage.compact-details-open #stage-footer .debug-hint {
+    display: inline;
+  }
+}
+
+/* Chromebook and short-window tier: preserve the compact composition through
+   ordinary laptop heights, with camera size growing continuously. */
+@media (min-width: 600px) and (max-height: 1000px) {
+  :root {
+    --stage-inline-padding: clamp(8px, 1.5vw, 18px);
+    --stage-block-padding: clamp(5px, 1.2vh, 10px);
+    --stage-layout-gap: clamp(3px, 0.8vh, 7px);
+    --performance-gap: clamp(7px, 1vw, 12px);
+    --side-gauge-width: clamp(84px, 9vw, 108px);
+    --camera-inline-size: min(720px, 58vw, calc(37dvh + 200px));
+    --orchestra-inline-size: min(620px, 68vw, 90dvh);
+  }
+
+  #piece-info,
+  #orchestra-silhouette,
+  .control-bars-wrap,
+  .mode-selector-container {
+    margin-bottom: 0;
+  }
+
+  #orchestra-silhouette {
+    margin-top: 0;
+  }
+
+  #piece-title {
+    font-size: clamp(1.15rem, 2.7vw, 1.8rem);
+    margin-bottom: 0;
+  }
+
+  #piece-subtitle {
+    display: none;
+  }
+
+  .repertoire-pill-btn {
+    padding: 3px 9px;
+    font-size: 0.7rem;
+  }
+
+  .stage-camera-row {
+    align-items: stretch;
+  }
+
+  .stage-center-column {
+    gap: 5px;
+  }
+
+  .camera-preview-header {
+    padding: 5px 8px;
+  }
+
+  .camera-title {
+    font-size: 0.7rem;
+  }
+
+  .camera-status-badge {
+    font-size: 0.56rem;
+  }
+
+  .camera-btn-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .camera-telemetry-hud {
+    padding: 3px 6px;
+    font-size: 8px;
+  }
+
+  .telemetry-item .label {
+    font-size: 7px;
+  }
+
+  .dynamic-ladder-container {
+    padding: 5px 8px;
+    margin: 2px 0 3px;
+  }
+
+  .dynamic-ladder-header {
+    margin-bottom: 4px;
+    padding-bottom: 2px;
+  }
+
+  .dynamic-ladder-wrap {
+    gap: 4px;
+  }
+
+  .dynamic-step {
+    min-width: 0;
+    padding: 3px 2px;
+  }
+
+  .dynamic-symbol {
+    font-size: 0.82rem;
+  }
+
+  .dynamic-analogue-track {
+    height: 9px;
+    margin-top: 2px;
+  }
+
+  .dynamic-vertical-gauge,
+  .bpm-vertical-gauge {
+    width: var(--side-gauge-width);
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    align-self: stretch;
+    padding: 7px 6px;
+  }
+
+  .dynamic-gauge-track-wrap,
+  .bpm-gauge-track-wrap {
+    min-height: 0;
+    gap: 6px;
+    margin: 6px 0;
+  }
+
+  .dynamic-vertical-steps {
+    width: 40px;
+  }
+
+  .dynamic-vertical-steps .dynamic-step {
+    min-height: 22px;
+    padding: 2px 3px;
+  }
+
+  .dynamic-vertical-track,
+  .bpm-gauge-track {
+    width: 22px;
+  }
+
+  .dynamic-gauge-header,
+  .bpm-gauge-header {
+    padding-bottom: 4px;
+  }
+
+  .dynamic-gauge-title,
+  .bpm-gauge-title {
+    font-size: 0.58rem;
+  }
+
+  .bpm-current-val {
+    font-size: 1.05rem;
+  }
+
+  .bpm-current-unit {
+    font-size: 0.55rem;
+  }
+
+  .bpm-gauge-footer-hint,
+  .dynamic-gauge-footer-hint {
+    padding-top: 3px;
+    font-size: 0.52rem;
+  }
+
+  .control-bars-wrap {
+    gap: 6px;
+  }
+
+  .mode-selector-container {
+    gap: 5px;
+    padding: 3px 8px;
+  }
+
+  .mode-pill {
+    min-height: 32px;
+    padding: 4px 8px;
+    font-size: 0.7rem;
+  }
+
+  .mode-shortcut-hint,
+  #stage-footer .footer-divider,
+  #stage-footer .footer-credit,
+  #stage-footer .debug-hint {
+    display: none;
+  }
+
+  .compact-details-btn {
+    display: inline-flex;
+  }
+
+  #stage.compact-details-open .mode-shortcut-hint,
+  #stage.compact-details-open #stage-footer .footer-divider,
+  #stage.compact-details-open #stage-footer .footer-credit,
+  #stage.compact-details-open #stage-footer .debug-hint {
+    display: inline;
+  }
+
+  #prompt {
+    font-size: 0.82rem;
+  }
+
+  #stage-actions {
+    margin-top: 0;
+  }
+
+  .stage-action-btn,
+  #repertoire-switch-btn,
+  #restart-btn {
+    padding: 6px 14px;
+    font-size: 0.72rem;
+  }
+}
+
+@media (min-width: 900px) and (max-height: 650px) {
+  :root {
+    --camera-inline-size: min(720px, 58vw, 56dvh);
+  }
+}
+
+/* Narrow and phone tier: use a portrait camera so the tempo gauge can remain
+   visible beside the performance surface instead of falling far below it. */
+@media (max-width: 720px) {
+  :root {
+    --stage-inline-padding: max(10px, env(safe-area-inset-left));
+    --stage-block-padding: max(8px, env(safe-area-inset-top));
+    --stage-layout-gap: 8px;
+    --performance-gap: 8px;
+    --side-gauge-width: clamp(82px, 24vw, 104px);
+    --portrait-camera-max: 420px;
+    --camera-inline-size: min(
+      var(--portrait-camera-max),
+      calc(20dvh + 100px),
+      calc(
+        100vw - var(--stage-inline-padding) - var(--stage-inline-padding) -
+        var(--side-gauge-width) - var(--performance-gap)
+      )
+    );
+    --orchestra-inline-size: min(94vw, 520px, 45dvh);
+  }
+
+  #piece-info {
+    margin-bottom: 0;
+  }
+
+  #piece-title {
+    font-size: clamp(1.25rem, 7vw, 1.8rem);
+  }
+
+  #piece-subtitle {
+    font-size: 0.66rem;
+    letter-spacing: 0.07em;
+  }
+
+  .stage-camera-row {
+    grid-template-columns: minmax(0, var(--camera-inline-size)) var(--side-gauge-width);
+    grid-template-areas:
+      "camera tempo"
+      "dynamics .";
+    align-items: stretch;
+  }
+
+  #stage.magic-mode-active {
+    --side-gauge-width: clamp(88px, 14vw, 104px);
+    --camera-inline-size: min(
+      var(--portrait-camera-max),
+      calc(20dvh + 100px),
+      calc(
+        100vw - var(--stage-inline-padding) - var(--stage-inline-padding) -
+        var(--side-gauge-width) - var(--side-gauge-width) -
+        var(--performance-gap) - var(--performance-gap)
+      )
+    );
+  }
+
+  .stage-center-column {
+    display: contents;
+  }
+
+  .camera-hero-slot {
+    grid-area: camera;
+    width: 100%;
+    max-width: var(--camera-inline-size);
+    justify-self: center;
+  }
+
+  .camera-preview-overlay {
+    max-width: var(--camera-inline-size);
+  }
+
+  .dynamic-ladder-container {
+    grid-area: dynamics;
+    width: 100%;
+    max-width: var(--camera-inline-size);
+    justify-self: center;
+  }
+
+  #stage.magic-mode-active .stage-camera-row {
+    grid-template-columns:
+      var(--side-gauge-width)
+      minmax(0, var(--camera-inline-size))
+      var(--side-gauge-width);
+    grid-template-areas: "dynamics camera tempo";
+  }
+
+  #stage.magic-mode-active .camera-hero-slot {
+    height: auto;
+  }
+
+  .stage-warming-up .camera-hero-slot {
+    min-height: min(480px, calc(26.667dvh + 133px));
+  }
+
+  .camera-media-wrap {
+    aspect-ratio: 3 / 4;
+  }
+
+  .camera-video,
+  .camera-canvas {
+    object-fit: cover;
+  }
+
+  .dynamic-step {
+    min-width: 0;
+  }
+
+  .dynamic-vertical-gauge,
+  .bpm-vertical-gauge,
+  .magic-mode-active .dynamic-vertical-gauge,
+  .magic-mode-active .bpm-vertical-gauge {
+    width: var(--side-gauge-width);
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    align-self: stretch;
+    padding: 9px 8px;
+  }
+
+  #stage:not(.magic-mode-active) .bpm-vertical-gauge {
+    grid-column: auto;
+    justify-self: stretch;
+    width: var(--side-gauge-width);
+  }
+
+  #stage.magic-mode-active .dynamic-vertical-gauge {
+    grid-area: dynamics;
+    grid-column: auto;
+    justify-self: stretch;
+    width: var(--side-gauge-width);
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .dynamic-gauge-track-wrap,
+  .bpm-gauge-track-wrap,
+  .magic-mode-active .dynamic-gauge-track-wrap,
+  .magic-mode-active .bpm-gauge-track-wrap {
+    min-height: 150px;
+    margin: 7px 0;
+    gap: 7px;
+  }
+
+  .dynamic-vertical-steps {
+    width: 44px;
+  }
+
+  .dynamic-vertical-steps .dynamic-step {
+    min-height: 24px;
+    padding: 2px 4px;
+  }
+
+  .camera-btn-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .control-bars-wrap {
+    gap: 6px;
+    margin-bottom: 0;
+  }
+
+  .mode-selector-container {
+    gap: 5px;
+    padding: 3px 8px;
+  }
+
+  .mode-pill {
+    min-height: 32px;
+    padding: 4px 8px;
+    font-size: 0.7rem;
+  }
+
+  #prompt {
+    font-size: 0.82rem;
+  }
+
+  #stage-actions {
+    margin-top: 0;
+  }
+
+  .stage-action-btn,
+  #repertoire-switch-btn,
+  #restart-btn {
+    padding: 6px 12px;
+    font-size: 0.72rem;
+  }
+
+  #stage-footer .footer-divider,
+  #stage-footer .footer-credit,
+  #stage-footer .debug-hint,
+  .mode-shortcut-hint {
+    display: none;
+  }
+
+  .compact-details-btn {
+    display: inline-flex;
+  }
+
+  #stage.compact-details-open .mode-shortcut-hint,
+  #stage.compact-details-open #stage-footer .footer-divider,
+  #stage.compact-details-open #stage-footer .footer-credit,
+  #stage.compact-details-open #stage-footer .debug-hint {
+    display: inline;
+  }
+}
+
+@media (max-width: 720px) and (max-height: 1350px) {
+  :root {
+    --portrait-camera-max: 320px;
+    --orchestra-inline-size: min(86vw, 460px, 38dvh);
+  }
+}
+
+@media (max-width: 720px) and (max-height: 950px) {
+  :root {
+    --portrait-camera-max: 240px;
+    --orchestra-inline-size: min(82vw, 360px, 34dvh);
+  }
+
+  #piece-subtitle {
+    display: none;
+  }
+}

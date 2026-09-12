@@ -30,6 +30,35 @@
   overflow: hidden;
 }
 
+.score-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  min-height: 22px;
+  padding: 2px 4px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-ui);
+  white-space: nowrap;
+}
+
+.score-card-kicker {
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.score-card-section-name {
+  overflow: hidden;
+  color: #ffd56b;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+}
+
 .score-svg-wrap svg {
   width: 100%;
   height: auto;
@@ -151,4 +180,22 @@
 .score-svg-wrap svg .vf-stavenote.upcoming path {
   fill: #f1f5f9 !important;
   stroke: #f1f5f9 !important;
+}
+
+@media (max-width: 480px), (max-height: 599px) {
+  .spotlight-score-panel {
+    padding-inline: 7px;
+  }
+
+  .score-card-header {
+    gap: 5px;
+  }
+
+  .score-card-kicker {
+    font-size: 0.52rem;
+  }
+
+  .score-card-section-name {
+    font-size: 0.68rem;
+  }
 }

@@ -144,6 +144,16 @@ window.addEventListener("resize", () => {
   }
 });
 
+const compactDetailsButton = document.getElementById("compact-details-btn");
+compactDetailsButton?.addEventListener("click", () => {
+  const stage = document.getElementById("stage");
+  if (!stage) return;
+
+  const isOpen = stage.classList.toggle("compact-details-open");
+  compactDetailsButton.setAttribute("aria-expanded", String(isOpen));
+  compactDetailsButton.textContent = isOpen ? "Less info" : "Help & info";
+});
+
 const versionModal = new VersionModal();
 versionModal.loadVersionInfo();
 

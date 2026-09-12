@@ -47,6 +47,11 @@ export interface VexKeyInfo {
   accidental: string | null;
 }
 
+export function getResponsiveScoreWidth(availableWidth: number, viewportWidth: number): number {
+  const fallbackWidth = Math.max(1, viewportWidth - 56);
+  return Math.max(1, Math.min(600, availableWidth > 0 ? availableWidth : fallbackWidth));
+}
+
 export function getClefForSection(sectionId: string): ClefType {
   const id = sectionId.toLowerCase();
   if (
@@ -266,6 +271,9 @@ export class SpotlightScoreVisualizer {
   private isEnabled: boolean = true;
   private lastRenderedBar: number = -1;
   private animFrameId: number | null = null;
+  private resizeFrameId: number | null = null;
+  private resizeObserver: ResizeObserver | null = null;
+  private observedScoreWidth = 0;
 
   // Track rendered VexFlow notes and playhead metrics
   private currentNoteRefs: NoteRef[] = [];
@@ -317,6 +325,25 @@ export class SpotlightScoreVisualizer {
       anchorParent.appendChild(panel);
     }
     this.container = panel;
+
+    if (typeof ResizeObserver !== "undefined") {
+      this.resizeObserver = new ResizeObserver(entries => {
+        const nextWidth = entries[0]?.contentRect.width ?? 0;
+        if (nextWidth <= 0 || Math.abs(nextWidth - this.observedScoreWidth) < 1) return;
+
+        this.observedScoreWidth = nextWidth;
+        if (!this.isVisible || typeof requestAnimationFrame === "undefined") return;
+
+        if (this.resizeFrameId !== null) cancelAnimationFrame(this.resizeFrameId);
+        this.resizeFrameId = requestAnimationFrame(() => {
+          this.resizeFrameId = null;
+          if (!this.isVisible) return;
+          this.render();
+          this.updatePosition();
+        });
+      });
+      this.resizeObserver.observe(panel);
+    }
   }
 
   /**
@@ -354,13 +381,15 @@ export class SpotlightScoreVisualizer {
       `Feature Flag isEnabled=${this.isEnabled}. Notes extracted: ${this.currentSectionNotes.length}`
     );
 
-    this.render();
-
     if (this.container) {
       this.container.style.display = "flex";
+      this.updatePosition();
+      this.render();
       void this.container.offsetWidth;
       this.container.classList.add("visible");
       this.updatePosition();
+    } else {
+      this.render();
     }
 
     if (typeof document !== "undefined" && document.fonts && !document.fonts.check("16px Bravura")) {
@@ -384,6 +413,10 @@ export class SpotlightScoreVisualizer {
     }
     this.isVisible = false;
     this.stopAnimationLoop();
+    if (this.resizeFrameId !== null && typeof cancelAnimationFrame !== "undefined") {
+      cancelAnimationFrame(this.resizeFrameId);
+      this.resizeFrameId = null;
+    }
 
     if (this.container) {
       this.container.classList.remove("visible");
@@ -515,7 +548,7 @@ export class SpotlightScoreVisualizer {
     const winW = typeof window !== "undefined" ? window.innerWidth : 1000;
     const winH = typeof window !== "undefined" ? window.innerHeight : 800;
     const cardWidth = Math.min(600, winW - 32);
-    const cardHeight = this.container.offsetHeight || 135;
+    const cardHeight = this.container.offsetHeight || 170;
 
     let secRect: DOMRect | { left: number; right: number; top: number; bottom: number };
     if (sectionEl) {
@@ -541,6 +574,7 @@ export class SpotlightScoreVisualizer {
     if (orchRect.top > cardHeight + 16) {
       targetTop = Math.min(targetTop, orchRect.top - cardHeight - 6);
     }
+    targetTop = Math.max(12, Math.min(Math.max(12, winH - cardHeight - 12), targetTop));
 
     this.container.style.position = "fixed";
     this.container.style.zIndex = "120";
@@ -613,14 +647,28 @@ export class SpotlightScoreVisualizer {
       const bar2StartBeat = bar2 * this.beatsPerBar;
       const bar2EndBeat = (bar2 + 1) * this.beatsPerBar;
 
-      // Clean minimal score card containing just the engraved notation
-      this.container.innerHTML = `<div class="score-svg-wrap"></div>`;
+      const sectionName =
+        piece?.sections.find(section => section.id === this.currentSectionId)?.name ||
+        this.currentSectionId;
+
+      this.container.innerHTML = `
+        <div class="score-card-header">
+          <span class="score-card-kicker">Now spotlighting</span>
+          <span class="score-card-section-name"></span>
+        </div>
+        <div class="score-svg-wrap"></div>
+      `;
+
+      const sectionNameEl = this.container.querySelector(".score-card-section-name");
+      if (sectionNameEl) sectionNameEl.textContent = sectionName;
 
       const svgWrap = this.container.querySelector(".score-svg-wrap") as HTMLElement;
       if (!svgWrap) return;
 
       // Dimensions: generous width and height with ample vertical clearance for high stems
-      const totalW = Math.max(520, Math.min(600, this.container.clientWidth || 580));
+      const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 600;
+      const availableWidth = svgWrap.clientWidth || Math.max(1, this.container.clientWidth - 24);
+      const totalW = getResponsiveScoreWidth(availableWidth, viewportWidth);
       const totalH = 145;
       const staveY = 28;
       const availableTotalW = totalW - 20;

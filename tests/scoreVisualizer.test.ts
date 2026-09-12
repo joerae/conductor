@@ -16,6 +16,7 @@ import {
   durationToBeatsToVexDuration,
   vexDurationToMusicalBeats,
   decomposeRestBeats,
+  getResponsiveScoreWidth,
   groupNotesByBeat,
   SpotlightScoreVisualizer,
 } from "../src/ui/SpotlightScoreVisualizer";
@@ -23,6 +24,12 @@ import type { PieceDefinition } from "../src/score/repertoire";
 import type { ScoreEvent } from "../src/score/scoreTypes";
 
 describe("SpotlightScoreVisualizer - Clef & VexFlow Mapping", () => {
+  it("uses the measured score width without a desktop-only minimum", () => {
+    expect(getResponsiveScoreWidth(312, 390)).toBe(312);
+    expect(getResponsiveScoreWidth(0, 390)).toBe(334);
+    expect(getResponsiveScoreWidth(900, 1200)).toBe(600);
+  });
+
   it("selects appropriate musical clef based on instrument section", () => {
     expect(getClefForSection("violin1")).toBe("treble");
     expect(getClefForSection("violin2")).toBe("treble");
@@ -429,8 +436,8 @@ describe("SpotlightScoreVisualizer - Section Note Extraction & State", () => {
     });
   });
 
-  describe("Clean Minimal Score Card & High Note Stem Clearance", () => {
-    it("renders clean score card without instrument header, clef badge, or measure counters", () => {
+  describe("Responsive Score Card & High Note Stem Clearance", () => {
+    it("renders an instrument label without adding clef or measure badges", () => {
       const originalDocument = (globalThis as any).document;
 
       function makeElement(tag: string) {
@@ -473,6 +480,12 @@ describe("SpotlightScoreVisualizer - Section Note Extraction & State", () => {
 
       const mockPanel = makeElement("div");
       mockPanel.id = "spotlight-score-panel";
+      const sectionNameElement = makeElement("span");
+      const panelQuerySelector = mockPanel.querySelector;
+      mockPanel.querySelector = (selector: string) =>
+        selector === ".score-card-section-name"
+          ? sectionNameElement
+          : panelQuerySelector(selector);
 
       (globalThis as any).document = {
         getElementById: vi.fn((id: string) => (id === "spotlight-score-panel" ? mockPanel : null)),
@@ -493,8 +506,8 @@ describe("SpotlightScoreVisualizer - Section Note Extraction & State", () => {
 
         // Verify HTML generated inside panel container
         expect(mockPanel.innerHTML).toContain("score-svg-wrap");
-        expect(mockPanel.innerHTML).not.toContain("score-card-header");
-        expect(mockPanel.innerHTML).not.toContain("score-card-section-name");
+        expect(mockPanel.innerHTML).toContain("score-card-header");
+        expect(sectionNameElement.textContent).toBe("Violin I");
         expect(mockPanel.innerHTML).not.toContain("clef-badge");
         expect(mockPanel.innerHTML).not.toContain("bar-badge");
       } finally {

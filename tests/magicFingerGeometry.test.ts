@@ -80,6 +80,26 @@ describe("magicFingerGeometry", () => {
       expect(res).not.toBeNull();
       expect(res?.sectionId).toBe("theme-a");
     });
+
+    it("uses live scaled and offset rectangles after a responsive reflow", () => {
+      const compactSvg: ScreenRect = {
+        left: 120,
+        top: 40,
+        right: 720,
+        bottom: 400,
+        width: 600,
+        height: 360,
+      };
+      const compactSections: InstrumentSectionTarget[] = [
+        { id: "violin1", rect: { left: 170, right: 290, top: 55, bottom: 115, width: 120, height: 60 } },
+        { id: "cello", rect: { left: 550, right: 680, top: 55, bottom: 115, width: 130, height: 60 } },
+      ];
+
+      const result = getTargetedInstrumentSection(0, -1, 110, 300, compactSvg, compactSections);
+
+      expect(result?.sectionId).toBe("violin1");
+      expect(result?.projectedHitX).toBeCloseTo(110);
+    });
   });
 
   describe("AdaptiveRaySmoother", () => {
